@@ -12,7 +12,7 @@ interface TripState {
 
 const TripContext = createContext<TripState | null>(null);
 
-const STORAGE_KEY = 'plan-holiday-session';
+const STORAGE_KEY = 'trip-planner-ai-session';
 
 interface StoredSession {
   tripId: string;
