@@ -8,6 +8,11 @@ const navItems = [
   { to: '/map', label: 'Map', icon: '🗺️' },
   { to: '/weather', label: 'Weather', icon: '☀️' },
   { to: '/currency', label: 'Currency', icon: '💱' },
+  { to: '/expenses', label: 'Expenses', icon: '💰' },
+  { to: '/settlements', label: 'Settlements', icon: '⚖️' },
+  { to: '/transport', label: 'Transport', icon: '✈️' },
+  { to: '/accommodation', label: 'Stays', icon: '🏨' },
+  { to: '/deposits', label: 'Deposits', icon: '🔖' },
 ];
 
 export default function Sidebar() {

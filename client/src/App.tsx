@@ -8,6 +8,11 @@ import ItineraryPage from './pages/ItineraryPage';
 import MapPage from './pages/MapPage';
 import WeatherPage from './pages/WeatherPage';
 import CurrencyPage from './pages/CurrencyPage';
+import ExpensesPage from './pages/ExpensesPage';
+import SettlementsPage from './pages/SettlementsPage';
+import TransportPage from './pages/TransportPage';
+import AccommodationPage from './pages/AccommodationPage';
+import DepositsPage from './pages/DepositsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentTrip } = useTrip();
@@ -32,6 +37,11 @@ function App() {
         <Route path="/map" element={<MapPage />} />
         <Route path="/weather" element={<WeatherPage />} />
         <Route path="/currency" element={<CurrencyPage />} />
+        <Route path="/expenses" element={<ExpensesPage />} />
+        <Route path="/settlements" element={<SettlementsPage />} />
+        <Route path="/transport" element={<TransportPage />} />
+        <Route path="/accommodation" element={<AccommodationPage />} />
+        <Route path="/deposits" element={<DepositsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

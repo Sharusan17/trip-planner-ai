@@ -102,6 +102,190 @@ const migrations = [
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (base_currency, target_currency)
   );`,
+
+  // 006: expense enums + expenses + expense_splits
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'expense_category') THEN
+      CREATE TYPE expense_category AS ENUM (
+        'accommodation', 'food', 'transport', 'activities', 'shopping', 'other'
+      );
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'split_mode') THEN
+      CREATE TYPE split_mode AS ENUM ('equal', 'weighted', 'custom');
+    END IF;
+  END $$;`,
+
+  `CREATE TABLE IF NOT EXISTS expenses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    paid_by UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    amount_home DECIMAL(12,2),
+    description TEXT NOT NULL,
+    category expense_category NOT NULL DEFAULT 'other',
+    split_mode split_mode NOT NULL DEFAULT 'equal',
+    expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_expenses_trip ON expenses(trip_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_expenses_paid_by ON expenses(paid_by);`,
+
+  `CREATE TABLE IF NOT EXISTS expense_splits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    expense_id UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    amount DECIMAL(12,2) NOT NULL,
+    amount_home DECIMAL(12,2),
+    UNIQUE(expense_id, traveller_id)
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_splits_expense ON expense_splits(expense_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_splits_traveller ON expense_splits(traveller_id);`,
+
+  // 007: expense budgets
+  `CREATE TABLE IF NOT EXISTS expense_budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    category expense_category NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    UNIQUE(trip_id, category)
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_budgets_trip ON expense_budgets(trip_id);`,
+
+  // 008: settlements
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'settlement_status') THEN
+      CREATE TYPE settlement_status AS ENUM ('pending', 'paid');
+    END IF;
+  END $$;`,
+
+  `CREATE TABLE IF NOT EXISTS settlements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    from_traveller UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    to_traveller UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    status settlement_status NOT NULL DEFAULT 'pending',
+    paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_settlements_trip ON settlements(trip_id);`,
+
+  // 009: transport enums + bookings + travellers + vehicles + seats
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transport_type') THEN
+      CREATE TYPE transport_type AS ENUM ('flight', 'train', 'bus', 'car', 'ferry', 'other');
+    END IF;
+  END $$;`,
+
+  `CREATE TABLE IF NOT EXISTS transport_bookings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    transport_type transport_type NOT NULL,
+    from_location VARCHAR(200) NOT NULL,
+    to_location VARCHAR(200) NOT NULL,
+    departure_time TIMESTAMPTZ NOT NULL,
+    arrival_time TIMESTAMPTZ,
+    reference_number VARCHAR(100),
+    price DECIMAL(12,2),
+    currency CHAR(3),
+    price_home DECIMAL(12,2),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_transport_trip ON transport_bookings(trip_id);`,
+
+  `CREATE TABLE IF NOT EXISTS transport_travellers (
+    transport_id UUID NOT NULL REFERENCES transport_bookings(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    PRIMARY KEY (transport_id, traveller_id)
+  );`,
+
+  `CREATE TABLE IF NOT EXISTS vehicles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    seat_count INTEGER NOT NULL DEFAULT 5,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_vehicles_trip ON vehicles(trip_id);`,
+
+  `CREATE TABLE IF NOT EXISTS vehicle_seat_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    seat_label VARCHAR(20),
+    UNIQUE(vehicle_id, traveller_id)
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_seats_vehicle ON vehicle_seat_assignments(vehicle_id);`,
+
+  // 010: accommodation
+  `CREATE TABLE IF NOT EXISTS accommodation_bookings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    address TEXT,
+    check_in_date DATE NOT NULL,
+    check_out_date DATE NOT NULL,
+    reference_number VARCHAR(100),
+    price DECIMAL(12,2),
+    currency CHAR(3),
+    price_home DECIMAL(12,2),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_accommodation_trip ON accommodation_bookings(trip_id);`,
+
+  `CREATE TABLE IF NOT EXISTS accommodation_travellers (
+    accommodation_id UUID NOT NULL REFERENCES accommodation_bookings(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    PRIMARY KEY (accommodation_id, traveller_id)
+  );`,
+
+  // 011: deposits
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'deposit_status') THEN
+      CREATE TYPE deposit_status AS ENUM ('pending', 'paid', 'overdue');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'deposit_linked_type') THEN
+      CREATE TYPE deposit_linked_type AS ENUM ('accommodation', 'transport', 'activity', 'other');
+    END IF;
+  END $$;`,
+
+  `CREATE TABLE IF NOT EXISTS deposits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    description VARCHAR(200) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    amount_home DECIMAL(12,2),
+    due_date DATE,
+    status deposit_status NOT NULL DEFAULT 'pending',
+    paid_at TIMESTAMPTZ,
+    linked_type deposit_linked_type,
+    linked_id UUID,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_deposits_trip ON deposits(trip_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_deposits_status ON deposits(trip_id, status);`,
 ];
 
 export async function runMigrations() {

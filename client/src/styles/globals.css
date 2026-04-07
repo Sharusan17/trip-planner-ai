@@ -220,3 +220,49 @@ h1, h2, h3, h4, h5, h6 {
   background: #2D6A4F;
   color: var(--color-parchment-light);
 }
+
+.status-badge-pending {
+  background: var(--color-gold);
+  color: var(--color-ink);
+  font-size: 0.7rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge-paid {
+  background: #2D6A4F;
+  color: var(--color-parchment-light);
+  font-size: 0.7rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge-overdue {
+  background: var(--color-terracotta);
+  color: var(--color-parchment-light);
+  font-size: 0.7rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.progress-bar-track {
+  background: var(--color-parchment-dark);
+  border-radius: 2px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}

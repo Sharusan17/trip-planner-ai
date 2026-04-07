@@ -4,3 +4,8 @@ export * from './types/itinerary';
 export * from './types/weather';
 export * from './types/currency';
 export * from './types/map';
+export * from './types/expense';
+export * from './types/settlement';
+export * from './types/transport';
+export * from './types/accommodation';
+export * from './types/deposit';

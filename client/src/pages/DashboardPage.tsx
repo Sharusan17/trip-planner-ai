@@ -1,8 +1,12 @@
+import { Link } from 'react-router-dom';
 import { useTrip } from '@/context/TripContext';
 import { useQuery } from '@tanstack/react-query';
 import { travellersApi } from '@/api/travellers';
 import { itineraryApi } from '@/api/itinerary';
 import { weatherApi } from '@/api/weather';
+import { expensesApi } from '@/api/expenses';
+import { depositsApi } from '@/api/deposits';
+import { settlementsApi } from '@/api/settlements';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function DashboardPage() {
@@ -27,7 +31,32 @@ export default function DashboardPage() {
     staleTime: 30 * 60 * 1000,
   });
 
+  const { data: expenseSummary = [] } = useQuery({
+    queryKey: ['expenses', 'summary', currentTrip?.id],
+    queryFn: () => expensesApi.summary(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
+  const { data: depositSummary } = useQuery({
+    queryKey: ['deposits', 'summary', currentTrip?.id],
+    queryFn: () => depositsApi.summary(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
+  const { data: settlements = [] } = useQuery({
+    queryKey: ['settlements', currentTrip?.id],
+    queryFn: () => settlementsApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
   if (!currentTrip) return null;
+
+  const totalSpent = expenseSummary.reduce((s, r) => s + r.total_home, 0);
+  const pendingSettlements = settlements.filter((s) => s.status === 'pending').length;
+  const depositsOutstanding = (depositSummary?.total_pending_home ?? 0) + (depositSummary?.total_overdue_home ?? 0);
 
   const totalActivities = days?.reduce((sum, d) => sum + d.activities.length, 0) ?? 0;
   const todayWeather = weather?.daily?.[0];
@@ -117,6 +146,34 @@ export default function DashboardPage() {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Finances at a glance */}
+      {(totalSpent > 0 || depositsOutstanding > 0 || pendingSettlements > 0) && (
+        <div className="vintage-card p-6">
+          <h3 className="font-display text-lg font-bold text-navy mb-3">Finances at a Glance</h3>
+          <div className="grid grid-cols-3 gap-3">
+            <Link to="/expenses" className="flex flex-col items-center p-3 bg-parchment-dark/30 rounded-sm hover:bg-parchment-dark/50 transition-colors text-center">
+              <span className="text-xl mb-1">💰</span>
+              <span className="font-display text-sm font-bold text-navy">
+                {new Intl.NumberFormat('en-GB', { style: 'currency', currency: currentTrip.home_currency }).format(totalSpent)}
+              </span>
+              <span className="text-xs text-ink-faint">Total Spent</span>
+            </Link>
+            <Link to="/deposits" className="flex flex-col items-center p-3 bg-parchment-dark/30 rounded-sm hover:bg-parchment-dark/50 transition-colors text-center">
+              <span className="text-xl mb-1">🔖</span>
+              <span className="font-display text-sm font-bold text-navy">
+                {new Intl.NumberFormat('en-GB', { style: 'currency', currency: currentTrip.home_currency }).format(depositsOutstanding)}
+              </span>
+              <span className="text-xs text-ink-faint">Deposits Due</span>
+            </Link>
+            <Link to="/settlements" className="flex flex-col items-center p-3 bg-parchment-dark/30 rounded-sm hover:bg-parchment-dark/50 transition-colors text-center">
+              <span className="text-xl mb-1">⚖️</span>
+              <span className="font-display text-sm font-bold text-navy">{pendingSettlements}</span>
+              <span className="text-xs text-ink-faint">Settlements</span>
+            </Link>
           </div>
         </div>
       )}

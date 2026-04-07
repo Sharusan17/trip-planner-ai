@@ -7,6 +7,11 @@ import itineraryRouter from './routes/itinerary';
 import locationsRouter from './routes/locations';
 import weatherRouter from './routes/weather';
 import currencyRouter from './routes/currency';
+import expensesRouter from './routes/expenses';
+import settlementsRouter from './routes/settlements';
+import transportRouter from './routes/transport';
+import accommodationRouter from './routes/accommodation';
+import depositsRouter from './routes/deposits';
 
 const app = express();
 
@@ -19,6 +24,11 @@ app.use('/api/v1', itineraryRouter);
 app.use('/api/v1', locationsRouter);
 app.use('/api/v1/weather', weatherRouter);
 app.use('/api/v1/currency', currencyRouter);
+app.use('/api/v1', expensesRouter);
+app.use('/api/v1', settlementsRouter);
+app.use('/api/v1', transportRouter);
+app.use('/api/v1', accommodationRouter);
+app.use('/api/v1', depositsRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
