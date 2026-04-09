@@ -63,18 +63,33 @@ npm run build
 
 ## Environment Setup
 
-### PostgreSQL (via pgAdmin4)
-Create a database and set `DATABASE_URL` in `server/.env`:
+### Local development
+Create `server/.env` (see `server/.env.example`):
 ```
-DATABASE_URL=postgresql://localhost:5432/trip_planner_dev
+DATABASE_URL=postgresql://postgres:password@localhost:5432/trip_planner_local
 PORT=3001
+NODE_ENV=development
 EXCHANGE_RATE_API_KEY=
 ```
 
-Run migrations after creating the DB: `npm run migrate -w server`
+Run migrations after creating the DB:
+```bash
+npm run migrate -w server
+```
+
+### Railway (production)
+Two separate services — `server` and `dashboard`:
+
+**server service env vars:**
+- `DATABASE_URL` — auto-injected by Railway when Postgres is linked
+- `NODE_ENV=production`
+- `DASHBOARD_URL=https://your-dashboard.up.railway.app` — for CORS
+
+**dashboard service env vars:**
+- `VITE_API_URL=https://your-server.up.railway.app` — points dashboard at the server API
 
 ### Supabase (Phase 4)
-`@supabase/supabase-js` is installed in client but not yet wired. Auth integration is planned for Phase 4.
+`@supabase/supabase-js` is installed in dashboard but not yet wired. Auth integration is planned for Phase 4.
 
 ---
 
@@ -91,8 +106,9 @@ Run migrations after creating the DB: `npm run migrate -w server`
 - Join flow: enter code → `GET /api/v1/trips?code=XXXX-XXXX` → pick traveller
 
 ### API Base URL
-- Dev: `http://localhost:3001/api/v1` (proxied via Vite: `/api` → `:3001`)
-- All routes: `/api/v1/trips`, `/api/v1/travellers`, etc.
+- Dev: proxied via Vite (`/api` → `localhost:3001`) — no `VITE_API_URL` needed
+- Production: set `VITE_API_URL` on the dashboard service to the server's Railway URL
+- Client: `dashboard/src/api/client.ts` reads `VITE_API_URL` at build time
 
 ### Traveller Cost Weights
 - Adult: `1.0`, Child: `0.5`, Infant: `0.0` (defaults)
@@ -107,6 +123,7 @@ Run migrations after creating the DB: `npm run migrate -w server`
 | Frontend | React 19, Vite 8, TypeScript, React Router v7 |
 | State | @tanstack/react-query v5 |
 | Styling | Tailwind CSS v4 (`@tailwindcss/vite` plugin) |
+| Icons | lucide-react |
 | Maps | Leaflet + react-leaflet |
 | Drag & Drop | @dnd-kit |
 | QR Codes | qrcode.react |
@@ -115,12 +132,13 @@ Run migrations after creating the DB: `npm run migrate -w server`
 | Auth (future) | Supabase |
 | Weather API | Open-Meteo (free, no key) |
 | Currency API | open.er-api.com (free, no key) |
+| Location Search | Nominatim / OpenStreetMap (free, no key) |
 
 ---
 
 ## Design System Classes
 
-Defined in `client/src/styles/globals.css`. Always use these — do not add inline Tailwind for card/button patterns.
+Defined in `dashboard/src/styles/globals.css`. Always use these — do not add inline Tailwind for card/button patterns.
 Icons: use `lucide-react` SVG icons. No emoji in navigation or UI chrome.
 
 | Class | Use |
@@ -179,12 +197,12 @@ Icons: use `lucide-react` SVG icons. No emoji in navigation or UI chrome.
 2. Export from `shared/src/index.ts`
 
 ### Adding a new page
-1. Create `client/src/pages/[Name]Page.tsx`
-2. Add `<Route path="/path" element={<NamePage />} />` inside `<AppShell>` in `client/src/App.tsx`
-3. Add to `navItems` array in `client/src/components/layout/Sidebar.tsx`
+1. Create `dashboard/src/pages/[Name]Page.tsx`
+2. Add `<Route path="/path" element={<NamePage />} />` inside `<AppShell>` in `dashboard/src/App.tsx`
+3. Add to `navItems` array in `dashboard/src/components/layout/Sidebar.tsx`
 
 ### Adding a new client API module
-1. Create `client/src/api/[resource].ts`
+1. Create `dashboard/src/api/[resource].ts`
 2. Import from `client.ts` base: `import { api } from './client'`
 
 ---
@@ -193,4 +211,4 @@ Icons: use `lucide-react` SVG icons. No emoji in navigation or UI chrome.
 
 - No `Co-Authored-By` lines
 - Conventional commit style: `feat:`, `fix:`, `chore:`
-- Push to: `https://github.com/Sharusan17/trip-planner-ai.git` (branch: `master`)
+- Push to: `https://github.com/Sharusan17/trip-planner-ai.git` (branch: `main`)

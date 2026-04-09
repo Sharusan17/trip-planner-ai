@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import { errorHandler } from './middleware/errorHandler';
 import tripsRouter from './routes/trips';
 import travellersRouter from './routes/travellers';
@@ -16,7 +15,10 @@ import depositsRouter from './routes/deposits';
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.DASHBOARD_URL ? [process.env.DASHBOARD_URL] : '*',
+  credentials: true,
+}));
 app.use(express.json());
 
 app.use('/api/v1/trips', tripsRouter);
@@ -34,15 +36,6 @@ app.use('/api/v1', depositsRouter);
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
-
-// Serve React client in production
-if (process.env.NODE_ENV === 'production') {
-  const clientDist = path.join(__dirname, '../../dashboard/dist');
-  app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
-}
 
 app.use(errorHandler);
 
