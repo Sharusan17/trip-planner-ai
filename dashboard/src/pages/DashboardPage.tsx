@@ -6,7 +6,8 @@ import { itineraryApi } from '@/api/itinerary';
 import { expensesApi } from '@/api/expenses';
 import { depositsApi } from '@/api/deposits';
 import { settlementsApi } from '@/api/settlements';
-import { QRCodeSVG } from 'qrcode.react';
+import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
+import type { ActivityType } from '@trip-planner-ai/shared';
 import {
   Users,
   CalendarDays,
@@ -14,10 +15,8 @@ import {
   Receipt,
   Bookmark,
   Scale,
-  Copy,
-  Check,
+  Clock,
 } from 'lucide-react';
-import { useState } from 'react';
 import WeatherWidget from '@/components/WeatherWidget';
 
 interface StatCardProps {
@@ -43,7 +42,6 @@ function StatCard({ icon, value, label, iconBg }: StatCardProps) {
 
 export default function DashboardPage() {
   const { currentTrip } = useTrip();
-  const [copied, setCopied] = useState(false);
 
   const { data: travellers } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
@@ -85,13 +83,10 @@ export default function DashboardPage() {
   const pendingSettlements = settlements.filter((s) => s.status === 'pending').length;
   const depositsOutstanding = (depositSummary?.total_pending_home ?? 0) + (depositSummary?.total_overdue_home ?? 0);
   const totalActivities = days?.reduce((sum, d) => sum + d.activities.length, 0) ?? 0;
-  const shareUrl = `${window.location.origin}/?code=${currentTrip.group_code}`;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(currentTrip.group_code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Today's plan
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayDay = days?.find((d) => d.date.startsWith(todayStr));
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-GB', { style: 'currency', currency: currentTrip.home_currency }).format(n);
@@ -121,42 +116,54 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* ── Share trip ── */}
+      {/* ── Today's Plan ── */}
       <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
-        <div className="px-5 py-4 border-b border-parchment-dark">
-          <h3 className="font-display text-base font-semibold text-ink">Share This Trip</h3>
-        </div>
-        <div className="p-5 flex flex-col md:flex-row items-center gap-6">
-          <div className="flex-shrink-0 text-center">
-            <div className="bg-parchment rounded-xl p-3 inline-block">
-              <QRCodeSVG
-                value={shareUrl}
-                size={120}
-                fgColor="#0F172A"
-                bgColor="transparent"
-              />
-            </div>
-            <p className="text-xs text-ink-faint mt-1.5">Scan to join</p>
+        <div className="px-5 py-4 border-b border-parchment-dark flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-base font-semibold text-ink">Today's Plan</h3>
+            {todayDay && (
+              <p className="text-xs text-ink-faint mt-0.5">{todayDay.title || `Day ${todayDay.day_number}`}</p>
+            )}
           </div>
-          <div className="flex-1 w-full">
-            <p className="text-sm text-ink-light mb-2">Or share the group code:</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-ink text-blue-300 text-xl tracking-[0.3em] font-mono px-4 py-2.5 rounded-xl text-center">
-                {currentTrip.group_code}
-              </code>
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-1.5 btn-secondary py-2.5 px-3 text-sm flex-shrink-0"
-              >
-                {copied ? <Check size={14} strokeWidth={2.5} className="text-green-600" /> : <Copy size={14} strokeWidth={2} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-            <p className="text-xs text-ink-faint mt-2">
-              Join at {window.location.origin} with this code
-            </p>
-          </div>
+          <Link to="/itinerary" className="text-xs text-navy hover:underline font-body">View all →</Link>
         </div>
+        {!todayDay ? (
+          <div className="p-8 text-center">
+            <CalendarDays size={28} className="text-ink-faint mx-auto mb-2" strokeWidth={1.5} />
+            <p className="text-sm text-ink-faint">No activities planned for today.</p>
+            <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Add to itinerary →</Link>
+          </div>
+        ) : todayDay.activities.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-sm text-ink-faint">Nothing scheduled for today yet.</p>
+            <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Add activities →</Link>
+          </div>
+        ) : (
+          <div className="divide-y divide-parchment-dark">
+            {todayDay.activities.map((activity) => (
+              <div key={activity.id} className="flex items-center gap-4 px-5 py-3.5">
+                <div className="w-10 h-10 rounded-xl bg-parchment flex items-center justify-center flex-shrink-0 text-xl leading-none">
+                  {ACTIVITY_ICONS[activity.type as ActivityType] ?? '📍'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink text-sm font-display truncate">{activity.description}</div>
+                  {activity.location_tag && (
+                    <div className="flex items-center gap-1 text-xs text-ink-faint font-body mt-0.5">
+                      <MapPin size={10} strokeWidth={2} />
+                      {activity.location_tag}
+                    </div>
+                  )}
+                </div>
+                {activity.time && (
+                  <div className="flex items-center gap-1 text-xs text-ink-faint font-body flex-shrink-0">
+                    <Clock size={11} strokeWidth={2} />
+                    {activity.time.slice(0, 5)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Travellers ── */}

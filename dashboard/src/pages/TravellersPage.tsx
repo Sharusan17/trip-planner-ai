@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { travellersApi } from '@/api/travellers';
 import type { Traveller, CreateTravellerInput, TravellerType, TravellerRole } from '@trip-planner-ai/shared';
+import { QRCodeSVG } from 'qrcode.react';
+import { Copy, Check } from 'lucide-react';
 
 const AVATAR_COLOURS = ['#1B3A5C', '#C65D3E', '#B8963E', '#2A5580', '#D4806A', '#9A7B2F', '#5C4D3C', '#6B8E7B', '#8B6FAE', '#D4A574'];
 
@@ -13,6 +15,14 @@ export default function TravellersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState<{ id: string; pin: string } | null>(null);
   const [revealedNotes, setRevealedNotes] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!currentTrip) return;
+    navigator.clipboard.writeText(currentTrip.group_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Form state
   const [name, setName] = useState('');
@@ -94,6 +104,9 @@ export default function TravellersPage() {
     }
   };
 
+  if (!currentTrip) return null;
+  const shareUrl = `${window.location.origin}/?code=${currentTrip.group_code}`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -103,6 +116,42 @@ export default function TravellersPage() {
             + Add Traveller
           </button>
         )}
+      </div>
+
+      {/* ── Share This Trip ── */}
+      <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
+        <div className="px-5 py-4 border-b border-parchment-dark">
+          <h3 className="font-display text-base font-semibold text-ink">Share This Trip</h3>
+          <p className="text-xs text-ink-faint mt-0.5">Invite others to join using the code or QR</p>
+        </div>
+        <div className="p-5 flex flex-col md:flex-row items-center gap-6">
+          <div className="flex-shrink-0 text-center">
+            <div className="bg-parchment rounded-xl p-3 inline-block">
+              <QRCodeSVG value={shareUrl} size={110} fgColor="#0F172A" bgColor="transparent" />
+            </div>
+            <p className="text-xs text-ink-faint mt-1.5">Scan to join</p>
+          </div>
+          <div className="flex-1 w-full">
+            <p className="text-sm text-ink-light mb-2">Group code:</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-ink text-blue-300 text-xl tracking-[0.3em] font-mono px-4 py-2.5 rounded-xl text-center">
+                {currentTrip.group_code}
+              </code>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 btn-secondary py-2.5 px-3 text-sm flex-shrink-0"
+              >
+                {copied
+                  ? <Check size={14} strokeWidth={2.5} className="text-green-600" />
+                  : <Copy size={14} strokeWidth={2} />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-xs text-ink-faint mt-2">
+              Join at <span className="font-mono">{window.location.origin}</span>
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Traveller cards */}
