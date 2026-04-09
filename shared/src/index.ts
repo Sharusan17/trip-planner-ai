@@ -9,3 +9,5 @@ export * from './types/settlement';
 export * from './types/transport';
 export * from './types/accommodation';
 export * from './types/deposit';
+export * from './types/announcement';
+export * from './types/poll';

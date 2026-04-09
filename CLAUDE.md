@@ -8,8 +8,8 @@ A **generic Group Holiday Planner** PWA. An organiser creates a trip and shares 
 
 ### Phase Status
 - **Phase 1** ✅ Complete — Trip creation/joining, itinerary, map, weather, currency
-- **Phase 2** 🚧 In progress — Expenses, settlements, transport, accommodation, deposits
-- **Phase 3** ⏳ Planned — Announcements, polls, push notifications, photo album
+- **Phase 2** ✅ Complete — Expenses, settlements, transport, accommodation, deposits
+- **Phase 3** 🚧 In progress — Announcements ✅, Polls ✅, push notifications ⏳, photo album ⏳
 - **Phase 4** ⏳ Planned — AI assistant (Claude API), local events, deals finder
 
 ---

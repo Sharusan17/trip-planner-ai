@@ -11,6 +11,8 @@ import {
   Plane,
   BedDouble,
   Bookmark,
+  Megaphone,
+  BarChart2,
   LogOut,
   type LucideIcon,
 } from 'lucide-react';
@@ -32,6 +34,8 @@ const navItems: NavItem[] = [
   { to: '/transport', label: 'Transport', Icon: Plane },
   { to: '/accommodation', label: 'Stays', Icon: BedDouble },
   { to: '/deposits', label: 'Deposits', Icon: Bookmark },
+  { to: '/announcements', label: 'Updates', Icon: Megaphone },
+  { to: '/polls', label: 'Polls', Icon: BarChart2 },
 ];
 
 export default function Sidebar() {

@@ -286,6 +286,47 @@ const migrations = [
 
   `CREATE INDEX IF NOT EXISTS idx_deposits_trip ON deposits(trip_id);`,
   `CREATE INDEX IF NOT EXISTS idx_deposits_status ON deposits(trip_id, status);`,
+
+  // 012: announcements
+  `CREATE TABLE IF NOT EXISTS announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    pinned BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_announcements_trip ON announcements(trip_id, created_at DESC);`,
+
+  // 013: polls
+  `CREATE TABLE IF NOT EXISTS polls (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    question VARCHAR(300) NOT NULL,
+    closes_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE TABLE IF NOT EXISTS poll_options (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    poll_id UUID NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+    text VARCHAR(200) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0
+  );`,
+
+  `CREATE TABLE IF NOT EXISTS poll_votes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    poll_id UUID NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+    option_id UUID NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    UNIQUE (poll_id, traveller_id)
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_polls_trip ON polls(trip_id, created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id);`,
 ];
 
 export async function runMigrations() {

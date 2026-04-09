@@ -12,6 +12,8 @@ import SettlementsPage from './pages/SettlementsPage';
 import TransportPage from './pages/TransportPage';
 import AccommodationPage from './pages/AccommodationPage';
 import DepositsPage from './pages/DepositsPage';
+import AnnouncementsPage from './pages/AnnouncementsPage';
+import PollsPage from './pages/PollsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentTrip } = useTrip();
@@ -40,6 +42,8 @@ function App() {
         <Route path="/transport" element={<TransportPage />} />
         <Route path="/accommodation" element={<AccommodationPage />} />
         <Route path="/deposits" element={<DepositsPage />} />
+        <Route path="/announcements" element={<AnnouncementsPage />} />
+        <Route path="/polls" element={<PollsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

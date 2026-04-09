@@ -12,6 +12,8 @@ import settlementsRouter from './routes/settlements';
 import transportRouter from './routes/transport';
 import accommodationRouter from './routes/accommodation';
 import depositsRouter from './routes/deposits';
+import announcementsRouter from './routes/announcements';
+import pollsRouter from './routes/polls';
 
 const app = express();
 
@@ -32,6 +34,8 @@ app.use('/api/v1', settlementsRouter);
 app.use('/api/v1', transportRouter);
 app.use('/api/v1', accommodationRouter);
 app.use('/api/v1', depositsRouter);
+app.use('/api/v1', announcementsRouter);
+app.use('/api/v1', pollsRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

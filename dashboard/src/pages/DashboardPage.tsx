@@ -6,6 +6,7 @@ import { itineraryApi } from '@/api/itinerary';
 import { expensesApi } from '@/api/expenses';
 import { depositsApi } from '@/api/deposits';
 import { settlementsApi } from '@/api/settlements';
+import { announcementsApi } from '@/api/announcements';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import type { ActivityType } from '@trip-planner-ai/shared';
 import {
@@ -16,6 +17,8 @@ import {
   Bookmark,
   Scale,
   Clock,
+  Megaphone,
+  Pin,
 } from 'lucide-react';
 import WeatherWidget from '@/components/WeatherWidget';
 
@@ -73,6 +76,13 @@ export default function DashboardPage() {
   const { data: settlements = [] } = useQuery({
     queryKey: ['settlements', currentTrip?.id],
     queryFn: () => settlementsApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['announcements', currentTrip?.id],
+    queryFn: () => announcementsApi.list(currentTrip!.id),
     enabled: !!currentTrip,
     staleTime: 60_000,
   });
@@ -265,6 +275,40 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-xs text-ink-faint font-body flex-shrink-0">
                   {new Date(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Announcements ── */}
+      {announcements.length > 0 && (
+        <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
+          <div className="px-5 py-4 border-b border-parchment-dark flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Megaphone size={16} strokeWidth={1.75} className="text-navy" />
+              <h3 className="font-display text-base font-semibold text-ink">Latest Updates</h3>
+            </div>
+            <Link to="/announcements" className="text-xs text-navy hover:underline font-body">
+              View all →
+            </Link>
+          </div>
+          <div className="divide-y divide-parchment-dark">
+            {announcements.slice(0, 3).map((a) => (
+              <div key={a.id} className="px-5 py-3.5 flex items-start gap-3">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5"
+                  style={{ backgroundColor: a.author_colour ?? '#2563EB' }}
+                >
+                  {(a.author_name ?? '?').charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    {a.pinned && <Pin size={10} strokeWidth={2.5} className="text-navy flex-shrink-0" />}
+                    <span className="font-display font-semibold text-ink text-sm truncate">{a.title}</span>
+                  </div>
+                  <p className="text-xs text-ink-faint font-body mt-0.5 line-clamp-1">{a.content}</p>
                 </div>
               </div>
             ))}
