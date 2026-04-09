@@ -5,14 +5,9 @@ import {
   Users,
   CalendarDays,
   Map,
-  ArrowLeftRight,
-  Receipt,
-  Scale,
-  Plane,
-  BedDouble,
-  Bookmark,
-  Megaphone,
-  BarChart2,
+  Wallet,
+  Package,
+  MessageSquare,
   LogOut,
   type LucideIcon,
 } from 'lucide-react';
@@ -24,18 +19,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
-  { to: '/travellers', label: 'Travellers', Icon: Users },
-  { to: '/itinerary', label: 'Itinerary', Icon: CalendarDays },
-  { to: '/map', label: 'Map', Icon: Map },
-  { to: '/currency', label: 'Currency', Icon: ArrowLeftRight },
-  { to: '/expenses', label: 'Expenses', Icon: Receipt },
-  { to: '/settlements', label: 'Settlements', Icon: Scale },
-  { to: '/transport', label: 'Transport', Icon: Plane },
-  { to: '/accommodation', label: 'Stays', Icon: BedDouble },
-  { to: '/deposits', label: 'Deposits', Icon: Bookmark },
-  { to: '/announcements', label: 'Updates', Icon: Megaphone },
-  { to: '/polls', label: 'Polls', Icon: BarChart2 },
+  { to: '/dashboard',    label: 'Dashboard',  Icon: LayoutDashboard },
+  { to: '/travellers',   label: 'Travellers', Icon: Users           },
+  { to: '/itinerary',    label: 'Itinerary',  Icon: CalendarDays    },
+  { to: '/map',          label: 'Map',        Icon: Map             },
+  { to: '/expenses',     label: 'Finance',    Icon: Wallet          },
+  { to: '/logistics',    label: 'Logistics',  Icon: Package         },
+  { to: '/community',    label: 'Community',  Icon: MessageSquare   },
 ];
 
 export default function Sidebar() {
@@ -49,7 +39,7 @@ export default function Sidebar() {
         <div className="px-5 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-navy flex items-center justify-center flex-shrink-0">
-              <Plane size={16} className="text-white" />
+              <Package size={16} className="text-white" />
             </div>
             <div className="min-w-0">
               <h1 className="font-display text-sm font-600 text-white leading-tight tracking-tight">

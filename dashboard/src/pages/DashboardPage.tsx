@@ -58,7 +58,6 @@ export default function DashboardPage() {
     enabled: !!currentTrip,
   });
 
-
   const { data: expenseSummary = [] } = useQuery({
     queryKey: ['expenses', 'summary', currentTrip?.id],
     queryFn: () => expensesApi.summary(currentTrip!.id),
@@ -89,20 +88,32 @@ export default function DashboardPage() {
 
   if (!currentTrip) return null;
 
-  const totalSpent = expenseSummary.reduce((s, r) => s + r.total_home, 0);
+  const totalSpent        = expenseSummary.reduce((s, r) => s + r.total_home, 0);
   const pendingSettlements = settlements.filter((s) => s.status === 'pending').length;
   const depositsOutstanding = (depositSummary?.total_pending_home ?? 0) + (depositSummary?.total_overdue_home ?? 0);
-  const totalActivities = days?.reduce((sum, d) => sum + d.activities.length, 0) ?? 0;
+  const totalActivities   = days?.reduce((sum, d) => sum + d.activities.length, 0) ?? 0;
+  const pinnedAnnouncements = announcements.filter((a) => a.pinned);
+  const latestAnnouncement = pinnedAnnouncements[0] ?? announcements[0];
 
   // Today's plan
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDay = days?.find((d) => d.date.startsWith(todayStr));
 
+  // Next upcoming day if today has no entry
+  const upcomingDay = !todayDay
+    ? days?.find((d) => d.date > todayStr)
+    : null;
+
+  const planDay = todayDay ?? upcomingDay;
+  const planLabel = todayDay ? "Today's Plan" : upcomingDay ? 'Next Up' : "Today's Plan";
+
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-GB', { style: 'currency', currency: currentTrip.home_currency }).format(n);
 
+  const showFinance = totalSpent > 0 || depositsOutstanding > 0 || pendingSettlements > 0;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
       {/* ── Quick stats ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -124,33 +135,61 @@ export default function DashboardPage() {
           label="Activities"
           iconBg="bg-orange-50"
         />
+        <StatCard
+          icon={<Receipt size={18} strokeWidth={1.75} className="text-emerald-600" />}
+          value={totalSpent > 0 ? fmt(totalSpent) : '—'}
+          label="Total Spent"
+          iconBg="bg-emerald-50"
+        />
       </div>
 
-      {/* ── Today's Plan ── */}
+      {/* ── Pinned announcement banner ── */}
+      {latestAnnouncement && (
+        <Link
+          to="/community"
+          className="flex items-start gap-3 bg-navy/5 border border-navy/15 rounded-xl px-4 py-3 hover:bg-navy/10 transition-colors"
+        >
+          <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+            {latestAnnouncement.pinned
+              ? <Pin size={13} strokeWidth={2.5} className="text-navy" />
+              : <Megaphone size={13} strokeWidth={2} className="text-navy" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-display font-semibold text-navy truncate">{latestAnnouncement.title}</p>
+            <p className="text-xs text-ink-faint font-body line-clamp-1 mt-0.5">{latestAnnouncement.content}</p>
+          </div>
+          <span className="text-xs text-navy font-body flex-shrink-0 mt-0.5">View →</span>
+        </Link>
+      )}
+
+      {/* ── Today's / Next Plan ── */}
       <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
         <div className="px-5 py-4 border-b border-parchment-dark flex items-center justify-between">
           <div>
-            <h3 className="font-display text-base font-semibold text-ink">Today's Plan</h3>
-            {todayDay && (
-              <p className="text-xs text-ink-faint mt-0.5">{todayDay.title || `Day ${todayDay.day_number}`}</p>
+            <h3 className="font-display text-base font-semibold text-ink">{planLabel}</h3>
+            {planDay && (
+              <p className="text-xs text-ink-faint mt-0.5">
+                {planDay.title || `Day ${planDay.day_number}`} ·{' '}
+                {new Date(planDay.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </p>
             )}
           </div>
           <Link to="/itinerary" className="text-xs text-navy hover:underline font-body">View all →</Link>
         </div>
-        {!todayDay ? (
+        {!planDay ? (
           <div className="p-8 text-center">
             <CalendarDays size={28} className="text-ink-faint mx-auto mb-2" strokeWidth={1.5} />
-            <p className="text-sm text-ink-faint">No activities planned for today.</p>
-            <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Add to itinerary →</Link>
+            <p className="text-sm text-ink-faint">No activities planned yet.</p>
+            <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Build itinerary →</Link>
           </div>
-        ) : todayDay.activities.length === 0 ? (
+        ) : planDay.activities.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-sm text-ink-faint">Nothing scheduled for today yet.</p>
+            <p className="text-sm text-ink-faint">Nothing scheduled for this day yet.</p>
             <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Add activities →</Link>
           </div>
         ) : (
           <div className="divide-y divide-parchment-dark">
-            {todayDay.activities.map((activity) => (
+            {planDay.activities.map((activity) => (
               <div key={activity.id} className="flex items-center gap-4 px-5 py-3.5">
                 <div className="w-10 h-10 rounded-xl bg-parchment flex items-center justify-center flex-shrink-0 text-xl leading-none">
                   {ACTIVITY_ICONS[activity.type as ActivityType] ?? '📍'}
@@ -176,142 +215,40 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── Travellers ── */}
-      {travellers && travellers.length > 0 && (
+      {/* ── Finances at a Glance ── */}
+      {showFinance && (
         <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
-          <div className="px-5 py-4 border-b border-parchment-dark flex items-center justify-between">
-            <h3 className="font-display text-base font-semibold text-ink">Travellers</h3>
-            <Link to="/travellers" className="text-xs text-navy hover:underline font-body">
-              Manage →
-            </Link>
-          </div>
-          <div className="p-5 flex flex-wrap gap-2">
-            {travellers.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-2 bg-parchment rounded-lg px-3 py-1.5"
-              >
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
-                  style={{ backgroundColor: t.avatar_colour }}
-                >
-                  {t.name.charAt(0)}
-                </div>
-                <span className="text-sm font-medium text-ink font-body">{t.name}</span>
-                <span className={`badge text-[10px] ${
-                  t.type === 'child' ? 'badge-gold' : t.type === 'infant' ? 'badge-terracotta' : 'badge-navy'
-                }`}>
-                  {t.type}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Finances ── */}
-      {(totalSpent > 0 || depositsOutstanding > 0 || pendingSettlements > 0) && (
-        <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
-          <div className="px-5 py-4 border-b border-parchment-dark">
-            <h3 className="font-display text-base font-semibold text-ink">Finances at a Glance</h3>
+          <div className="px-5 py-3 border-b border-parchment-dark">
+            <h3 className="font-display text-sm font-semibold text-ink">Finances</h3>
           </div>
           <div className="grid grid-cols-3 divide-x divide-parchment-dark">
-            <Link
-              to="/expenses"
+            <Link to="/expenses"
               className="flex flex-col items-center gap-1 p-4 hover:bg-parchment/50 transition-colors text-center group"
             >
-              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center mb-1 group-hover:bg-blue-100 transition-colors">
-                <Receipt size={16} strokeWidth={1.75} className="text-navy" />
+              <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center mb-1 group-hover:bg-blue-100 transition-colors">
+                <Receipt size={15} strokeWidth={1.75} className="text-navy" />
               </div>
               <span className="font-display text-sm font-bold text-ink">{fmt(totalSpent)}</span>
               <span className="text-xs text-ink-faint font-body">Total Spent</span>
             </Link>
-            <Link
-              to="/deposits"
+            <Link to="/expenses"
               className="flex flex-col items-center gap-1 p-4 hover:bg-parchment/50 transition-colors text-center group"
             >
-              <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center mb-1 group-hover:bg-orange-100 transition-colors">
-                <Bookmark size={16} strokeWidth={1.75} className="text-gold-aged" />
+              <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center mb-1 group-hover:bg-orange-100 transition-colors">
+                <Bookmark size={15} strokeWidth={1.75} className="text-gold-aged" />
               </div>
               <span className="font-display text-sm font-bold text-ink">{fmt(depositsOutstanding)}</span>
               <span className="text-xs text-ink-faint font-body">Deposits Due</span>
             </Link>
-            <Link
-              to="/settlements"
+            <Link to="/expenses"
               className="flex flex-col items-center gap-1 p-4 hover:bg-parchment/50 transition-colors text-center group"
             >
-              <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center mb-1 group-hover:bg-violet-100 transition-colors">
-                <Scale size={16} strokeWidth={1.75} className="text-violet-600" />
+              <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center mb-1 group-hover:bg-violet-100 transition-colors">
+                <Scale size={15} strokeWidth={1.75} className="text-violet-600" />
               </div>
               <span className="font-display text-sm font-bold text-ink">{pendingSettlements}</span>
               <span className="text-xs text-ink-faint font-body">Pending</span>
             </Link>
-          </div>
-        </div>
-      )}
-
-      {/* ── Upcoming days ── */}
-      {days && days.length > 0 && (
-        <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
-          <div className="px-5 py-4 border-b border-parchment-dark flex items-center justify-between">
-            <h3 className="font-display text-base font-semibold text-ink">Upcoming Days</h3>
-            <Link to="/itinerary" className="text-xs text-navy hover:underline font-body">
-              View all →
-            </Link>
-          </div>
-          <div className="divide-y divide-parchment-dark">
-            {days.slice(0, 3).map((day) => (
-              <div key={day.id} className="flex items-center gap-4 px-5 py-3.5">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <span className="text-navy font-display font-bold text-sm">{day.day_number}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-ink text-sm font-display truncate">
-                    {day.title || `Day ${day.day_number}`}
-                  </div>
-                  <div className="text-xs text-ink-faint font-body">
-                    {day.activities.length} activit{day.activities.length === 1 ? 'y' : 'ies'}
-                  </div>
-                </div>
-                <div className="text-xs text-ink-faint font-body flex-shrink-0">
-                  {new Date(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Announcements ── */}
-      {announcements.length > 0 && (
-        <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
-          <div className="px-5 py-4 border-b border-parchment-dark flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Megaphone size={16} strokeWidth={1.75} className="text-navy" />
-              <h3 className="font-display text-base font-semibold text-ink">Latest Updates</h3>
-            </div>
-            <Link to="/announcements" className="text-xs text-navy hover:underline font-body">
-              View all →
-            </Link>
-          </div>
-          <div className="divide-y divide-parchment-dark">
-            {announcements.slice(0, 3).map((a) => (
-              <div key={a.id} className="px-5 py-3.5 flex items-start gap-3">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5"
-                  style={{ backgroundColor: a.author_colour ?? '#2563EB' }}
-                >
-                  {(a.author_name ?? '?').charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    {a.pinned && <Pin size={10} strokeWidth={2.5} className="text-navy flex-shrink-0" />}
-                    <span className="font-display font-semibold text-ink text-sm truncate">{a.title}</span>
-                  </div>
-                  <p className="text-xs text-ink-faint font-body mt-0.5 line-clamp-1">{a.content}</p>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       )}

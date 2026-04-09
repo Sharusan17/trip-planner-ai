@@ -5,7 +5,10 @@
       "Bash(railway service:*)",
       "Bash(railway variables:*)",
       "Bash(npm install:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit --project dashboard/tsconfig.app.json)",
+      "Bash(./node_modules/.bin/tsc --noEmit --project dashboard/tsconfig.app.json)"
     ]
   }
 }
