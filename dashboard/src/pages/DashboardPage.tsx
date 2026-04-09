@@ -3,7 +3,6 @@ import { useTrip } from '@/context/TripContext';
 import { useQuery } from '@tanstack/react-query';
 import { travellersApi } from '@/api/travellers';
 import { itineraryApi } from '@/api/itinerary';
-import { weatherApi } from '@/api/weather';
 import { expensesApi } from '@/api/expenses';
 import { depositsApi } from '@/api/deposits';
 import { settlementsApi } from '@/api/settlements';
@@ -12,7 +11,6 @@ import {
   Users,
   CalendarDays,
   MapPin,
-  Thermometer,
   Receipt,
   Bookmark,
   Scale,
@@ -20,6 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useState } from 'react';
+import WeatherWidget from '@/components/WeatherWidget';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -58,12 +57,6 @@ export default function DashboardPage() {
     enabled: !!currentTrip,
   });
 
-  const { data: weather } = useQuery({
-    queryKey: ['weather', currentTrip?.latitude, currentTrip?.longitude],
-    queryFn: () => weatherApi.get(currentTrip!.latitude, currentTrip!.longitude),
-    enabled: !!currentTrip && !!currentTrip.latitude,
-    staleTime: 30 * 60 * 1000,
-  });
 
   const { data: expenseSummary = [] } = useQuery({
     queryKey: ['expenses', 'summary', currentTrip?.id],
@@ -92,7 +85,6 @@ export default function DashboardPage() {
   const pendingSettlements = settlements.filter((s) => s.status === 'pending').length;
   const depositsOutstanding = (depositSummary?.total_pending_home ?? 0) + (depositSummary?.total_overdue_home ?? 0);
   const totalActivities = days?.reduce((sum, d) => sum + d.activities.length, 0) ?? 0;
-  const todayWeather = weather?.daily?.[0];
   const shareUrl = `${window.location.origin}/?code=${currentTrip.group_code}`;
 
   const handleCopy = () => {
@@ -126,12 +118,6 @@ export default function DashboardPage() {
           value={totalActivities}
           label="Activities"
           iconBg="bg-orange-50"
-        />
-        <StatCard
-          icon={<Thermometer size={18} strokeWidth={1.75} className="text-emerald-600" />}
-          value={todayWeather ? `${Math.round(todayWeather.temperature_max)}°` : '--'}
-          label="Today's High"
-          iconBg="bg-emerald-50"
         />
       </div>
 
@@ -278,6 +264,9 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── Weather widget ── */}
+      <WeatherWidget />
     </div>
   );
 }

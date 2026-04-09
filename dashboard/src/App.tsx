@@ -6,7 +6,6 @@ import DashboardPage from './pages/DashboardPage';
 import TravellersPage from './pages/TravellersPage';
 import ItineraryPage from './pages/ItineraryPage';
 import MapPage from './pages/MapPage';
-import WeatherPage from './pages/WeatherPage';
 import CurrencyPage from './pages/CurrencyPage';
 import ExpensesPage from './pages/ExpensesPage';
 import SettlementsPage from './pages/SettlementsPage';
@@ -35,7 +34,6 @@ function App() {
         <Route path="/travellers" element={<TravellersPage />} />
         <Route path="/itinerary" element={<ItineraryPage />} />
         <Route path="/map" element={<MapPage />} />
-        <Route path="/weather" element={<WeatherPage />} />
         <Route path="/currency" element={<CurrencyPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/settlements" element={<SettlementsPage />} />
