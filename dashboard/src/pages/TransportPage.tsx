@@ -199,7 +199,9 @@ export default function TransportPage() {
   function handleSeatAssign(vehicleId: string, travellerId: string) {
     const vehicle = vehicles.find((v) => v.id === vehicleId);
     if (!vehicle) return;
-    const currentSeats = vehicle.seats.filter((s) => s.traveller_id !== travellerId);
+    const currentSeats = vehicle.seats
+      .filter((s) => s.traveller_id !== travellerId)
+      .map((s) => ({ traveller_id: s.traveller_id, seat_label: s.seat_label ?? undefined }));
     const newSeats = [...currentSeats, { traveller_id: travellerId }];
     assignSeatMutation.mutate({ vehicleId, seats: newSeats });
   }

@@ -1,0 +1,292 @@
+@import "tailwindcss";
+
+@theme {
+  /* Remapped color tokens — same Tailwind utility names, modern values */
+  --color-navy: #2563EB;
+  --color-navy-light: #3B82F6;
+  --color-navy-dark: #1D4ED8;
+  --color-parchment: #F8FAFC;
+  --color-parchment-dark: #E2E8F0;
+  --color-parchment-light: #FFFFFF;
+  --color-gold: #F97316;
+  --color-gold-light: #FB923C;
+  --color-gold-aged: #EA580C;
+  --color-terracotta: #EF4444;
+  --color-terracotta-light: #F87171;
+  --color-ink: #0F172A;
+  --color-ink-light: #475569;
+  --color-ink-faint: #94A3B8;
+
+  /* New semantic tokens */
+  --color-success: #10B981;
+  --color-success-light: #ECFDF5;
+  --color-warning: #F59E0B;
+  --color-warning-light: #FFFBEB;
+  --color-danger-light: #FEF2F2;
+  --color-sidebar: #0F172A;
+  --color-sidebar-border: #1E293B;
+  --color-slate-400: #94A3B8;
+  --color-slate-500: #64748B;
+
+  /* Fonts */
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Work Sans', sans-serif;
+  --font-mono: 'Courier New', monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 10px 25px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Base ─────────────────────────────────────────── */
+body {
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  background-color: var(--color-parchment);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+/* ─── Card ─────────────────────────────────────────── */
+/* .vintage-card retained for compatibility — now renders as a clean modern card */
+.vintage-card {
+  background: var(--color-parchment-light);
+  border: 1px solid var(--color-parchment-dark);
+  box-shadow: var(--shadow-card);
+  border-radius: 12px;
+  position: relative;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.vintage-card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Map grid — no-op (removes old paper texture) */
+.map-grid::before {
+  content: none;
+}
+
+/* Compass watermark — hidden */
+.compass-watermark {
+  display: none;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-parchment);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-parchment-dark);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-faint);
+}
+
+/* ─── Leaflet overrides ─────────────────────────────── */
+.leaflet-container {
+  font-family: var(--font-body) !important;
+  border-radius: 12px;
+  border: 1px solid var(--color-parchment-dark);
+}
+
+/* ─── Buttons ───────────────────────────────────────── */
+.btn-primary {
+  background: var(--color-navy);
+  color: #FFFFFF;
+  font-family: var(--font-body);
+  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.btn-primary:hover {
+  background: var(--color-navy-dark);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background: #FFFFFF;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-parchment-dark);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.btn-secondary:hover {
+  background: var(--color-parchment);
+  border-color: var(--color-ink-faint);
+}
+
+.btn-danger {
+  background: var(--color-terracotta);
+  color: #FFFFFF;
+  font-family: var(--font-body);
+  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.btn-danger:hover {
+  background: #DC2626;
+  transform: translateY(-1px);
+}
+
+.btn-danger:active {
+  transform: translateY(0);
+}
+
+/* ─── Inputs ────────────────────────────────────────── */
+.vintage-input {
+  background: #FFFFFF;
+  border: 1px solid var(--color-parchment-dark);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.vintage-input:focus {
+  outline: none;
+  border-color: var(--color-navy);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.vintage-input::placeholder {
+  color: var(--color-ink-faint);
+}
+
+/* ─── Badges ────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+}
+
+.badge-navy {
+  background: #EFF6FF;
+  color: var(--color-navy);
+}
+
+.badge-gold {
+  background: #FFF7ED;
+  color: var(--color-gold-aged);
+}
+
+.badge-terracotta {
+  background: #FEF2F2;
+  color: var(--color-terracotta);
+}
+
+.badge-green {
+  background: #ECFDF5;
+  color: #065F46;
+}
+
+/* ─── Status badges ─────────────────────────────────── */
+.status-badge-pending {
+  background: #FFFBEB;
+  color: #92400E;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-badge-paid {
+  background: #ECFDF5;
+  color: #065F46;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-badge-overdue {
+  background: #FEF2F2;
+  color: #991B1B;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ─── Progress bars ─────────────────────────────────── */
+.progress-bar-track {
+  background: var(--color-parchment-dark);
+  border-radius: 9999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--color-navy), var(--color-navy-light));
+  transition: width 0.3s ease;
+}

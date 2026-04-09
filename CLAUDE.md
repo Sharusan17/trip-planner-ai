@@ -18,9 +18,9 @@ A **generic Group Holiday Planner** PWA. An organiser creates a trip and shares 
 
 ```
 trip-planner-ai/
-├── shared/          @trip-planner-ai/shared — TypeScript types only (no build step)
-├── server/          Express + TypeScript + PostgreSQL (port 3001)
-└── client/          React 19 + Vite + Tailwind CSS v4 (port 5173)
+├── shared/     @trip-planner-ai/shared — TypeScript types (built before server/dashboard)
+├── server/     Express + TypeScript + PostgreSQL (port 3001)
+└── dashboard/  React 19 + Vite + Tailwind CSS v4 (port 5173)
 ```
 
 Root workspace config at `package.json` uses npm workspaces.
@@ -29,39 +29,34 @@ Root workspace config at `package.json` uses npm workspaces.
 
 ## Running the Project
 
-> **IMPORTANT:** Node is installed via nvm. Every bash command must be prefixed:
-> ```bash
-> export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-> ```
-
-### Dev (both server + client concurrently)
+### Dev (server + dashboard concurrently)
 ```bash
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && npm run dev
+npm run dev
 ```
 
 ### Server only
 ```bash
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && npm run dev:server
+npm run dev:server
 ```
 
-### Client only
+### Dashboard only
 ```bash
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && npm run dev:client
+npm run dev:client
 ```
 
 ### Run DB migrations
 ```bash
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && npm run migrate -w server
+npm run migrate -w server
 ```
 
-### Seed demo data (Faro trip, 10 travellers, 3 days)
+### Seed demo data
 ```bash
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && npm run seed -w server
+npm run seed -w server
 ```
 
 ### Build
 ```bash
-export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && npm run build
+npm run build
 ```
 
 ---
@@ -123,34 +118,52 @@ Run migrations after creating the DB: `npm run migrate -w server`
 
 ---
 
-## Vintage Theme Classes
+## Design System Classes
 
 Defined in `client/src/styles/globals.css`. Always use these — do not add inline Tailwind for card/button patterns.
+Icons: use `lucide-react` SVG icons. No emoji in navigation or UI chrome.
 
 | Class | Use |
 |-------|-----|
-| `.vintage-card` | Main content container |
-| `.btn-primary` | Navy filled button |
-| `.btn-secondary` | Parchment outlined button |
-| `.btn-danger` | Terracotta button |
-| `.vintage-input` | Form inputs |
-| `.badge` | Base badge |
-| `.badge-navy` | Navy badge |
-| `.badge-gold` | Gold badge |
-| `.badge-terracotta` | Terracotta/red badge |
-| `.status-badge-pending` | Deposit/settlement pending |
-| `.status-badge-paid` | Deposit/settlement paid |
-| `.status-badge-overdue` | Deposit overdue |
-| `.progress-bar-track` | Budget progress track |
-| `.progress-bar-fill` | Budget progress fill |
+| `.vintage-card` | White card with 12px radius + subtle shadow |
+| `.btn-primary` | Blue filled button (`#2563EB`) |
+| `.btn-secondary` | White/ghost outlined button |
+| `.btn-danger` | Red button (`#EF4444`) |
+| `.vintage-input` | Form inputs — white bg, 8px radius, blue focus ring |
+| `.badge` | Base badge (6px radius) |
+| `.badge-navy` | Blue tint badge |
+| `.badge-gold` | Orange tint badge |
+| `.badge-terracotta` | Red tint badge |
+| `.badge-green` | Green tint badge |
+| `.status-badge-pending` | Amber pill — pending state |
+| `.status-badge-paid` | Emerald pill — paid state |
+| `.status-badge-overdue` | Red pill — overdue state |
+| `.progress-bar-track` | Progress track (full-radius) |
+| `.progress-bar-fill` | Blue gradient fill |
 
 ### Colour Tokens
 ```
---color-parchment: #F5E6C8  (main bg)
---color-navy:      #1B3A5C  (primary)
---color-terracotta:#C65D3E  (accent/danger)
---color-gold:      #B8963E  (secondary)
---color-ink:       #2C2417  (text)
+--color-parchment:      #F8FAFC  (page bg)
+--color-parchment-dark: #E2E8F0  (borders/dividers)
+--color-parchment-light:#FFFFFF  (card/surface bg)
+--color-navy:           #2563EB  (primary blue)
+--color-navy-light:     #3B82F6  (blue light)
+--color-navy-dark:      #1D4ED8  (blue dark / hover)
+--color-gold:           #F97316  (orange accent)
+--color-gold-light:     #FB923C  (orange light)
+--color-gold-aged:      #EA580C  (orange dark)
+--color-terracotta:     #EF4444  (red / danger)
+--color-ink:            #0F172A  (text primary)
+--color-ink-light:      #475569  (text secondary)
+--color-ink-faint:      #94A3B8  (text tertiary)
+--color-sidebar:        #0F172A  (sidebar bg)
+```
+
+### Typography
+```
+--font-display: 'Outfit', sans-serif   (headings, labels)
+--font-body:    'Work Sans', sans-serif (body, buttons, inputs)
+--font-mono:    'Courier New', monospace (group codes)
 ```
 
 ---

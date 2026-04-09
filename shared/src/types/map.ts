@@ -1,4 +1,4 @@
-import { ActivityType } from './itinerary';
+import type { ActivityType } from './itinerary';
 
 export interface MapPin {
   id: string;
