@@ -9,6 +9,18 @@ import { settlementsApi } from '@/api/settlements';
 import { announcementsApi } from '@/api/announcements';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import type { ActivityType } from '@trip-planner-ai/shared';
+
+const ACTIVITY_COLOURS: Record<string, { bg: string; text: string }> = {
+  flight:        { bg: 'bg-blue-50',   text: 'text-blue-600'   },
+  transport:     { bg: 'bg-slate-50',  text: 'text-slate-500'  },
+  hotel:         { bg: 'bg-purple-50', text: 'text-purple-600' },
+  food:          { bg: 'bg-orange-50', text: 'text-orange-500' },
+  sightseeing:   { bg: 'bg-emerald-50',text: 'text-emerald-600'},
+  beach:         { bg: 'bg-cyan-50',   text: 'text-cyan-600'   },
+  shopping:      { bg: 'bg-pink-50',   text: 'text-pink-500'   },
+  entertainment: { bg: 'bg-amber-50',  text: 'text-amber-600'  },
+  custom:        { bg: 'bg-gray-50',   text: 'text-gray-500'   },
+};
 import {
   Users,
   CalendarDays,
@@ -191,7 +203,7 @@ export default function DashboardPage() {
           <div className="divide-y divide-parchment-dark">
             {planDay.activities.map((activity) => (
               <div key={activity.id} className="flex items-center gap-4 px-5 py-3.5">
-                <div className="w-10 h-10 rounded-xl bg-parchment flex items-center justify-center flex-shrink-0 text-xl leading-none">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg leading-none ${(ACTIVITY_COLOURS[activity.type] ?? ACTIVITY_COLOURS.custom).bg}`}>
                   {ACTIVITY_ICONS[activity.type as ActivityType] ?? '📍'}
                 </div>
                 <div className="flex-1 min-w-0">
