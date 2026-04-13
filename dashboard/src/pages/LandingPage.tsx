@@ -69,7 +69,7 @@ export default function LandingPage() {
         setLocationSuggestions(data);
         setShowSuggestions(data.length > 0);
       } catch {
-        // silently ignore network errors
+        // silently ignore
       } finally {
         setLocationSearching(false);
       }
@@ -77,7 +77,6 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, [locationQuery, locationPinned]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (locationRef.current && !locationRef.current.contains(e.target as Node)) {
@@ -96,12 +95,7 @@ export default function LandingPage() {
       result.display_name.split(',')[0];
     const country = result.address?.country;
     const displayName = [city, country].filter(Boolean).join(', ');
-
-    setLocationPinned({
-      name: displayName,
-      lat: parseFloat(result.lat),
-      lng: parseFloat(result.lon),
-    });
+    setLocationPinned({ name: displayName, lat: parseFloat(result.lat), lng: parseFloat(result.lon) });
     setLocationQuery(displayName);
     setLocationSuggestions([]);
     setShowSuggestions(false);
@@ -174,48 +168,55 @@ export default function LandingPage() {
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{
-        background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 40%, #1D4ED8 100%)',
+        background: 'linear-gradient(160deg, #4E8080 0%, #6B9999 35%, #7BAAA8 65%, #507878 100%)',
       }}
     >
-      {/* Glow overlay */}
+      {/* Soft radial highlight */}
       <div
         className="pointer-events-none fixed inset-0"
         style={{
-          background:
-            'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(37,99,235,0.18) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse 70% 50% at 50% 20%, rgba(255,255,255,0.10) 0%, transparent 70%)',
         }}
       />
 
-      <div className="relative w-full max-w-md">
+      <div className="relative w-full max-w-sm">
         {/* Brand mark — home only */}
         {view === 'home' && (
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-navy mb-4 shadow-lg">
-              <Plane size={26} className="text-white" strokeWidth={1.75} />
+          <div className="text-center mb-7">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white mb-4 shadow-lg">
+              <Plane size={28} className="text-[#4E8080]" strokeWidth={1.75} />
             </div>
-            <h1 className="font-display text-3xl font-bold text-white mb-1">Trip Planner</h1>
-            <p className="text-slate-400 text-sm">Plan your group adventure together</p>
+            <h1 className="font-display text-3xl font-bold text-white mb-1.5 tracking-tight">
+              Trip Planner
+            </h1>
+            <p className="text-white/60 text-sm font-body">Plan your group adventure together</p>
           </div>
         )}
 
         {/* Error alert */}
         {error && (
-          <div className="mb-4 flex items-start gap-2.5 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm">
+          <div className="mb-4 flex items-start gap-2.5 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm backdrop-blur-sm">
             <AlertCircle size={15} className="flex-shrink-0 mt-0.5" strokeWidth={2} />
             {error}
           </div>
         )}
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-[0_24px_60px_rgba(0,0,0,0.3)] overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-[0_24px_60px_rgba(28,25,23,0.25)] overflow-hidden">
 
           {/* ── Home ── */}
           {view === 'home' && (
-            <div className="p-8 space-y-3">
-              <button onClick={() => setView('create')} className="w-full btn-primary py-3 text-base font-semibold">
+            <div className="p-7 space-y-3">
+              <button
+                onClick={() => setView('create')}
+                className="w-full btn-primary py-3 text-base font-semibold"
+              >
                 Create a Trip
               </button>
-              <button onClick={() => setView('join')} className="w-full btn-secondary py-3 text-base font-semibold">
+              <button
+                onClick={() => setView('join')}
+                className="w-full btn-secondary py-3 text-base font-semibold"
+              >
                 Join a Trip
               </button>
             </div>
@@ -224,20 +225,18 @@ export default function LandingPage() {
           {/* ── Create trip ── */}
           {view === 'create' && (
             <div className="p-6 space-y-4">
-              {/* Header */}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setView('home')}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-parchment transition-colors text-ink-faint hover:text-ink"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-parchment transition-colors text-ink-faint hover:text-ink"
                 >
                   <ArrowLeft size={16} strokeWidth={2} />
                 </button>
-                <h2 className="font-display text-lg font-semibold text-ink">Create a Trip</h2>
+                <h2 className="font-display text-lg font-bold text-ink">Create a Trip</h2>
               </div>
 
-              {/* Your name */}
               <div>
-                <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
+                <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">
                   Your Name *
                 </label>
                 <input
@@ -248,9 +247,8 @@ export default function LandingPage() {
                 />
               </div>
 
-              {/* Trip name */}
               <div>
-                <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
+                <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">
                   Trip Name *
                 </label>
                 <input
@@ -261,14 +259,13 @@ export default function LandingPage() {
                 />
               </div>
 
-              {/* Location search */}
+              {/* Location autocomplete */}
               <div ref={locationRef}>
-                <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
+                <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">
                   Destination *
                 </label>
                 <div className="relative">
                   <div className="relative flex items-center">
-                    {/* Icon */}
                     <span className="absolute left-3 text-ink-faint pointer-events-none">
                       {locationSearching ? (
                         <Loader2 size={15} className="animate-spin" />
@@ -302,7 +299,6 @@ export default function LandingPage() {
                     )}
                   </div>
 
-                  {/* Suggestions dropdown */}
                   {showSuggestions && locationSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-parchment-dark rounded-xl shadow-[var(--shadow-elevated)] z-50 overflow-hidden">
                       {locationSuggestions.map((result) => {
@@ -311,12 +307,7 @@ export default function LandingPage() {
                           result.address?.town ||
                           result.address?.village ||
                           result.display_name.split(',')[0];
-                        const detail = result.display_name
-                          .split(',')
-                          .slice(1, 3)
-                          .join(',')
-                          .trim();
-
+                        const detail = result.display_name.split(',').slice(1, 3).join(',').trim();
                         return (
                           <button
                             key={result.place_id}
@@ -327,9 +318,7 @@ export default function LandingPage() {
                             <MapPin size={14} strokeWidth={2} className="text-ink-faint flex-shrink-0 mt-0.5" />
                             <div className="min-w-0">
                               <div className="text-sm font-semibold text-ink font-display truncate">{city}</div>
-                              {detail && (
-                                <div className="text-xs text-ink-faint font-body truncate">{detail}</div>
-                              )}
+                              {detail && <div className="text-xs text-ink-faint font-body truncate">{detail}</div>}
                             </div>
                           </button>
                         );
@@ -337,7 +326,6 @@ export default function LandingPage() {
                     </div>
                   )}
                 </div>
-
                 {locationPinned && (
                   <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
                     <Check size={11} strokeWidth={2.5} />
@@ -346,38 +334,20 @@ export default function LandingPage() {
                 )}
               </div>
 
-              {/* Dates */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
-                    Start Date *
-                  </label>
-                  <input
-                    className="vintage-input"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">Start Date *</label>
+                  <input className="vintage-input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
-                    End Date *
-                  </label>
-                  <input
-                    className="vintage-input"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">End Date *</label>
+                  <input className="vintage-input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                 </div>
               </div>
 
-              {/* Currencies */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
-                    Home Currency
-                  </label>
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">Home Currency</label>
                   <select className="vintage-input" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value)}>
                     <option value="GBP">GBP (£)</option>
                     <option value="USD">USD ($)</option>
@@ -385,9 +355,7 @@ export default function LandingPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
-                    Dest. Currency
-                  </label>
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">Dest. Currency</label>
                   <select className="vintage-input" value={destCurrency} onChange={(e) => setDestCurrency(e.target.value)}>
                     <option value="EUR">EUR (€)</option>
                     <option value="GBP">GBP (£)</option>
@@ -400,7 +368,7 @@ export default function LandingPage() {
                 <button
                   onClick={handleCreate}
                   disabled={loading}
-                  className="btn-primary w-full py-2.5 font-semibold disabled:opacity-60"
+                  className="btn-primary w-full py-3 font-semibold text-base disabled:opacity-60"
                 >
                   {loading ? 'Creating…' : 'Create Trip'}
                 </button>
@@ -414,42 +382,40 @@ export default function LandingPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setView('home')}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-parchment transition-colors text-ink-faint hover:text-ink"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-parchment transition-colors text-ink-faint hover:text-ink"
                 >
                   <ArrowLeft size={16} strokeWidth={2} />
                 </button>
-                <h2 className="font-display text-lg font-semibold text-ink">Join a Trip</h2>
+                <h2 className="font-display text-lg font-bold text-ink">Join a Trip</h2>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-ink-light mb-1.5 uppercase tracking-wide font-body">
+                <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">
                   Group Code
                 </label>
                 <input
-                  className="vintage-input text-center text-xl tracking-[0.35em] font-mono"
+                  className="vintage-input text-center text-2xl tracking-[0.4em] font-mono"
                   placeholder="XXXX-XXXX"
                   maxLength={9}
                   value={groupCode}
                   onChange={(e) => {
-                    // Strip non-alphanumeric, uppercase, auto-insert hyphen after 4 chars
                     const raw = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
                     setGroupCode(raw.length > 4 ? raw.slice(0, 4) + '-' + raw.slice(4) : raw);
                   }}
                   onKeyDown={(e) => {
-                    // Allow backspace to remove hyphen naturally
                     if (e.key === 'Backspace' && groupCode.endsWith('-')) {
                       e.preventDefault();
                       setGroupCode(groupCode.slice(0, -1));
                     }
                   }}
                 />
-                <p className="text-xs text-ink-faint mt-1 text-center">Works with or without the dash</p>
+                <p className="text-xs text-ink-faint mt-1.5 text-center">Works with or without the dash</p>
               </div>
 
               <button
                 onClick={handleJoinLookup}
                 disabled={loading}
-                className="btn-primary w-full py-2.5 font-semibold disabled:opacity-60"
+                className="btn-primary w-full py-3 font-semibold text-base disabled:opacity-60"
               >
                 {loading ? 'Searching…' : 'Find Trip'}
               </button>
@@ -462,12 +428,12 @@ export default function LandingPage() {
               <div className="flex items-center gap-3 mb-5">
                 <button
                   onClick={() => { setView('join'); setFoundTrip(null); }}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-parchment transition-colors text-ink-faint hover:text-ink"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-parchment transition-colors text-ink-faint hover:text-ink"
                 >
                   <ArrowLeft size={16} strokeWidth={2} />
                 </button>
                 <div className="min-w-0">
-                  <h2 className="font-display text-lg font-semibold text-ink leading-tight truncate">{foundTrip.name}</h2>
+                  <h2 className="font-display text-lg font-bold text-ink leading-tight truncate">{foundTrip.name}</h2>
                   <p className="text-xs text-ink-faint flex items-center gap-1 mt-0.5">
                     <MapPin size={11} strokeWidth={2} />
                     {foundTrip.destination}
@@ -485,7 +451,7 @@ export default function LandingPage() {
                   <button
                     key={t.id}
                     onClick={() => handleSelectTraveller(t)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-parchment-dark hover:border-navy/40 hover:bg-blue-50/50 transition-all text-left"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-parchment-dark hover:border-[#1C1917]/20 hover:bg-parchment/60 transition-all text-left"
                   >
                     <div
                       className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
@@ -505,7 +471,7 @@ export default function LandingPage() {
         </div>
 
         {view === 'home' && (
-          <p className="text-center text-slate-500 text-xs mt-5">No account needed — just a group code</p>
+          <p className="text-center text-white/40 text-xs mt-5">No account needed — just a group code</p>
         )}
       </div>
     </div>
