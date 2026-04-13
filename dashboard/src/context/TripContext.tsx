@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { Trip, Traveller } from '@trip-planner-ai/shared';
+import { tripsApi } from '../api/trips';
+import { travellersApi } from '../api/travellers';
 
 interface TripState {
   currentTrip: Trip | null;
@@ -8,6 +10,7 @@ interface TripState {
   setActiveTraveller: (traveller: Traveller | null) => void;
   isOrganiser: boolean;
   clearSession: () => void;
+  restoring: boolean;
 }
 
 const TripContext = createContext<TripState | null>(null);
@@ -22,8 +25,35 @@ interface StoredSession {
 export function TripProvider({ children }: { children: ReactNode }) {
   const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
   const [activeTraveller, setActiveTraveller] = useState<Traveller | null>(null);
+  const [restoring, setRestoring] = useState(true);
 
-  // Persist session to localStorage
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const stored = getStoredSession();
+    if (!stored) {
+      setRestoring(false);
+      return;
+    }
+    Promise.all([
+      tripsApi.getById(stored.tripId),
+      travellersApi.list(stored.tripId),
+    ])
+      .then(([trip, travellers]) => {
+        const traveller = travellers.find((t) => t.id === stored.travellerId);
+        if (trip && traveller) {
+          setCurrentTrip(trip);
+          setActiveTraveller(traveller);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(STORAGE_KEY);
+      })
+      .finally(() => setRestoring(false));
+  }, []);
+
+  // Persist session to localStorage whenever trip/traveller change
   useEffect(() => {
     if (currentTrip && activeTraveller) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -49,6 +79,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
       setActiveTraveller,
       isOrganiser,
       clearSession,
+      restoring,
     }}>
       {children}
     </TripContext.Provider>
