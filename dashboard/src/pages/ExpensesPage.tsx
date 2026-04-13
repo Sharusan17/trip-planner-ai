@@ -625,7 +625,7 @@ export default function ExpensesPage() {
                                 )}
                                 <span className="text-xs text-ink-faint">{exp.splits.length} {exp.splits.length === 1 ? 'person' : 'people'}</span>
                                 {exp.receipt_filename && (
-                                  <button onClick={() => setViewingReceipt(`/uploads/receipts/${exp.receipt_filename!}`)}
+                                  <button onClick={() => setViewingReceipt(`/api/v1/expenses/${exp.id}/receipt`)}
                                     className="text-xs text-navy hover:underline flex items-center gap-0.5">
                                     📎 Receipt
                                   </button>
@@ -1099,7 +1099,7 @@ export default function ExpensesPage() {
                   )
                 ) : editingExpense?.receipt_filename ? (
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button type="button" onClick={() => setViewingReceipt(`/uploads/receipts/${editingExpense.receipt_filename}`)}
+                    <button type="button" onClick={() => setViewingReceipt(`/api/v1/expenses/${editingExpense.id}/receipt`)}
                       className="btn-secondary text-xs py-1.5 px-3">📎 View current receipt</button>
                     <button type="button" onClick={() => receiptInputRef.current?.click()} className="btn-secondary text-xs py-1.5 px-3">Replace</button>
                     {isOrganiser && (

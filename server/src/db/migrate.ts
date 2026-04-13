@@ -344,6 +344,12 @@ const migrations = [
   );`,
 
   `CREATE INDEX IF NOT EXISTS idx_trip_photos_trip ON trip_photos(trip_id, created_at DESC);`,
+
+  // 016: store image/receipt data as BYTEA in DB (replaces disk storage)
+  `ALTER TABLE trip_photos ADD COLUMN IF NOT EXISTS data BYTEA;`,
+  `ALTER TABLE trip_photos ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100);`,
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_data BYTEA;`,
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_mime VARCHAR(100);`,
 ];
 
 export async function runMigrations() {

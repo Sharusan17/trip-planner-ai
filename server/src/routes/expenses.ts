@@ -1,6 +1,4 @@
 import { Router, Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
 import pool from '../db/pool';
 import { getRate } from '../services/currencyService';
 import { uploadReceipt } from '../middleware/upload';
@@ -375,21 +373,32 @@ router.delete('/expenses/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /expenses/:id/receipt — serve receipt binary from DB
+router.get('/expenses/:id/receipt', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT receipt_data, receipt_mime FROM expenses WHERE id = $1`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0 || !result.rows[0].receipt_data) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const { receipt_data, receipt_mime } = result.rows[0];
+    res.set('Content-Type', receipt_mime || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=31536000');
+    res.send(receipt_data);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // POST /expenses/:id/receipt  (multipart)
 router.post('/expenses/:id/receipt', uploadReceipt.single('receipt'), async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-
-    // Remove old file if exists
-    const old = await pool.query(`SELECT receipt_filename FROM expenses WHERE id = $1`, [req.params.id]);
-    if (old.rows[0]?.receipt_filename) {
-      const oldPath = path.join(__dirname, '../../uploads/receipts', old.rows[0].receipt_filename);
-      fs.unlink(oldPath, () => {});
-    }
-
     const result = await pool.query(
-      `UPDATE expenses SET receipt_filename = $1 WHERE id = $2 RETURNING receipt_filename`,
-      [req.file.filename, req.params.id]
+      `UPDATE expenses SET receipt_filename = $1, receipt_data = $2, receipt_mime = $3 WHERE id = $4 RETURNING id, receipt_filename`,
+      [req.file.originalname, req.file.buffer, req.file.mimetype, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ receipt_filename: result.rows[0].receipt_filename });
@@ -402,13 +411,10 @@ router.post('/expenses/:id/receipt', uploadReceipt.single('receipt'), async (req
 router.delete('/expenses/:id/receipt', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `UPDATE expenses SET receipt_filename = NULL WHERE id = $1 RETURNING receipt_filename`,
+      `UPDATE expenses SET receipt_filename = NULL, receipt_data = NULL, receipt_mime = NULL WHERE id = $1 RETURNING id`,
       [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (result.rows[0]?.receipt_filename) {
-      fs.unlink(path.join(__dirname, '../../uploads/receipts', result.rows[0].receipt_filename), () => {});
-    }
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

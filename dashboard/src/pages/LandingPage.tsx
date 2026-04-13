@@ -150,7 +150,7 @@ export default function LandingPage() {
     setError('');
     setLoading(true);
     try {
-      const trip = await tripsApi.getByCode(groupCode.toUpperCase().trim());
+      const trip = await tripsApi.getByCode(groupCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase());
       setFoundTrip(trip);
       const travs = await travellersApi.list(trip.id);
       setTravellers(travs);
@@ -430,8 +430,20 @@ export default function LandingPage() {
                   placeholder="XXXX-XXXX"
                   maxLength={9}
                   value={groupCode}
-                  onChange={(e) => setGroupCode(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    // Strip non-alphanumeric, uppercase, auto-insert hyphen after 4 chars
+                    const raw = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
+                    setGroupCode(raw.length > 4 ? raw.slice(0, 4) + '-' + raw.slice(4) : raw);
+                  }}
+                  onKeyDown={(e) => {
+                    // Allow backspace to remove hyphen naturally
+                    if (e.key === 'Backspace' && groupCode.endsWith('-')) {
+                      e.preventDefault();
+                      setGroupCode(groupCode.slice(0, -1));
+                    }
+                  }}
                 />
+                <p className="text-xs text-ink-faint mt-1 text-center">Works with or without the dash</p>
               </div>
 
               <button

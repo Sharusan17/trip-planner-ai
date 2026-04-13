@@ -69,7 +69,7 @@ export default function PhotoAlbumPage() {
     setPreview(url);
   }
 
-  const photoUrl = (filename: string) => `/uploads/photos/${filename}`;
+  const photoUrl = (id: string) => `/api/v1/photos/${id}/image`;
 
   if (!currentTrip) return null;
 
@@ -165,7 +165,7 @@ export default function PhotoAlbumPage() {
           {photos.map((photo) => (
             <div key={photo.id} className="group relative rounded-xl overflow-hidden aspect-square bg-parchment-dark">
               <img
-                src={photoUrl(photo.filename)}
+                src={photoUrl(photo.id)}
                 alt={photo.caption ?? photo.original_name}
                 className="w-full h-full object-cover cursor-pointer transition-transform duration-200 group-hover:scale-105"
                 onClick={() => setLightbox(photo)}
@@ -216,7 +216,7 @@ export default function PhotoAlbumPage() {
               <X size={24} />
             </button>
             <img
-              src={photoUrl(lightbox.filename)}
+              src={photoUrl(lightbox.id)}
               alt={lightbox.caption ?? ''}
               className="w-full max-h-[80vh] object-contain rounded-xl"
             />

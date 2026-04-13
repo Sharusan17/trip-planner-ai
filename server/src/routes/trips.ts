@@ -18,9 +18,12 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { code } = req.query;
     if (code) {
+      // Normalise: uppercase, strip hyphens, then re-insert hyphen at position 4
+      const raw = String(code).toUpperCase().replace(/-/g, '');
+      const normalised = raw.length > 4 ? raw.slice(0, 4) + '-' + raw.slice(4) : raw;
       const result = await pool.query(
-        'SELECT * FROM trips WHERE group_code = $1',
-        [code]
+        'SELECT * FROM trips WHERE UPPER(REPLACE(group_code, \'-\', \'\')) = $1',
+        [raw]
       );
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Trip not found' });

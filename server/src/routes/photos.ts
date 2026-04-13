@@ -1,16 +1,16 @@
 import { Router, Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
 import pool from '../db/pool';
 import { uploadPhoto } from '../middleware/upload';
 
 const router = Router();
 
-// GET /trips/:tripId/photos
+// GET /trips/:tripId/photos — list metadata (no binary data)
 router.get('/trips/:tripId/photos', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT p.*, t.name AS uploader_name, t.avatar_colour AS uploader_colour
+      `SELECT p.id, p.trip_id, p.uploader_id, p.day_id, p.original_name, p.mime_type,
+              p.caption, p.created_at,
+              t.name AS uploader_name, t.avatar_colour AS uploader_colour
        FROM trip_photos p
        JOIN travellers t ON t.id = p.uploader_id
        WHERE p.trip_id = $1
@@ -23,16 +23,44 @@ router.get('/trips/:tripId/photos', async (req: Request, res: Response) => {
   }
 });
 
-// POST /trips/:tripId/photos  (multipart)
+// GET /photos/:id/image — serve photo binary from DB
+router.get('/photos/:id/image', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT data, mime_type FROM trip_photos WHERE id = $1`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0 || !result.rows[0].data) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const { data, mime_type } = result.rows[0];
+    res.set('Content-Type', mime_type || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=31536000');
+    res.send(data);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /trips/:tripId/photos (multipart)
 router.post('/trips/:tripId/photos', uploadPhoto.single('photo'), async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
     const { uploader_id, caption, day_id } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO trip_photos (trip_id, uploader_id, day_id, filename, original_name, caption)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [req.params.tripId, uploader_id, day_id || null, req.file.filename, req.file.originalname, caption || null]
+      `INSERT INTO trip_photos (trip_id, uploader_id, day_id, filename, original_name, caption, data, mime_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, trip_id, uploader_id, day_id, original_name, mime_type, caption, created_at`,
+      [
+        req.params.tripId,
+        uploader_id,
+        day_id || null,
+        req.file.originalname, // keep original name as filename field
+        req.file.originalname,
+        caption || null,
+        req.file.buffer,
+        req.file.mimetype,
+      ]
     );
     const row = result.rows[0];
     const traveller = await pool.query(
@@ -52,15 +80,10 @@ router.post('/trips/:tripId/photos', uploadPhoto.single('photo'), async (req: Re
 router.delete('/photos/:id', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `DELETE FROM trip_photos WHERE id = $1 RETURNING filename`,
+      `DELETE FROM trip_photos WHERE id = $1 RETURNING id`,
       [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-
-    // Delete file from disk
-    const filePath = path.join(__dirname, '../../uploads/photos', result.rows[0].filename);
-    fs.unlink(filePath, () => {}); // ignore error if file missing
-
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

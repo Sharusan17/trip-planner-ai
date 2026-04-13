@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import { errorHandler } from './middleware/errorHandler';
 import tripsRouter from './routes/trips';
 import travellersRouter from './routes/travellers';
@@ -24,7 +23,6 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/v1/trips', tripsRouter);
 app.use('/api/v1', travellersRouter);
