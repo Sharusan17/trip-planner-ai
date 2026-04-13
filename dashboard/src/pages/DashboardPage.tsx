@@ -130,10 +130,10 @@ export default function DashboardPage() {
       {/* ── Quick stats ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
-          icon={<Users size={18} strokeWidth={1.75} className="text-blue-600" />}
+          icon={<Users size={18} strokeWidth={1.75} className="text-[#3A6666]" />}
           value={travellers?.length ?? 0}
           label="Travellers"
-          iconBg="bg-blue-50"
+          iconBg="bg-[#EBF4F4]"
         />
         <StatCard
           icon={<CalendarDays size={18} strokeWidth={1.75} className="text-violet-600" />}
@@ -237,7 +237,7 @@ export default function DashboardPage() {
             <Link to="/expenses"
               className="flex flex-col items-center gap-1 p-4 hover:bg-parchment/50 transition-colors text-center group"
             >
-              <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center mb-1 group-hover:bg-blue-100 transition-colors">
+              <div className="w-8 h-8 rounded-xl bg-[#EBF4F4] flex items-center justify-center mb-1 group-hover:bg-[#D4EDED] transition-colors">
                 <Receipt size={15} strokeWidth={1.75} className="text-navy" />
               </div>
               <span className="font-display text-sm font-bold text-ink">{fmt(totalSpent)}</span>

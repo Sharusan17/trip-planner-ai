@@ -134,7 +134,7 @@ export default function TravellersPage() {
           <div className="flex-1 w-full">
             <p className="text-sm text-ink-light mb-2">Group code:</p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-ink text-blue-300 text-xl tracking-[0.3em] font-mono px-4 py-2.5 rounded-xl text-center">
+              <code className="flex-1 bg-[#1C1917] text-[#7BAAA8] text-xl tracking-[0.3em] font-mono px-4 py-2.5 rounded-xl text-center">
                 {currentTrip.group_code}
               </code>
               <button

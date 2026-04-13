@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Interactive blue — focus rings, badges, links ── */
-  --color-navy: #2563EB;
-  --color-navy-light: #3B82F6;
-  --color-navy-dark: #1D4ED8;
+  /* ── Teal — interactive colour, links, badges, focus rings ── */
+  --color-navy: #4E8080;
+  --color-navy-light: #6B9999;
+  --color-navy-dark: #3A6666;
 
   /* ── Warm cream palette — main surfaces ── */
   --color-parchment: #F5F0E8;
@@ -221,8 +221,8 @@ h1, h2, h3, h4, h5, h6 {
 
 .vintage-input:focus {
   outline: none;
-  border-color: var(--color-charcoal);
-  box-shadow: 0 0 0 3px rgba(28, 25, 23, 0.08);
+  border-color: var(--color-navy);
+  box-shadow: 0 0 0 3px rgba(78, 128, 128, 0.12);
 }
 
 .vintage-input::placeholder {
@@ -241,8 +241,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .badge-navy {
-  background: #EFF6FF;
-  color: var(--color-navy);
+  background: #EBF4F4;
+  color: var(--color-navy-dark);
 }
 
 .badge-gold {

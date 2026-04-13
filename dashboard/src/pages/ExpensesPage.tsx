@@ -30,10 +30,15 @@ const CATEGORIES: ExpenseCategory[] = [
 ];
 
 const SPLIT_MODES: { key: SplitMode; label: string }[] = [
-  { key: 'equal',    label: 'Equal'     },
-  { key: 'weighted', label: 'By Weight' },
-  { key: 'custom',   label: 'Custom'    },
-  { key: 'itemised', label: 'Itemised'  },
+  { key: 'equal',    label: 'Equal'    },
+  { key: 'custom',   label: 'Custom'   },
+  { key: 'itemised', label: 'Itemised' },
+];
+
+const ALL_CURRENCIES = [
+  'AED','AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP',
+  'HKD','HUF','INR','JPY','KRW','MXN','NOK','NZD','PLN','SAR',
+  'SEK','SGD','THB','TRY','USD','ZAR',
 ];
 
 const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
@@ -396,17 +401,38 @@ export default function ExpensesPage() {
       return;
     }
 
-    const cs: Record<string, number> = {};
     if (expenseForm.split_mode === 'custom') {
-      for (const [id, v] of Object.entries(expenseForm.custom_splits)) cs[id] = parseFloat(v) || 0;
+      const target = parseFloat(expenseForm.amount) || 0;
+      const cs: Record<string, number> = {};
+      for (const [id, v] of Object.entries(expenseForm.custom_splits)) {
+        const n = parseFloat(v) || 0;
+        if (n > 0) cs[id] = n;
+      }
+      const total = Object.values(cs).reduce((s, v) => s + v, 0);
+      if (target > 0 && Math.abs(total - target) >= 0.01) {
+        alert(`Custom splits must add up to ${fmt(target, expenseForm.currency)}. Currently: ${fmt(total, expenseForm.currency)}.`);
+        return;
+      }
+      const data: CreateExpenseInput = {
+        description: expenseForm.description, amount: target,
+        currency: expenseForm.currency, category: expenseForm.category,
+        expense_date: expenseForm.expense_date, paid_by: expenseForm.paid_by,
+        split_mode: 'custom',
+        traveller_ids: Object.keys(cs).length > 0 ? Object.keys(cs) : travellers.map((t) => t.id),
+        custom_splits: cs,
+        notes: expenseForm.notes || undefined,
+      };
+      if (editingExpense) updateExpenseMutation.mutate({ id: editingExpense.id, data });
+      else createExpenseMutation.mutate(data);
+      return;
     }
+
     const data: CreateExpenseInput = {
       description: expenseForm.description, amount: parseFloat(expenseForm.amount),
       currency: expenseForm.currency, category: expenseForm.category,
       expense_date: expenseForm.expense_date, paid_by: expenseForm.paid_by,
       split_mode: expenseForm.split_mode,
       traveller_ids: expenseForm.traveller_ids.length > 0 ? expenseForm.traveller_ids : travellers.map((t) => t.id),
-      custom_splits: expenseForm.split_mode === 'custom' ? cs : undefined,
       notes: expenseForm.notes || undefined,
     };
     if (editingExpense) updateExpenseMutation.mutate({ id: editingExpense.id, data });
@@ -612,9 +638,15 @@ export default function ExpensesPage() {
                                   )}
                                 </div>
                                 <div className="text-right shrink-0">
-                                  <p className="font-bold text-navy text-lg">{fmt(exp.amount, exp.currency)}</p>
-                                  {exp.amount_home !== null && exp.currency !== homeCurrency && (
-                                    <p className="text-xs text-ink-faint">~{fmt(exp.amount_home, homeCurrency)}</p>
+                                  {exp.amount_home !== null ? (
+                                    <>
+                                      <p className="font-bold text-ink text-lg">{fmt(exp.amount_home, homeCurrency)}</p>
+                                      {exp.currency !== homeCurrency && (
+                                        <p className="text-xs text-ink-faint">{fmt(exp.amount, exp.currency)}</p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className="font-bold text-ink text-lg">{fmt(exp.amount, exp.currency)}</p>
                                   )}
                                 </div>
                               </div>
@@ -936,9 +968,18 @@ export default function ExpensesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">Currency</label>
-                  <input className="vintage-input w-full uppercase" maxLength={3}
-                    value={expenseForm.currency}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, currency: e.target.value.toUpperCase() })} />
+                  <select className="vintage-input w-full" value={expenseForm.currency}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, currency: e.target.value })}>
+                    {/* Trip currencies first */}
+                    <option value={destCurrency}>{destCurrency} {CURRENCY_SYMBOLS[destCurrency] ?? ''}</option>
+                    {homeCurrency !== destCurrency && (
+                      <option value={homeCurrency}>{homeCurrency} {CURRENCY_SYMBOLS[homeCurrency] ?? ''}</option>
+                    )}
+                    <option disabled>──────────</option>
+                    {ALL_CURRENCIES.filter((c) => c !== destCurrency && c !== homeCurrency).map((c) => (
+                      <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c] ?? ''}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div>
@@ -971,12 +1012,14 @@ export default function ExpensesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink mb-2">Split Mode</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {SPLIT_MODES.map(({ key, label }) => (
                     <button key={key} type="button"
                       onClick={() => setExpenseForm({ ...expenseForm, split_mode: key })}
-                      className={`py-1.5 rounded text-sm font-medium transition-colors ${
-                        expenseForm.split_mode === key ? 'bg-navy text-white' : 'bg-parchment-dark/20 hover:bg-parchment-dark/40'
+                      className={`py-2 rounded-xl text-sm font-medium transition-colors border ${
+                        expenseForm.split_mode === key
+                          ? 'bg-[#1C1917] text-white border-[#1C1917]'
+                          : 'bg-white border-parchment-dark text-ink hover:bg-parchment/60'
                       }`}
                     >{label}</button>
                   ))}
@@ -1038,6 +1081,44 @@ export default function ExpensesPage() {
                     ) : null;
                   })()}
                 </div>
+              ) : expenseForm.split_mode === 'custom' ? (
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-2">Custom Split</label>
+                  {(() => {
+                    const target = parseFloat(expenseForm.amount) || 0;
+                    const total = travellers.reduce((sum, t) => sum + (parseFloat(expenseForm.custom_splits[t.id] ?? '') || 0), 0);
+                    const diff = target > 0 ? total - target : 0;
+                    const valid = target > 0 && Math.abs(diff) < 0.01;
+                    const over = diff > 0.01;
+                    return (
+                      <>
+                        <div className="space-y-2">
+                          {travellers.map((t) => (
+                            <div key={t.id} className="flex items-center gap-3">
+                              <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                                style={{ backgroundColor: t.avatar_colour }}>
+                                {t.name.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="flex-1 text-sm text-ink">{t.name}</span>
+                              <input type="number" step="0.01" min="0"
+                                className="vintage-input w-28 text-sm text-right"
+                                placeholder="0.00"
+                                value={expenseForm.custom_splits[t.id] ?? ''}
+                                onChange={(e) => setExpenseForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {target > 0 && (
+                          <div className={`mt-2.5 flex items-center justify-between text-xs px-1 font-medium ${valid ? 'text-emerald-600' : 'text-terracotta'}`}>
+                            <span>{valid ? '✓ Splits match total' : over ? `Over by ${fmt(Math.abs(diff), expenseForm.currency)}` : `Under by ${fmt(Math.abs(diff), expenseForm.currency)}`}</span>
+                            <span className="font-mono">{fmt(total, expenseForm.currency)} / {fmt(target, expenseForm.currency)}</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
               ) : (
                 <div>
                   <label className="block text-sm font-medium text-ink mb-2">
@@ -1052,15 +1133,6 @@ export default function ExpensesPage() {
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
                           style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
                         <span className="text-sm text-ink flex-1">{t.name}</span>
-                        {expenseForm.split_mode === 'custom' && expenseForm.traveller_ids.includes(t.id) && (
-                          <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm" placeholder="Amount"
-                            value={expenseForm.custom_splits[t.id] ?? ''}
-                            onChange={(e) => setExpenseForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
-                            onClick={(e) => e.stopPropagation()} />
-                        )}
-                        {expenseForm.split_mode === 'weighted' && (
-                          <span className="text-xs text-ink-faint">×{t.cost_split_weight}</span>
-                        )}
                       </label>
                     ))}
                   </div>
@@ -1147,9 +1219,17 @@ export default function ExpensesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">Currency</label>
-                  <input className="vintage-input w-full uppercase" maxLength={3}
-                    value={depositForm.currency}
-                    onChange={(e) => setDepositForm({ ...depositForm, currency: e.target.value.toUpperCase() })} />
+                  <select className="vintage-input w-full" value={depositForm.currency}
+                    onChange={(e) => setDepositForm({ ...depositForm, currency: e.target.value })}>
+                    <option value={destCurrency}>{destCurrency} {CURRENCY_SYMBOLS[destCurrency] ?? ''}</option>
+                    {homeCurrency !== destCurrency && (
+                      <option value={homeCurrency}>{homeCurrency} {CURRENCY_SYMBOLS[homeCurrency] ?? ''}</option>
+                    )}
+                    <option disabled>──────────</option>
+                    {ALL_CURRENCIES.filter((c) => c !== destCurrency && c !== homeCurrency).map((c) => (
+                      <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c] ?? ''}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div>
