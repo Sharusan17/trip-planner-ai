@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import AnnouncementsPage from './AnnouncementsPage';
 import PollsPage from './PollsPage';
+import PhotoAlbumPage from './PhotoAlbumPage';
 
-type Tab = 'updates' | 'polls';
+type Tab = 'updates' | 'polls' | 'photos';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'updates', label: 'Updates' },
   { key: 'polls',   label: 'Polls'   },
+  { key: 'photos',  label: 'Photos'  },
 ];
 
 export default function CommunityPage() {
@@ -30,6 +32,7 @@ export default function CommunityPage() {
 
       {tab === 'updates' && <AnnouncementsPage />}
       {tab === 'polls'   && <PollsPage />}
+      {tab === 'photos'  && <PhotoAlbumPage />}
     </div>
   );
 }

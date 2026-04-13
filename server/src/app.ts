@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import { errorHandler } from './middleware/errorHandler';
 import tripsRouter from './routes/trips';
 import travellersRouter from './routes/travellers';
@@ -14,6 +15,7 @@ import accommodationRouter from './routes/accommodation';
 import depositsRouter from './routes/deposits';
 import announcementsRouter from './routes/announcements';
 import pollsRouter from './routes/polls';
+import photosRouter from './routes/photos';
 
 const app = express();
 
@@ -22,6 +24,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/v1/trips', tripsRouter);
 app.use('/api/v1', travellersRouter);
@@ -36,6 +39,7 @@ app.use('/api/v1', accommodationRouter);
 app.use('/api/v1', depositsRouter);
 app.use('/api/v1', announcementsRouter);
 app.use('/api/v1', pollsRouter);
+app.use('/api/v1', photosRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

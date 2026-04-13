@@ -29,4 +29,14 @@ export const api = {
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  // For multipart/form-data — do NOT set Content-Type, let browser set it with boundary
+  postFile: <T>(path: string, body: FormData): Promise<T> =>
+    fetch(`${API_BASE}${path}`, { method: 'POST', body }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || 'Upload failed');
+      }
+      if (res.status === 204) return undefined as T;
+      return res.json() as Promise<T>;
+    }),
 };

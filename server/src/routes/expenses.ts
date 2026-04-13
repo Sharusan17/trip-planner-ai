@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import pool from '../db/pool';
 import { getRate } from '../services/currencyService';
+import { uploadReceipt } from '../middleware/upload';
 import type { SplitMode, ExpenseCategory } from '@trip-planner-ai/shared';
 
 const router = Router();
@@ -194,12 +197,13 @@ router.post('/trips/:tripId/expenses', async (req: Request, res: Response) => {
     await client.query('BEGIN');
 
     const expResult = await client.query(
-      `INSERT INTO expenses (trip_id, paid_by, amount, currency, amount_home, description, category, split_mode, expense_date, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `INSERT INTO expenses (trip_id, paid_by, amount, currency, amount_home, description, category, split_mode, expense_date, notes, line_items)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
       [tripId, paid_by, amount, currency, amountHome, description,
        (category as ExpenseCategory) || 'other', split_mode || 'equal',
-       expense_date || new Date().toISOString().split('T')[0], notes || null]
+       expense_date || new Date().toISOString().split('T')[0], notes || null,
+       req.body.line_items ? JSON.stringify(req.body.line_items) : null]
     );
     const expense = expResult.rows[0];
 
@@ -284,11 +288,14 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
          split_mode = $7,
          expense_date = COALESCE($8, expense_date),
          notes = COALESCE($9, notes),
+         line_items = COALESCE($10, line_items),
          updated_at = NOW()
-       WHERE id = $10 RETURNING *`,
+       WHERE id = $11 RETURNING *`,
       [paid_by ?? null, newAmount, newCurrency, amountHome,
        description ?? null, category ?? null, newSplitMode,
-       expense_date ?? null, notes ?? null, req.params.id]
+       expense_date ?? null, notes ?? null,
+       req.body.line_items ? JSON.stringify(req.body.line_items) : null,
+       req.params.id]
     );
     const expense = updResult.rows[0];
 
@@ -362,6 +369,46 @@ router.delete('/expenses/:id', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(`DELETE FROM expenses WHERE id = $1 RETURNING id`, [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /expenses/:id/receipt  (multipart)
+router.post('/expenses/:id/receipt', uploadReceipt.single('receipt'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    // Remove old file if exists
+    const old = await pool.query(`SELECT receipt_filename FROM expenses WHERE id = $1`, [req.params.id]);
+    if (old.rows[0]?.receipt_filename) {
+      const oldPath = path.join(__dirname, '../../uploads/receipts', old.rows[0].receipt_filename);
+      fs.unlink(oldPath, () => {});
+    }
+
+    const result = await pool.query(
+      `UPDATE expenses SET receipt_filename = $1 WHERE id = $2 RETURNING receipt_filename`,
+      [req.file.filename, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ receipt_filename: result.rows[0].receipt_filename });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// DELETE /expenses/:id/receipt
+router.delete('/expenses/:id/receipt', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `UPDATE expenses SET receipt_filename = NULL WHERE id = $1 RETURNING receipt_filename`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (result.rows[0]?.receipt_filename) {
+      fs.unlink(path.join(__dirname, '../../uploads/receipts', result.rows[0].receipt_filename), () => {});
+    }
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

@@ -6,7 +6,13 @@ export type ExpenseCategory =
   | 'shopping'
   | 'other';
 
-export type SplitMode = 'equal' | 'weighted' | 'custom';
+export type SplitMode = 'equal' | 'weighted' | 'custom' | 'itemised';
+
+export interface ExpenseLineItem {
+  description: string;
+  amount: number;
+  traveller_ids: string[];
+}
 
 export const EXPENSE_CATEGORY_ICONS: Record<ExpenseCategory, string> = {
   accommodation: '🏨',
@@ -37,6 +43,8 @@ export interface Expense {
   split_mode: SplitMode;
   expense_date: string;
   notes: string | null;
+  line_items: ExpenseLineItem[] | null;
+  receipt_filename: string | null;
   splits: ExpenseSplit[];
   created_at: string;
   updated_at: string;
@@ -53,6 +61,7 @@ export interface CreateExpenseInput {
   traveller_ids: string[];
   custom_splits?: Record<string, number>;
   notes?: string;
+  line_items?: ExpenseLineItem[];
 }
 
 export type UpdateExpenseInput = Partial<CreateExpenseInput>;

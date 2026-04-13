@@ -327,6 +327,23 @@ const migrations = [
 
   `CREATE INDEX IF NOT EXISTS idx_polls_trip ON polls(trip_id, created_at DESC);`,
   `CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id);`,
+
+  // 015: expense line items + receipt, trip photos
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS line_items JSONB DEFAULT '[]';`,
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_filename VARCHAR(255);`,
+
+  `CREATE TABLE IF NOT EXISTS trip_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    uploader_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    day_id UUID REFERENCES itinerary_days(id) ON DELETE SET NULL,
+    filename VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    caption VARCHAR(300),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_trip_photos_trip ON trip_photos(trip_id, created_at DESC);`,
 ];
 
 export async function runMigrations() {

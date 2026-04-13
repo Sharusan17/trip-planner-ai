@@ -28,4 +28,13 @@ export const expensesApi = {
 
   upsertBudgets: (tripId: string, data: UpsertBudgetsInput) =>
     api.put<ExpenseBudget[]>(`/trips/${tripId}/budgets`, data),
+
+  uploadReceipt: (id: string, file: File): Promise<{ receipt_filename: string }> => {
+    const fd = new FormData();
+    fd.append('receipt', file);
+    return api.postFile(`/expenses/${id}/receipt`, fd);
+  },
+
+  deleteReceipt: (id: string): Promise<void> =>
+    api.delete<void>(`/expenses/${id}/receipt`),
 };

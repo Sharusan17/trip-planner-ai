@@ -11,3 +11,4 @@ export * from './types/accommodation';
 export * from './types/deposit';
 export * from './types/announcement';
 export * from './types/poll';
+export * from './types/photo';

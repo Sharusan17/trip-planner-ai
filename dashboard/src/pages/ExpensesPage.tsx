@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '../context/TripContext';
 import { expensesApi } from '../api/expenses';
+import type { ExpenseLineItem } from '@trip-planner-ai/shared';
 import { travellersApi } from '../api/travellers';
 import { settlementsApi } from '../api/settlements';
 import { depositsApi } from '../api/deposits';
@@ -32,6 +33,7 @@ const SPLIT_MODES: { key: SplitMode; label: string }[] = [
   { key: 'equal',    label: 'Equal'     },
   { key: 'weighted', label: 'By Weight' },
   { key: 'custom',   label: 'Custom'    },
+  { key: 'itemised', label: 'Itemised'  },
 ];
 
 const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
@@ -154,6 +156,15 @@ export default function ExpensesPage() {
   const [expenseForm, setExpenseForm] = useState<ExpenseFormData>(() =>
     makeEmptyExpenseForm(currentTrip?.dest_currency, activeTraveller?.id ?? '')
   );
+  // line items for itemised split
+  const [lineItems, setLineItems] = useState<Array<{ description: string; amount: string; traveller_ids: string[] }>>([
+    { description: '', amount: '', traveller_ids: [] },
+  ]);
+  // receipt upload
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
   const [budgetInputs, setBudgetInputs] = useState<Record<ExpenseCategory, string>>({
     accommodation: '', food: '', transport: '', activities: '', shopping: '', other: '',
   });
@@ -237,19 +248,30 @@ export default function ExpensesPage() {
 
   // ── expense mutations
   const createExpenseMutation = useMutation({
-    mutationFn: (data: CreateExpenseInput) => expensesApi.create(currentTrip!.id, data),
+    mutationFn: async (data: CreateExpenseInput) => {
+      const expense = await expensesApi.create(currentTrip!.id, data);
+      if (receiptFile) await expensesApi.uploadReceipt(expense.id, receiptFile).catch(() => {});
+      return expense;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       closeExpenseForm();
     },
   });
   const updateExpenseMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateExpenseInput> }) =>
-      expensesApi.update(id, data),
+    mutationFn: async ({ id, data }: { id: string; data: Partial<CreateExpenseInput> }) => {
+      const expense = await expensesApi.update(id, data);
+      if (receiptFile) await expensesApi.uploadReceipt(id, receiptFile).catch(() => {});
+      return expense;
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); closeExpenseForm(); },
   });
   const deleteExpenseMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+  });
+  const deleteReceiptMutation = useMutation({
+    mutationFn: (id: string) => expensesApi.deleteReceipt(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
   });
 
@@ -283,11 +305,44 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deposits'] }),
   });
 
+  // ── line-item helpers
+  function addLineItem() {
+    setLineItems((prev) => [...prev, { description: '', amount: '', traveller_ids: [] }]);
+  }
+  function removeLineItem(i: number) {
+    setLineItems((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function updateLineItem(i: number, field: 'description' | 'amount', value: string) {
+    setLineItems((prev) => { const n = [...prev]; n[i] = { ...n[i], [field]: value }; return n; });
+  }
+  function toggleLineItemTraveller(i: number, tid: string) {
+    setLineItems((prev) => {
+      const n = [...prev];
+      const ids = n[i].traveller_ids;
+      n[i] = { ...n[i], traveller_ids: ids.includes(tid) ? ids.filter((x) => x !== tid) : [...ids, tid] };
+      return n;
+    });
+  }
+  // Compute per-traveller totals from line items
+  function computeItemisedSplits(): Record<string, number> {
+    const splits: Record<string, number> = {};
+    for (const item of lineItems) {
+      const amt = parseFloat(item.amount) || 0;
+      if (amt <= 0 || item.traveller_ids.length === 0) continue;
+      const share = amt / item.traveller_ids.length;
+      for (const tid of item.traveller_ids) splits[tid] = (splits[tid] ?? 0) + share;
+    }
+    return splits;
+  }
+
   // ── expense helpers
   function closeExpenseForm() {
     setShowExpenseForm(false);
     setEditingExpense(null);
     setExpenseForm(makeEmptyExpenseForm(currentTrip?.dest_currency, activeTraveller?.id ?? ''));
+    setLineItems([{ description: '', amount: '', traveller_ids: [] }]);
+    setReceiptFile(null);
+    setReceiptPreview(null);
   }
   function openEditExpense(e: Expense) {
     setEditingExpense(e);
@@ -299,6 +354,15 @@ export default function ExpensesPage() {
       split_mode: e.split_mode, traveller_ids: e.splits.map((s) => s.traveller_id),
       custom_splits: cs, notes: e.notes ?? '',
     });
+    if (e.split_mode === 'itemised' && e.line_items?.length) {
+      setLineItems(e.line_items.map((li) => ({
+        description: li.description, amount: String(li.amount), traveller_ids: li.traveller_ids,
+      })));
+    } else {
+      setLineItems([{ description: '', amount: '', traveller_ids: [] }]);
+    }
+    setReceiptFile(null);
+    setReceiptPreview(null);
     setShowExpenseForm(true);
   }
   function toggleTraveller(id: string) {
@@ -311,6 +375,27 @@ export default function ExpensesPage() {
   }
   function handleExpenseSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (expenseForm.split_mode === 'itemised') {
+      const computedSplits = computeItemisedSplits();
+      const validLineItems: ExpenseLineItem[] = lineItems
+        .filter(li => li.description.trim() && parseFloat(li.amount) > 0)
+        .map(li => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+      const data: CreateExpenseInput = {
+        description: expenseForm.description, amount: parseFloat(expenseForm.amount),
+        currency: expenseForm.currency, category: expenseForm.category,
+        expense_date: expenseForm.expense_date, paid_by: expenseForm.paid_by,
+        split_mode: 'itemised',
+        traveller_ids: Object.keys(computedSplits).length > 0 ? Object.keys(computedSplits) : travellers.map(t => t.id),
+        custom_splits: computedSplits,
+        line_items: validLineItems,
+        notes: expenseForm.notes || undefined,
+      };
+      if (editingExpense) updateExpenseMutation.mutate({ id: editingExpense.id, data });
+      else createExpenseMutation.mutate(data);
+      return;
+    }
+
     const cs: Record<string, number> = {};
     if (expenseForm.split_mode === 'custom') {
       for (const [id, v] of Object.entries(expenseForm.custom_splits)) cs[id] = parseFloat(v) || 0;
@@ -539,6 +624,12 @@ export default function ExpensesPage() {
                                   <span className="text-xs text-ink-faint">Your share: <strong>{fmt(mySplit.amount, exp.currency)}</strong></span>
                                 )}
                                 <span className="text-xs text-ink-faint">{exp.splits.length} {exp.splits.length === 1 ? 'person' : 'people'}</span>
+                                {exp.receipt_filename && (
+                                  <button onClick={() => setViewingReceipt(`/uploads/receipts/${exp.receipt_filename!}`)}
+                                    className="text-xs text-navy hover:underline flex items-center gap-0.5">
+                                    📎 Receipt
+                                  </button>
+                                )}
                               </div>
                               {exp.notes && <p className="text-xs text-ink-faint mt-1 italic">{exp.notes}</p>}
                             </div>
@@ -825,8 +916,8 @@ export default function ExpensesPage() {
 
       {/* Expense form modal */}
       {showExpenseForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
-          <div className="vintage-card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl border border-parchment-dark shadow-[var(--shadow-elevated)] w-full max-w-lg max-h-[92vh] overflow-y-auto p-5 sm:p-6">
             <h2 className="text-xl font-display font-bold text-navy mb-4">
               {editingExpense ? 'Edit Expense' : 'Log Expense'}
             </h2>
@@ -880,48 +971,148 @@ export default function ExpensesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink mb-2">Split Mode</label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {SPLIT_MODES.map(({ key, label }) => (
                     <button key={key} type="button"
                       onClick={() => setExpenseForm({ ...expenseForm, split_mode: key })}
-                      className={`flex-1 py-1.5 rounded text-sm font-medium transition-colors ${
+                      className={`py-1.5 rounded text-sm font-medium transition-colors ${
                         expenseForm.split_mode === key ? 'bg-navy text-white' : 'bg-parchment-dark/20 hover:bg-parchment-dark/40'
                       }`}
                     >{label}</button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">
-                  Split Between {expenseForm.traveller_ids.length === 0 ? '(all)' : `(${expenseForm.traveller_ids.length})`}
-                </label>
-                <div className="space-y-1.5">
-                  {travellers.map((t) => (
-                    <label key={t.id} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" className="accent-navy"
-                        checked={expenseForm.traveller_ids.includes(t.id)}
-                        onChange={() => toggleTraveller(t.id)} />
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
-                        style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
-                      <span className="text-sm text-ink flex-1">{t.name}</span>
-                      {expenseForm.split_mode === 'custom' && expenseForm.traveller_ids.includes(t.id) && (
-                        <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm" placeholder="Amount"
-                          value={expenseForm.custom_splits[t.id] ?? ''}
-                          onChange={(e) => setExpenseForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
-                          onClick={(e) => e.stopPropagation()} />
-                      )}
-                      {expenseForm.split_mode === 'weighted' && (
-                        <span className="text-xs text-ink-faint">×{t.cost_split_weight}</span>
-                      )}
-                    </label>
-                  ))}
+              {expenseForm.split_mode === 'itemised' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-ink">Line Items</label>
+                    <button type="button" onClick={addLineItem} className="text-xs text-navy hover:underline font-medium">+ Add item</button>
+                  </div>
+                  <div className="space-y-3">
+                    {lineItems.map((item, i) => (
+                      <div key={i} className="border border-parchment-dark rounded-xl p-3 space-y-2">
+                        <div className="flex gap-2 items-center">
+                          <input className="vintage-input flex-1 text-sm" placeholder="Item (e.g. Burger)"
+                            value={item.description} onChange={(e) => updateLineItem(i, 'description', e.target.value)} />
+                          <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm text-right" placeholder="0.00"
+                            value={item.amount} onChange={(e) => updateLineItem(i, 'amount', e.target.value)} />
+                          {lineItems.length > 1 && (
+                            <button type="button" onClick={() => removeLineItem(i)}
+                              className="text-terracotta text-xl leading-none flex-shrink-0 hover:opacity-70">×</button>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs text-ink-faint mb-1.5">Who had this?</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {travellers.map((t) => (
+                              <button key={t.id} type="button" onClick={() => toggleLineItemTraveller(i, t.id)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                                  item.traveller_ids.includes(t.id) ? 'bg-navy text-white' : 'bg-parchment-dark/30 text-ink hover:bg-parchment-dark/60'
+                                }`}>
+                                <span className="w-4 h-4 rounded-full inline-flex items-center justify-center text-[10px] text-white font-bold flex-shrink-0"
+                                  style={{ backgroundColor: t.avatar_colour }}>
+                                  {t.name.charAt(0).toUpperCase()}
+                                </span>
+                                {t.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {(() => {
+                    const splits = computeItemisedSplits();
+                    return Object.keys(splits).length > 0 ? (
+                      <div className="mt-3 bg-parchment/60 rounded-xl p-3">
+                        <p className="text-xs font-semibold text-ink-faint mb-2 uppercase tracking-wide">Split Preview</p>
+                        <div className="space-y-1">
+                          {Object.entries(splits).map(([tid, amt]) => (
+                            <div key={tid} className="flex items-center justify-between text-sm">
+                              <span className="text-ink">{getName(tid)}</span>
+                              <span className="font-semibold text-navy">{fmt(amt, expenseForm.currency)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-2">
+                    Split Between {expenseForm.traveller_ids.length === 0 ? '(all)' : `(${expenseForm.traveller_ids.length})`}
+                  </label>
+                  <div className="space-y-1.5">
+                    {travellers.map((t) => (
+                      <label key={t.id} className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" className="accent-navy"
+                          checked={expenseForm.traveller_ids.includes(t.id)}
+                          onChange={() => toggleTraveller(t.id)} />
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
+                          style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
+                        <span className="text-sm text-ink flex-1">{t.name}</span>
+                        {expenseForm.split_mode === 'custom' && expenseForm.traveller_ids.includes(t.id) && (
+                          <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm" placeholder="Amount"
+                            value={expenseForm.custom_splits[t.id] ?? ''}
+                            onChange={(e) => setExpenseForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
+                            onClick={(e) => e.stopPropagation()} />
+                        )}
+                        {expenseForm.split_mode === 'weighted' && (
+                          <span className="text-xs text-ink-faint">×{t.cost_split_weight}</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">Notes</label>
                 <textarea className="vintage-input w-full" rows={2} value={expenseForm.notes}
                   onChange={(e) => setExpenseForm({ ...expenseForm, notes: e.target.value })} />
               </div>
+
+              {/* Receipt upload */}
+              <div>
+                <label className="block text-sm font-medium text-ink mb-2">Receipt (optional)</label>
+                <input ref={receiptInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setReceiptFile(f);
+                    setReceiptPreview(f.type.startsWith('image/') ? URL.createObjectURL(f) : null);
+                  }} />
+                {receiptFile ? (
+                  receiptPreview ? (
+                    <div className="relative rounded-xl overflow-hidden">
+                      <img src={receiptPreview} alt="Receipt preview" className="w-full h-32 object-cover" />
+                      <button type="button" onClick={() => { setReceiptFile(null); setReceiptPreview(null); }}
+                        className="absolute top-2 right-2 w-6 h-6 bg-ink/60 text-white rounded-full flex items-center justify-center text-sm hover:bg-ink">
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 p-3 bg-parchment/50 rounded-xl border border-parchment-dark text-sm">
+                      <span className="text-ink flex-1 truncate">{receiptFile.name}</span>
+                      <button type="button" onClick={() => setReceiptFile(null)} className="text-terracotta hover:underline text-xs shrink-0">Remove</button>
+                    </div>
+                  )
+                ) : editingExpense?.receipt_filename ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={() => setViewingReceipt(`/uploads/receipts/${editingExpense.receipt_filename}`)}
+                      className="btn-secondary text-xs py-1.5 px-3">📎 View current receipt</button>
+                    <button type="button" onClick={() => receiptInputRef.current?.click()} className="btn-secondary text-xs py-1.5 px-3">Replace</button>
+                    {isOrganiser && (
+                      <button type="button" onClick={() => deleteReceiptMutation.mutate(editingExpense.id)}
+                        className="text-terracotta text-xs hover:underline">Remove</button>
+                    )}
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => receiptInputRef.current?.click()}
+                    className="btn-secondary text-sm w-full flex items-center justify-center py-2.5">📎 Attach receipt</button>
+                )}
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="btn-primary flex-1"
                   disabled={createExpenseMutation.isPending || updateExpenseMutation.isPending}>
@@ -936,8 +1127,8 @@ export default function ExpensesPage() {
 
       {/* Deposit form modal */}
       {showDepositForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
-          <div className="vintage-card w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl border border-parchment-dark shadow-[var(--shadow-elevated)] w-full max-w-md max-h-[92vh] overflow-y-auto p-5 sm:p-6">
             <h2 className="text-xl font-display font-bold text-navy mb-4">
               {editingDeposit ? 'Edit Deposit' : 'Add Deposit'}
             </h2>
@@ -993,8 +1184,8 @@ export default function ExpensesPage() {
 
       {/* Calculate settlements confirmation */}
       {showCalcConfirm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
-          <div className="vintage-card w-full max-w-sm text-center">
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="vintage-card rounded-t-2xl sm:rounded-xl w-full max-w-sm text-center p-6">
             <p className="text-3xl mb-3">⚖️</p>
             <h2 className="text-xl font-display font-bold text-navy mb-2">Recalculate Settlements?</h2>
             <p className="text-sm text-ink-faint mb-6">
@@ -1007,6 +1198,25 @@ export default function ExpensesPage() {
               </button>
               <button className="btn-secondary flex-1" onClick={() => setShowCalcConfirm(false)}>Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt viewer */}
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-[60] bg-ink/90 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setViewingReceipt(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg p-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display font-semibold text-ink">Receipt</h3>
+              <button onClick={() => setViewingReceipt(null)} className="text-2xl text-ink-faint hover:text-ink leading-none">×</button>
+            </div>
+            {viewingReceipt.endsWith('.pdf') ? (
+              <a href={viewingReceipt} target="_blank" rel="noreferrer" className="btn-primary block text-center">Open PDF ↗</a>
+            ) : (
+              <img src={viewingReceipt} alt="Receipt" className="w-full rounded-xl" />
+            )}
           </div>
         </div>
       )}
