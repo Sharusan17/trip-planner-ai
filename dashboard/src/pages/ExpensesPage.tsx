@@ -1,15 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '../context/TripContext';
 import { expensesApi } from '../api/expenses';
-import type { ExpenseLineItem } from '@trip-planner-ai/shared';
 import { travellersApi } from '../api/travellers';
 import { settlementsApi } from '../api/settlements';
 import { depositsApi } from '../api/deposits';
 import { currencyApi } from '../api/currency';
 import type {
-  Expense, ExpenseCategory, SplitMode, CreateExpenseInput,
-  Settlement, Deposit, DepositStatus, CreateDepositInput,
+  Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 
@@ -29,18 +28,6 @@ const CATEGORIES: ExpenseCategory[] = [
   'accommodation', 'food', 'transport', 'activities', 'shopping', 'other',
 ];
 
-const SPLIT_MODES: { key: SplitMode; label: string }[] = [
-  { key: 'equal',    label: 'Equal'    },
-  { key: 'custom',   label: 'Custom'   },
-  { key: 'itemised', label: 'Itemised' },
-];
-
-const ALL_CURRENCIES = [
-  'AED','AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP',
-  'HKD','HUF','INR','JPY','KRW','MXN','NOK','NZD','PLN','SAR',
-  'SEK','SGD','THB','TRY','USD','ZAR',
-];
-
 const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
   { key: 'all',     label: 'All'     },
   { key: 'pending', label: 'Pending' },
@@ -48,7 +35,6 @@ const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
   { key: 'overdue', label: 'Overdue' },
 ];
 
-const LINKED_TYPES = ['accommodation', 'transport', 'activity', 'other'] as const;
 const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
 const QUICK_AMOUNTS = [10, 20, 50, 100, 200];
 
@@ -72,31 +58,6 @@ function groupByDate(expenses: Expense[]): { date: string; items: Expense[] }[] 
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, items]) => ({ date, items }));
 }
-
-// ─── expense form ─────────────────────────────────────────────────────────────
-
-interface ExpenseFormData {
-  description: string; amount: string; currency: string;
-  category: ExpenseCategory; expense_date: string; paid_by: string;
-  split_mode: SplitMode; traveller_ids: string[];
-  custom_splits: Record<string, string>; notes: string;
-}
-
-const makeEmptyExpenseForm = (defaultCurrency = 'EUR', defaultPaidBy = ''): ExpenseFormData => ({
-  description: '', amount: '', currency: defaultCurrency, category: 'other',
-  expense_date: new Date().toISOString().split('T')[0],
-  paid_by: defaultPaidBy, split_mode: 'equal', traveller_ids: [], custom_splits: {}, notes: '',
-});
-
-// ─── deposit form ─────────────────────────────────────────────────────────────
-
-interface DepositFormData {
-  description: string; amount: string; currency: string;
-  due_date: string; linked_type: string; notes: string;
-}
-const emptyDepositForm: DepositFormData = {
-  description: '', amount: '', currency: 'EUR', due_date: '', linked_type: '', notes: '',
-};
 
 function depositStatusBadge(status: DepositStatus) {
   if (status === 'paid')    return 'status-badge-paid';
@@ -149,6 +110,7 @@ function SettlementRow({
 
 export default function ExpensesPage() {
   const { currentTrip, activeTraveller, isOrganiser } = useTrip();
+  const navigate = useNavigate();
   const qc = useQueryClient();
 
   // ── tab state
@@ -156,19 +118,6 @@ export default function ExpensesPage() {
 
   // ── expenses state
   const [expenseCat, setExpenseCat] = useState<ExpenseCategory | 'all'>('all');
-  const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [expenseForm, setExpenseForm] = useState<ExpenseFormData>(() =>
-    makeEmptyExpenseForm(currentTrip?.dest_currency, activeTraveller?.id ?? '')
-  );
-  // line items for itemised split
-  const [lineItems, setLineItems] = useState<Array<{ description: string; amount: string; traveller_ids: string[] }>>([
-    { description: '', amount: '', traveller_ids: [] },
-  ]);
-  // receipt upload
-  const receiptInputRef = useRef<HTMLInputElement>(null);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
   const [budgetInputs, setBudgetInputs] = useState<Record<ExpenseCategory, string>>({
     accommodation: '', food: '', transport: '', activities: '', shopping: '', other: '',
@@ -180,9 +129,6 @@ export default function ExpensesPage() {
 
   // ── deposits state
   const [depositStatusTab, setDepositStatusTab] = useState<'all' | DepositStatus>('all');
-  const [showDepositForm, setShowDepositForm] = useState(false);
-  const [editingDeposit, setEditingDeposit] = useState<Deposit | null>(null);
-  const [depositForm, setDepositForm] = useState<DepositFormData>(emptyDepositForm);
 
   // ── currency state
   const [currAmount, setCurrAmount] = useState('50');
@@ -252,31 +198,8 @@ export default function ExpensesPage() {
   }, [budgets]);
 
   // ── expense mutations
-  const createExpenseMutation = useMutation({
-    mutationFn: async (data: CreateExpenseInput) => {
-      const expense = await expensesApi.create(currentTrip!.id, data);
-      if (receiptFile) await expensesApi.uploadReceipt(expense.id, receiptFile).catch(() => {});
-      return expense;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['expenses'] });
-      closeExpenseForm();
-    },
-  });
-  const updateExpenseMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<CreateExpenseInput> }) => {
-      const expense = await expensesApi.update(id, data);
-      if (receiptFile) await expensesApi.uploadReceipt(id, receiptFile).catch(() => {});
-      return expense;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); closeExpenseForm(); },
-  });
   const deleteExpenseMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-  const deleteReceiptMutation = useMutation({
-    mutationFn: (id: string) => expensesApi.deleteReceipt(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
   });
 
@@ -291,15 +214,6 @@ export default function ExpensesPage() {
   });
 
   // ── deposit mutations
-  const createDepositMutation = useMutation({
-    mutationFn: (data: CreateDepositInput) => depositsApi.create(currentTrip!.id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['deposits'] }); closeDepositForm(); },
-  });
-  const updateDepositMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateDepositInput> }) =>
-      depositsApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['deposits'] }); closeDepositForm(); },
-  });
   const depositStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: DepositStatus }) =>
       depositsApi.updateStatus(id, status),
@@ -309,161 +223,6 @@ export default function ExpensesPage() {
     mutationFn: (id: string) => depositsApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deposits'] }),
   });
-
-  // ── line-item helpers
-  function addLineItem() {
-    setLineItems((prev) => [...prev, { description: '', amount: '', traveller_ids: [] }]);
-  }
-  function removeLineItem(i: number) {
-    setLineItems((prev) => prev.filter((_, idx) => idx !== i));
-  }
-  function updateLineItem(i: number, field: 'description' | 'amount', value: string) {
-    setLineItems((prev) => { const n = [...prev]; n[i] = { ...n[i], [field]: value }; return n; });
-  }
-  function toggleLineItemTraveller(i: number, tid: string) {
-    setLineItems((prev) => {
-      const n = [...prev];
-      const ids = n[i].traveller_ids;
-      n[i] = { ...n[i], traveller_ids: ids.includes(tid) ? ids.filter((x) => x !== tid) : [...ids, tid] };
-      return n;
-    });
-  }
-  // Compute per-traveller totals from line items
-  function computeItemisedSplits(): Record<string, number> {
-    const splits: Record<string, number> = {};
-    for (const item of lineItems) {
-      const amt = parseFloat(item.amount) || 0;
-      if (amt <= 0 || item.traveller_ids.length === 0) continue;
-      const share = amt / item.traveller_ids.length;
-      for (const tid of item.traveller_ids) splits[tid] = (splits[tid] ?? 0) + share;
-    }
-    return splits;
-  }
-
-  // ── expense helpers
-  function closeExpenseForm() {
-    setShowExpenseForm(false);
-    setEditingExpense(null);
-    setExpenseForm(makeEmptyExpenseForm(currentTrip?.dest_currency, activeTraveller?.id ?? ''));
-    setLineItems([{ description: '', amount: '', traveller_ids: [] }]);
-    setReceiptFile(null);
-    setReceiptPreview(null);
-  }
-  function openEditExpense(e: Expense) {
-    setEditingExpense(e);
-    const cs: Record<string, string> = {};
-    for (const s of e.splits) cs[s.traveller_id] = String(s.amount);
-    setExpenseForm({
-      description: e.description, amount: String(e.amount), currency: e.currency,
-      category: e.category, expense_date: e.expense_date, paid_by: e.paid_by,
-      split_mode: e.split_mode, traveller_ids: e.splits.map((s) => s.traveller_id),
-      custom_splits: cs, notes: e.notes ?? '',
-    });
-    if (e.split_mode === 'itemised' && e.line_items?.length) {
-      setLineItems(e.line_items.map((li) => ({
-        description: li.description, amount: String(li.amount), traveller_ids: li.traveller_ids,
-      })));
-    } else {
-      setLineItems([{ description: '', amount: '', traveller_ids: [] }]);
-    }
-    setReceiptFile(null);
-    setReceiptPreview(null);
-    setShowExpenseForm(true);
-  }
-  function toggleTraveller(id: string) {
-    setExpenseForm((f) => ({
-      ...f,
-      traveller_ids: f.traveller_ids.includes(id)
-        ? f.traveller_ids.filter((t) => t !== id)
-        : [...f.traveller_ids, id],
-    }));
-  }
-  function handleExpenseSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (expenseForm.split_mode === 'itemised') {
-      const computedSplits = computeItemisedSplits();
-      const validLineItems: ExpenseLineItem[] = lineItems
-        .filter(li => li.description.trim() && parseFloat(li.amount) > 0)
-        .map(li => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
-      const data: CreateExpenseInput = {
-        description: expenseForm.description, amount: parseFloat(expenseForm.amount),
-        currency: expenseForm.currency, category: expenseForm.category,
-        expense_date: expenseForm.expense_date, paid_by: expenseForm.paid_by,
-        split_mode: 'itemised',
-        traveller_ids: Object.keys(computedSplits).length > 0 ? Object.keys(computedSplits) : travellers.map(t => t.id),
-        custom_splits: computedSplits,
-        line_items: validLineItems,
-        notes: expenseForm.notes || undefined,
-      };
-      if (editingExpense) updateExpenseMutation.mutate({ id: editingExpense.id, data });
-      else createExpenseMutation.mutate(data);
-      return;
-    }
-
-    if (expenseForm.split_mode === 'custom') {
-      const target = parseFloat(expenseForm.amount) || 0;
-      const cs: Record<string, number> = {};
-      for (const [id, v] of Object.entries(expenseForm.custom_splits)) {
-        const n = parseFloat(v) || 0;
-        if (n > 0) cs[id] = n;
-      }
-      const total = Object.values(cs).reduce((s, v) => s + v, 0);
-      if (target > 0 && Math.abs(total - target) >= 0.01) {
-        alert(`Custom splits must add up to ${fmt(target, expenseForm.currency)}. Currently: ${fmt(total, expenseForm.currency)}.`);
-        return;
-      }
-      const data: CreateExpenseInput = {
-        description: expenseForm.description, amount: target,
-        currency: expenseForm.currency, category: expenseForm.category,
-        expense_date: expenseForm.expense_date, paid_by: expenseForm.paid_by,
-        split_mode: 'custom',
-        traveller_ids: Object.keys(cs).length > 0 ? Object.keys(cs) : travellers.map((t) => t.id),
-        custom_splits: cs,
-        notes: expenseForm.notes || undefined,
-      };
-      if (editingExpense) updateExpenseMutation.mutate({ id: editingExpense.id, data });
-      else createExpenseMutation.mutate(data);
-      return;
-    }
-
-    const data: CreateExpenseInput = {
-      description: expenseForm.description, amount: parseFloat(expenseForm.amount),
-      currency: expenseForm.currency, category: expenseForm.category,
-      expense_date: expenseForm.expense_date, paid_by: expenseForm.paid_by,
-      split_mode: expenseForm.split_mode,
-      traveller_ids: expenseForm.traveller_ids.length > 0 ? expenseForm.traveller_ids : travellers.map((t) => t.id),
-      notes: expenseForm.notes || undefined,
-    };
-    if (editingExpense) updateExpenseMutation.mutate({ id: editingExpense.id, data });
-    else createExpenseMutation.mutate(data);
-  }
-
-  // ── deposit helpers
-  function closeDepositForm() {
-    setShowDepositForm(false);
-    setEditingDeposit(null);
-    setDepositForm(emptyDepositForm);
-  }
-  function openEditDeposit(d: Deposit) {
-    setEditingDeposit(d);
-    setDepositForm({
-      description: d.description, amount: String(d.amount), currency: d.currency,
-      due_date: d.due_date ?? '', linked_type: d.linked_type ?? '', notes: d.notes ?? '',
-    });
-    setShowDepositForm(true);
-  }
-  function handleDepositSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const data: CreateDepositInput = {
-      description: depositForm.description, amount: parseFloat(depositForm.amount),
-      currency: depositForm.currency, due_date: depositForm.due_date || undefined,
-      linked_type: (depositForm.linked_type as CreateDepositInput['linked_type']) || undefined,
-      notes: depositForm.notes || undefined,
-    };
-    if (editingDeposit) updateDepositMutation.mutate({ id: editingDeposit.id, data });
-    else createDepositMutation.mutate(data);
-  }
 
   // ── settlement helpers
   const getName   = (id: string) => travellers.find((t) => t.id === id)?.name ?? 'Unknown';
@@ -525,14 +284,10 @@ export default function ExpensesPage() {
           )}
         </div>
         {tab === 'expenses' && (
-          <button className="btn-primary" onClick={() => {
-            setEditingExpense(null);
-            setExpenseForm(makeEmptyExpenseForm(currentTrip.dest_currency, activeTraveller?.id ?? ''));
-            setShowExpenseForm(true);
-          }}>+ Add Expense</button>
+          <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
         )}
         {tab === 'deposits' && isOrganiser && (
-          <button className="btn-primary" onClick={() => { setEditingDeposit(null); setDepositForm(emptyDepositForm); setShowDepositForm(true); }}>
+          <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
             + Add Deposit
           </button>
         )}
@@ -607,11 +362,7 @@ export default function ExpensesPage() {
             <div className="vintage-card text-center py-12">
               <p className="text-3xl mb-2">💰</p>
               <p className="text-ink-faint">No expenses yet.</p>
-              <button className="btn-primary mt-4" onClick={() => {
-                setEditingExpense(null);
-                setExpenseForm(makeEmptyExpenseForm(currentTrip.dest_currency, activeTraveller?.id ?? ''));
-                setShowExpenseForm(true);
-              }}>Log first expense</button>
+              <button className="btn-primary mt-4" onClick={() => navigate('/expenses/add')}>Log first expense</button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -668,7 +419,7 @@ export default function ExpensesPage() {
                           </div>
                           {isOrganiser && (
                             <div className="flex gap-2 mt-3 justify-end">
-                              <button onClick={() => openEditExpense(exp)} className="btn-secondary text-xs py-1 px-3">Edit</button>
+                              <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
                             </div>
                           )}
@@ -791,7 +542,7 @@ export default function ExpensesPage() {
               <p className="text-3xl mb-2">🔖</p>
               <p className="text-ink-faint">No deposits yet.</p>
               {isOrganiser && (
-                <button className="btn-primary mt-4" onClick={() => { setEditingDeposit(null); setDepositForm(emptyDepositForm); setShowDepositForm(true); }}>
+                <button className="btn-primary mt-4" onClick={() => navigate('/expenses/deposits/add')}>
                   Add first deposit
                 </button>
               )}
@@ -827,7 +578,7 @@ export default function ExpensesPage() {
                       {d.status === 'pending' && (
                         <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'overdue' })} className="btn-danger text-xs py-1 px-2">Overdue</button>
                       )}
-                      <button onClick={() => openEditDeposit(d)} className="btn-secondary text-xs py-1 px-2">Edit</button>
+                      <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)} className="btn-secondary text-xs py-1 px-2">Edit</button>
                       <button onClick={() => { if (confirm('Delete?')) deleteDepositMutation.mutate(d.id); }} className="btn-danger text-xs py-1 px-2">Delete</button>
                     </div>
                   )}
@@ -941,324 +692,6 @@ export default function ExpensesPage() {
               {savingBudgets ? 'Saving…' : 'Save Budgets'}
             </button>
           )}
-        </div>
-      )}
-
-      {/* ══ MODALS ══════════════════════════════════════════════════════════════ */}
-
-      {/* Expense form modal */}
-      {showExpenseForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-white rounded-t-2xl sm:rounded-xl border border-parchment-dark shadow-[var(--shadow-elevated)] w-full max-w-lg max-h-[92vh] overflow-y-auto p-5 sm:p-6">
-            <h2 className="text-xl font-display font-bold text-navy mb-4">
-              {editingExpense ? 'Edit Expense' : 'Log Expense'}
-            </h2>
-            <form onSubmit={handleExpenseSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Description *</label>
-                <input className="vintage-input w-full" value={expenseForm.description}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} required />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-ink mb-1">Amount *</label>
-                  <input type="number" step="0.01" min="0" className="vintage-input w-full"
-                    value={expenseForm.amount}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Currency</label>
-                  <select className="vintage-input w-full" value={expenseForm.currency}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, currency: e.target.value })}>
-                    {/* Trip currencies first */}
-                    <option value={destCurrency}>{destCurrency} {CURRENCY_SYMBOLS[destCurrency] ?? ''}</option>
-                    {homeCurrency !== destCurrency && (
-                      <option value={homeCurrency}>{homeCurrency} {CURRENCY_SYMBOLS[homeCurrency] ?? ''}</option>
-                    )}
-                    <option disabled>──────────</option>
-                    {ALL_CURRENCIES.filter((c) => c !== destCurrency && c !== homeCurrency).map((c) => (
-                      <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c] ?? ''}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">Category</label>
-                <div className="flex flex-wrap gap-2">
-                  {CATEGORIES.map((cat) => (
-                    <button key={cat} type="button"
-                      onClick={() => setExpenseForm({ ...expenseForm, category: cat })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
-                        expenseForm.category === cat ? 'bg-navy text-white' : 'bg-parchment-dark/20 hover:bg-parchment-dark/40'
-                      }`}
-                    >{EXPENSE_CATEGORY_ICONS[cat]} <span className="capitalize">{cat}</span></button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Date *</label>
-                  <input type="date" className="vintage-input w-full" value={expenseForm.expense_date}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, expense_date: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Paid by *</label>
-                  <select className="vintage-input w-full" value={expenseForm.paid_by}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, paid_by: e.target.value })} required>
-                    <option value="">Select…</option>
-                    {travellers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">Split Mode</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {SPLIT_MODES.map(({ key, label }) => (
-                    <button key={key} type="button"
-                      onClick={() => setExpenseForm({ ...expenseForm, split_mode: key })}
-                      className={`py-2 rounded-xl text-sm font-medium transition-colors border ${
-                        expenseForm.split_mode === key
-                          ? 'bg-[#1C1917] text-white border-[#1C1917]'
-                          : 'bg-white border-parchment-dark text-ink hover:bg-parchment/60'
-                      }`}
-                    >{label}</button>
-                  ))}
-                </div>
-              </div>
-              {expenseForm.split_mode === 'itemised' ? (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-ink">Line Items</label>
-                    <button type="button" onClick={addLineItem} className="text-xs text-navy hover:underline font-medium">+ Add item</button>
-                  </div>
-                  <div className="space-y-3">
-                    {lineItems.map((item, i) => (
-                      <div key={i} className="border border-parchment-dark rounded-xl p-3 space-y-2">
-                        <div className="flex gap-2 items-center">
-                          <input className="vintage-input flex-1 text-sm" placeholder="Item (e.g. Burger)"
-                            value={item.description} onChange={(e) => updateLineItem(i, 'description', e.target.value)} />
-                          <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm text-right" placeholder="0.00"
-                            value={item.amount} onChange={(e) => updateLineItem(i, 'amount', e.target.value)} />
-                          {lineItems.length > 1 && (
-                            <button type="button" onClick={() => removeLineItem(i)}
-                              className="text-terracotta text-xl leading-none flex-shrink-0 hover:opacity-70">×</button>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-xs text-ink-faint mb-1.5">Who had this?</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {travellers.map((t) => (
-                              <button key={t.id} type="button" onClick={() => toggleLineItemTraveller(i, t.id)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
-                                  item.traveller_ids.includes(t.id) ? 'bg-navy text-white' : 'bg-parchment-dark/30 text-ink hover:bg-parchment-dark/60'
-                                }`}>
-                                <span className="w-4 h-4 rounded-full inline-flex items-center justify-center text-[10px] text-white font-bold flex-shrink-0"
-                                  style={{ backgroundColor: t.avatar_colour }}>
-                                  {t.name.charAt(0).toUpperCase()}
-                                </span>
-                                {t.name}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {(() => {
-                    const splits = computeItemisedSplits();
-                    return Object.keys(splits).length > 0 ? (
-                      <div className="mt-3 bg-parchment/60 rounded-xl p-3">
-                        <p className="text-xs font-semibold text-ink-faint mb-2 uppercase tracking-wide">Split Preview</p>
-                        <div className="space-y-1">
-                          {Object.entries(splits).map(([tid, amt]) => (
-                            <div key={tid} className="flex items-center justify-between text-sm">
-                              <span className="text-ink">{getName(tid)}</span>
-                              <span className="font-semibold text-navy">{fmt(amt, expenseForm.currency)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-              ) : expenseForm.split_mode === 'custom' ? (
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">Custom Split</label>
-                  {(() => {
-                    const target = parseFloat(expenseForm.amount) || 0;
-                    const total = travellers.reduce((sum, t) => sum + (parseFloat(expenseForm.custom_splits[t.id] ?? '') || 0), 0);
-                    const diff = target > 0 ? total - target : 0;
-                    const valid = target > 0 && Math.abs(diff) < 0.01;
-                    const over = diff > 0.01;
-                    return (
-                      <>
-                        <div className="space-y-2">
-                          {travellers.map((t) => (
-                            <div key={t.id} className="flex items-center gap-3">
-                              <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                                style={{ backgroundColor: t.avatar_colour }}>
-                                {t.name.charAt(0).toUpperCase()}
-                              </span>
-                              <span className="flex-1 text-sm text-ink">{t.name}</span>
-                              <input type="number" step="0.01" min="0"
-                                className="vintage-input w-28 text-sm text-right"
-                                placeholder="0.00"
-                                value={expenseForm.custom_splits[t.id] ?? ''}
-                                onChange={(e) => setExpenseForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                        {target > 0 && (
-                          <div className={`mt-2.5 flex items-center justify-between text-xs px-1 font-medium ${valid ? 'text-emerald-600' : 'text-terracotta'}`}>
-                            <span>{valid ? '✓ Splits match total' : over ? `Over by ${fmt(Math.abs(diff), expenseForm.currency)}` : `Under by ${fmt(Math.abs(diff), expenseForm.currency)}`}</span>
-                            <span className="font-mono">{fmt(total, expenseForm.currency)} / {fmt(target, expenseForm.currency)}</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">
-                    Split Between {expenseForm.traveller_ids.length === 0 ? '(all)' : `(${expenseForm.traveller_ids.length})`}
-                  </label>
-                  <div className="space-y-1.5">
-                    {travellers.map((t) => (
-                      <label key={t.id} className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" className="accent-navy"
-                          checked={expenseForm.traveller_ids.includes(t.id)}
-                          onChange={() => toggleTraveller(t.id)} />
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
-                          style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
-                        <span className="text-sm text-ink flex-1">{t.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Notes</label>
-                <textarea className="vintage-input w-full" rows={2} value={expenseForm.notes}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, notes: e.target.value })} />
-              </div>
-
-              {/* Receipt upload */}
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">Receipt (optional)</label>
-                <input ref={receiptInputRef} type="file" accept="image/*,application/pdf" className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    setReceiptFile(f);
-                    setReceiptPreview(f.type.startsWith('image/') ? URL.createObjectURL(f) : null);
-                  }} />
-                {receiptFile ? (
-                  receiptPreview ? (
-                    <div className="relative rounded-xl overflow-hidden">
-                      <img src={receiptPreview} alt="Receipt preview" className="w-full h-32 object-cover" />
-                      <button type="button" onClick={() => { setReceiptFile(null); setReceiptPreview(null); }}
-                        className="absolute top-2 right-2 w-6 h-6 bg-ink/60 text-white rounded-full flex items-center justify-center text-sm hover:bg-ink">
-                        ×
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 p-3 bg-parchment/50 rounded-xl border border-parchment-dark text-sm">
-                      <span className="text-ink flex-1 truncate">{receiptFile.name}</span>
-                      <button type="button" onClick={() => setReceiptFile(null)} className="text-terracotta hover:underline text-xs shrink-0">Remove</button>
-                    </div>
-                  )
-                ) : editingExpense?.receipt_filename ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button type="button" onClick={() => setViewingReceipt(`/api/v1/expenses/${editingExpense.id}/receipt`)}
-                      className="btn-secondary text-xs py-1.5 px-3">📎 View current receipt</button>
-                    <button type="button" onClick={() => receiptInputRef.current?.click()} className="btn-secondary text-xs py-1.5 px-3">Replace</button>
-                    {isOrganiser && (
-                      <button type="button" onClick={() => deleteReceiptMutation.mutate(editingExpense.id)}
-                        className="text-terracotta text-xs hover:underline">Remove</button>
-                    )}
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => receiptInputRef.current?.click()}
-                    className="btn-secondary text-sm w-full flex items-center justify-center py-2.5">📎 Attach receipt</button>
-                )}
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button type="submit" className="btn-primary flex-1"
-                  disabled={createExpenseMutation.isPending || updateExpenseMutation.isPending}>
-                  {editingExpense ? 'Save Changes' : 'Log Expense'}
-                </button>
-                <button type="button" className="btn-secondary flex-1" onClick={closeExpenseForm}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Deposit form modal */}
-      {showDepositForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-white rounded-t-2xl sm:rounded-xl border border-parchment-dark shadow-[var(--shadow-elevated)] w-full max-w-md max-h-[92vh] overflow-y-auto p-5 sm:p-6">
-            <h2 className="text-xl font-display font-bold text-navy mb-4">
-              {editingDeposit ? 'Edit Deposit' : 'Add Deposit'}
-            </h2>
-            <form onSubmit={handleDepositSubmit} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Description *</label>
-                <input className="vintage-input w-full" value={depositForm.description}
-                  onChange={(e) => setDepositForm({ ...depositForm, description: e.target.value })} required />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Amount *</label>
-                  <input type="number" step="0.01" min="0" className="vintage-input w-full"
-                    value={depositForm.amount}
-                    onChange={(e) => setDepositForm({ ...depositForm, amount: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Currency</label>
-                  <select className="vintage-input w-full" value={depositForm.currency}
-                    onChange={(e) => setDepositForm({ ...depositForm, currency: e.target.value })}>
-                    <option value={destCurrency}>{destCurrency} {CURRENCY_SYMBOLS[destCurrency] ?? ''}</option>
-                    {homeCurrency !== destCurrency && (
-                      <option value={homeCurrency}>{homeCurrency} {CURRENCY_SYMBOLS[homeCurrency] ?? ''}</option>
-                    )}
-                    <option disabled>──────────</option>
-                    {ALL_CURRENCIES.filter((c) => c !== destCurrency && c !== homeCurrency).map((c) => (
-                      <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c] ?? ''}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Due Date</label>
-                <input type="date" className="vintage-input w-full" value={depositForm.due_date}
-                  onChange={(e) => setDepositForm({ ...depositForm, due_date: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Category</label>
-                <select className="vintage-input w-full" value={depositForm.linked_type}
-                  onChange={(e) => setDepositForm({ ...depositForm, linked_type: e.target.value })}>
-                  <option value="">None</option>
-                  {LINKED_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Notes</label>
-                <textarea className="vintage-input w-full" rows={2} value={depositForm.notes}
-                  onChange={(e) => setDepositForm({ ...depositForm, notes: e.target.value })} />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" className="btn-primary flex-1"
-                  disabled={createDepositMutation.isPending || updateDepositMutation.isPending}>
-                  {editingDeposit ? 'Save Changes' : 'Add Deposit'}
-                </button>
-                <button type="button" className="btn-secondary flex-1" onClick={closeDepositForm}>Cancel</button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
 

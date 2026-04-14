@@ -1,15 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '../context/TripContext';
 import { transportApi } from '../api/transport';
 import { travellersApi } from '../api/travellers';
-import type {
-  TransportBooking, Vehicle, TransportType,
-  CreateTransportInput, CreateVehicleInput,
-} from '@trip-planner-ai/shared';
+import type { TransportBooking, Vehicle } from '@trip-planner-ai/shared';
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
-
-const TRANSPORT_TYPES: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
@@ -21,44 +17,13 @@ function formatDateTime(dt: string) {
   });
 }
 
-interface BookingForm {
-  transport_type: TransportType;
-  from_location: string;
-  to_location: string;
-  departure_time: string;
-  arrival_time: string;
-  reference_number: string;
-  price: string;
-  currency: string;
-  notes: string;
-  traveller_ids: string[];
-}
-
-const emptyBookingForm: BookingForm = {
-  transport_type: 'flight', from_location: '', to_location: '',
-  departure_time: '', arrival_time: '', reference_number: '',
-  price: '', currency: 'EUR', notes: '', traveller_ids: [],
-};
-
-interface VehicleForm {
-  name: string;
-  seat_count: string;
-  notes: string;
-}
-const emptyVehicleForm: VehicleForm = { name: '', seat_count: '5', notes: '' };
-
 type AssignTarget = { vehicleId: string; slotIndex: number } | null;
 
 export default function TransportPage() {
   const { currentTrip, isOrganiser } = useTrip();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<'bookings' | 'cars'>('bookings');
-  const [showBookingForm, setShowBookingForm] = useState(false);
-  const [editingBooking, setEditingBooking] = useState<TransportBooking | null>(null);
-  const [bookingForm, setBookingForm] = useState<BookingForm>(emptyBookingForm);
-  const [showVehicleForm, setShowVehicleForm] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-  const [vehicleForm, setVehicleForm] = useState<VehicleForm>(emptyVehicleForm);
   const [assignTarget, setAssignTarget] = useState<AssignTarget>(null);
 
   const { data: bookings = [], isLoading: loadingBookings } = useQuery({
@@ -79,31 +44,9 @@ export default function TransportPage() {
     enabled: !!currentTrip,
   });
 
-  const createBookingMutation = useMutation({
-    mutationFn: (data: CreateTransportInput) => transportApi.create(currentTrip!.id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transport', currentTrip?.id] }); closeBookingForm(); },
-  });
-
-  const updateBookingMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateTransportInput> }) =>
-      transportApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transport', currentTrip?.id] }); closeBookingForm(); },
-  });
-
   const deleteBookingMutation = useMutation({
     mutationFn: (id: string) => transportApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transport', currentTrip?.id] }),
-  });
-
-  const createVehicleMutation = useMutation({
-    mutationFn: (data: CreateVehicleInput) => transportApi.createVehicle(currentTrip!.id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicles', currentTrip?.id] }); closeVehicleForm(); },
-  });
-
-  const updateVehicleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateVehicleInput> }) =>
-      transportApi.updateVehicle(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicles', currentTrip?.id] }); closeVehicleForm(); },
   });
 
   const deleteVehicleMutation = useMutation({
@@ -116,85 +59,6 @@ export default function TransportPage() {
       transportApi.assignSeats(vehicleId, { seats }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicles', currentTrip?.id] }); setAssignTarget(null); },
   });
-
-  function closeBookingForm() {
-    setShowBookingForm(false);
-    setEditingBooking(null);
-    setBookingForm(emptyBookingForm);
-  }
-
-  function closeVehicleForm() {
-    setShowVehicleForm(false);
-    setEditingVehicle(null);
-    setVehicleForm(emptyVehicleForm);
-  }
-
-  function openEditBooking(b: TransportBooking) {
-    setEditingBooking(b);
-    setBookingForm({
-      transport_type: b.transport_type,
-      from_location: b.from_location,
-      to_location: b.to_location,
-      departure_time: b.departure_time.slice(0, 16),
-      arrival_time: b.arrival_time ? b.arrival_time.slice(0, 16) : '',
-      reference_number: b.reference_number ?? '',
-      price: b.price ? String(b.price) : '',
-      currency: b.currency ?? 'EUR',
-      notes: b.notes ?? '',
-      traveller_ids: b.traveller_ids,
-    });
-    setShowBookingForm(true);
-  }
-
-  function openEditVehicle(v: Vehicle) {
-    setEditingVehicle(v);
-    setVehicleForm({ name: v.name, seat_count: String(v.seat_count), notes: v.notes ?? '' });
-    setShowVehicleForm(true);
-  }
-
-  function toggleTravellerBooking(id: string) {
-    setBookingForm((f) => ({
-      ...f,
-      traveller_ids: f.traveller_ids.includes(id)
-        ? f.traveller_ids.filter((t) => t !== id)
-        : [...f.traveller_ids, id],
-    }));
-  }
-
-  function handleBookingSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const data: CreateTransportInput = {
-      transport_type: bookingForm.transport_type,
-      from_location: bookingForm.from_location,
-      to_location: bookingForm.to_location,
-      departure_time: bookingForm.departure_time,
-      arrival_time: bookingForm.arrival_time || undefined,
-      reference_number: bookingForm.reference_number || undefined,
-      price: bookingForm.price ? parseFloat(bookingForm.price) : undefined,
-      currency: bookingForm.currency || undefined,
-      notes: bookingForm.notes || undefined,
-      traveller_ids: bookingForm.traveller_ids,
-    };
-    if (editingBooking) {
-      updateBookingMutation.mutate({ id: editingBooking.id, data });
-    } else {
-      createBookingMutation.mutate(data);
-    }
-  }
-
-  function handleVehicleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const data: CreateVehicleInput = {
-      name: vehicleForm.name,
-      seat_count: parseInt(vehicleForm.seat_count) || 5,
-      notes: vehicleForm.notes || undefined,
-    };
-    if (editingVehicle) {
-      updateVehicleMutation.mutate({ id: editingVehicle.id, data });
-    } else {
-      createVehicleMutation.mutate(data);
-    }
-  }
 
   function handleSeatAssign(vehicleId: string, travellerId: string) {
     const vehicle = vehicles.find((v) => v.id === vehicleId);
@@ -225,14 +89,12 @@ export default function TransportPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-bold text-navy">Transport</h1>
         {isOrganiser && activeTab === 'bookings' && (
-          <button className="btn-primary"
-            onClick={() => { setEditingBooking(null); setBookingForm(emptyBookingForm); setShowBookingForm(true); }}>
+          <button className="btn-primary" onClick={() => navigate('/logistics/transport/add')}>
             + Add Booking
           </button>
         )}
         {isOrganiser && activeTab === 'cars' && (
-          <button className="btn-primary"
-            onClick={() => { setEditingVehicle(null); setVehicleForm(emptyVehicleForm); setShowVehicleForm(true); }}>
+          <button className="btn-primary" onClick={() => navigate('/logistics/vehicles/add')}>
             + Add Vehicle
           </button>
         )}
@@ -263,8 +125,7 @@ export default function TransportPage() {
               <p className="text-3xl mb-2">✈️</p>
               <p className="text-ink/60">No transport bookings yet.</p>
               {isOrganiser && (
-                <button className="btn-primary mt-4"
-                  onClick={() => { setEditingBooking(null); setBookingForm(emptyBookingForm); setShowBookingForm(true); }}>
+                <button className="btn-primary mt-4" onClick={() => navigate('/logistics/transport/add')}>
                   Add first booking
                 </button>
               )}
@@ -323,7 +184,7 @@ export default function TransportPage() {
                       </div>
                       {isOrganiser && (
                         <div className="flex flex-col gap-2 shrink-0">
-                          <button onClick={() => openEditBooking(b)} className="btn-secondary text-xs py-1 px-3">Edit</button>
+                          <button onClick={() => navigate(`/logistics/transport/${b.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                           <button
                             onClick={() => { if (confirm('Delete this booking?')) deleteBookingMutation.mutate(b.id); }}
                             className="btn-danger text-xs py-1 px-3"
@@ -351,8 +212,7 @@ export default function TransportPage() {
               <p className="text-3xl mb-2">🚗</p>
               <p className="text-ink/60">No vehicles added yet.</p>
               {isOrganiser && (
-                <button className="btn-primary mt-4"
-                  onClick={() => { setEditingVehicle(null); setVehicleForm(emptyVehicleForm); setShowVehicleForm(true); }}>
+                <button className="btn-primary mt-4" onClick={() => navigate('/logistics/vehicles/add')}>
                   Add vehicle
                 </button>
               )}
@@ -371,7 +231,7 @@ export default function TransportPage() {
                       </div>
                       {isOrganiser && (
                         <div className="flex gap-2">
-                          <button onClick={() => openEditVehicle(v)} className="btn-secondary text-xs py-1 px-3">Edit</button>
+                          <button onClick={() => navigate(`/logistics/vehicles/${v.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                           <button
                             onClick={() => { if (confirm('Delete this vehicle?')) deleteVehicleMutation.mutate(v.id); }}
                             className="btn-danger text-xs py-1 px-3"
@@ -454,158 +314,6 @@ export default function TransportPage() {
         </>
       )}
 
-      {/* Booking form modal */}
-      {showBookingForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
-          <div className="vintage-card w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-display font-bold text-navy mb-4">
-              {editingBooking ? 'Edit Booking' : 'Add Booking'}
-            </h2>
-            <form onSubmit={handleBookingSubmit} className="space-y-3">
-              {/* Transport type */}
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">Type</label>
-                <div className="flex flex-wrap gap-2">
-                  {TRANSPORT_TYPES.map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setBookingForm({ ...bookingForm, transport_type: type })}
-                      className={`px-3 py-1.5 rounded text-sm flex items-center gap-1 transition-colors ${
-                        bookingForm.transport_type === type
-                          ? 'bg-navy text-parchment'
-                          : 'bg-parchment-dark/20 text-ink hover:bg-parchment-dark/40'
-                      }`}
-                    >
-                      {TRANSPORT_ICONS[type]} {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">From *</label>
-                  <input className="vintage-input w-full" value={bookingForm.from_location}
-                    onChange={(e) => setBookingForm({ ...bookingForm, from_location: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">To *</label>
-                  <input className="vintage-input w-full" value={bookingForm.to_location}
-                    onChange={(e) => setBookingForm({ ...bookingForm, to_location: e.target.value })} required />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Departure *</label>
-                  <input type="datetime-local" className="vintage-input w-full" value={bookingForm.departure_time}
-                    onChange={(e) => setBookingForm({ ...bookingForm, departure_time: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Arrival</label>
-                  <input type="datetime-local" className="vintage-input w-full" value={bookingForm.arrival_time}
-                    onChange={(e) => setBookingForm({ ...bookingForm, arrival_time: e.target.value })} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Reference Number</label>
-                <input className="vintage-input w-full font-mono" value={bookingForm.reference_number}
-                  onChange={(e) => setBookingForm({ ...bookingForm, reference_number: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Price</label>
-                  <input type="number" step="0.01" min="0" className="vintage-input w-full"
-                    value={bookingForm.price}
-                    onChange={(e) => setBookingForm({ ...bookingForm, price: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Currency</label>
-                  <input className="vintage-input w-full uppercase" maxLength={3}
-                    value={bookingForm.currency}
-                    onChange={(e) => setBookingForm({ ...bookingForm, currency: e.target.value.toUpperCase() })} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">Travellers</label>
-                <div className="flex flex-wrap gap-2">
-                  {travellers.map((t) => (
-                    <label key={t.id} className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" className="accent-navy"
-                        checked={bookingForm.traveller_ids.includes(t.id)}
-                        onChange={() => toggleTravellerBooking(t.id)} />
-                      <span
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
-                        style={{ backgroundColor: t.avatar_colour }}
-                      >
-                        {t.name.charAt(0).toUpperCase()}
-                      </span>
-                      <span className="text-sm text-ink">{t.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Notes</label>
-                <textarea className="vintage-input w-full" rows={2} value={bookingForm.notes}
-                  onChange={(e) => setBookingForm({ ...bookingForm, notes: e.target.value })} />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" className="btn-primary flex-1"
-                  disabled={createBookingMutation.isPending || updateBookingMutation.isPending}>
-                  {editingBooking ? 'Save Changes' : 'Add Booking'}
-                </button>
-                <button type="button" className="btn-secondary flex-1" onClick={closeBookingForm}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Vehicle form modal */}
-      {showVehicleForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
-          <div className="vintage-card w-full max-w-md">
-            <h2 className="text-xl font-display font-bold text-navy mb-4">
-              {editingVehicle ? 'Edit Vehicle' : 'Add Vehicle'}
-            </h2>
-            <form onSubmit={handleVehicleSubmit} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Vehicle Name *</label>
-                <input className="vintage-input w-full" placeholder="e.g. White Peugeot"
-                  value={vehicleForm.name}
-                  onChange={(e) => setVehicleForm({ ...vehicleForm, name: e.target.value })} required />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Number of Seats</label>
-                <input type="number" min="1" max="50" className="vintage-input w-full"
-                  value={vehicleForm.seat_count}
-                  onChange={(e) => setVehicleForm({ ...vehicleForm, seat_count: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Notes</label>
-                <textarea className="vintage-input w-full" rows={2} value={vehicleForm.notes}
-                  onChange={(e) => setVehicleForm({ ...vehicleForm, notes: e.target.value })} />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" className="btn-primary flex-1"
-                  disabled={createVehicleMutation.isPending || updateVehicleMutation.isPending}>
-                  {editingVehicle ? 'Save Changes' : 'Add Vehicle'}
-                </button>
-                <button type="button" className="btn-secondary flex-1" onClick={closeVehicleForm}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {assignTarget && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50"
-          onClick={() => setAssignTarget(null)} />
-      )}
     </div>
   );
 }

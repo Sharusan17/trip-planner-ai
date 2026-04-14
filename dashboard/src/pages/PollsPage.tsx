@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { pollsApi } from '@/api/polls';
 import type { Poll } from '@trip-planner-ai/shared';
-import { BarChart2, Plus, Trash2, Check, X } from 'lucide-react';
+import { BarChart2, Plus, Trash2, Check } from 'lucide-react';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -115,25 +116,13 @@ function PollCard({
 
 export default function PollsPage() {
   const { currentTrip, activeTraveller, isOrganiser } = useTrip();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [question, setQuestion] = useState('');
-  const [options, setOptions] = useState(['', '']);
-  const [closesAt, setClosesAt] = useState('');
 
   const { data: polls = [], isLoading } = useQuery({
     queryKey: ['polls', currentTrip?.id, activeTraveller?.id],
     queryFn: () => pollsApi.list(currentTrip!.id, activeTraveller?.id),
     enabled: !!currentTrip,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (data: { question: string; options: string[]; created_by: string; closes_at?: string | null }) =>
-      pollsApi.create(currentTrip!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['polls'] });
-      resetForm();
-    },
   });
 
   const voteMutation = useMutation({
@@ -147,36 +136,6 @@ export default function PollsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['polls'] }),
   });
 
-  const resetForm = () => {
-    setShowForm(false);
-    setQuestion('');
-    setOptions(['', '']);
-    setClosesAt('');
-  };
-
-  const handleAddOption = () => setOptions([...options, '']);
-  const handleRemoveOption = (i: number) => {
-    if (options.length <= 2) return;
-    setOptions(options.filter((_, idx) => idx !== i));
-  };
-  const handleOptionChange = (i: number, val: string) => {
-    const next = [...options];
-    next[i] = val;
-    setOptions(next);
-  };
-
-  const handleSubmit = () => {
-    if (!activeTraveller) return;
-    const validOptions = options.map((o) => o.trim()).filter(Boolean);
-    if (!question.trim() || validOptions.length < 2) return;
-    createMutation.mutate({
-      question: question.trim(),
-      options: validOptions,
-      created_by: activeTraveller.id,
-      closes_at: closesAt || null,
-    });
-  };
-
   if (!currentTrip) return null;
 
   return (
@@ -186,78 +145,11 @@ export default function PollsPage() {
           <h2 className="font-display text-2xl font-bold text-navy">Polls</h2>
           <p className="text-sm text-ink-faint mt-0.5">Vote on trip decisions together</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => navigate('/community/polls/new')} className="btn-primary flex items-center gap-2">
           <Plus size={16} strokeWidth={2} />
           New Poll
         </button>
       </div>
-
-      {/* Create form modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={resetForm}>
-          <div className="bg-white rounded-xl shadow-[var(--shadow-elevated)] w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-lg font-bold text-ink mb-4">Create Poll</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Question *</label>
-                <input
-                  className="vintage-input"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="e.g. Which restaurant for dinner on day 3?"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Options *</label>
-                <div className="space-y-2">
-                  {options.map((opt, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        className="vintage-input flex-1"
-                        value={opt}
-                        onChange={(e) => handleOptionChange(i, e.target.value)}
-                        placeholder={`Option ${i + 1}`}
-                      />
-                      {options.length > 2 && (
-                        <button onClick={() => handleRemoveOption(i)} className="text-ink-faint hover:text-terracotta transition-colors">
-                          <X size={16} strokeWidth={2} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={handleAddOption}
-                  className="mt-2 text-xs text-navy hover:underline font-body"
-                >
-                  + Add option
-                </button>
-              </div>
-
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Close date (optional)</label>
-                <input
-                  type="datetime-local"
-                  className="vintage-input"
-                  value={closesAt}
-                  onChange={(e) => setClosesAt(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-5">
-              <button onClick={resetForm} className="btn-secondary flex-1">Cancel</button>
-              <button
-                onClick={handleSubmit}
-                disabled={!question.trim() || options.filter((o) => o.trim()).length < 2 || createMutation.isPending}
-                className="btn-primary flex-1 disabled:opacity-50"
-              >
-                {createMutation.isPending ? 'Creating…' : 'Create Poll'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Polls list */}
       {isLoading ? (

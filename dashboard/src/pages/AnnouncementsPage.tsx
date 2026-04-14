@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { announcementsApi } from '@/api/announcements';
@@ -17,27 +18,15 @@ function timeAgo(dateStr: string) {
 }
 
 export default function AnnouncementsPage() {
-  const { currentTrip, activeTraveller, isOrganiser } = useTrip();
+  const { currentTrip, isOrganiser } = useTrip();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [pinned, setPinned] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ['announcements', currentTrip?.id],
     queryFn: () => announcementsApi.list(currentTrip!.id),
     enabled: !!currentTrip,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (data: { title: string; content: string; author_id: string; pinned: boolean }) =>
-      announcementsApi.create(currentTrip!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['announcements'] });
-      resetForm();
-    },
   });
 
   const pinMutation = useMutation({
@@ -50,18 +39,6 @@ export default function AnnouncementsPage() {
     mutationFn: (id: string) => announcementsApi.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['announcements'] }),
   });
-
-  const resetForm = () => {
-    setShowForm(false);
-    setTitle('');
-    setContent('');
-    setPinned(false);
-  };
-
-  const handleSubmit = () => {
-    if (!title.trim() || !content.trim() || !activeTraveller) return;
-    createMutation.mutate({ title, content, author_id: activeTraveller.id, pinned });
-  };
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -77,61 +54,12 @@ export default function AnnouncementsPage() {
           <p className="text-sm text-ink-faint mt-0.5">Trip updates from organisers</p>
         </div>
         {isOrganiser && (
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => navigate('/community/announcements/new')} className="btn-primary flex items-center gap-2">
             <Plus size={16} strokeWidth={2} />
             New Post
           </button>
         )}
       </div>
-
-      {/* Create form */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={resetForm}>
-          <div className="bg-white rounded-xl shadow-[var(--shadow-elevated)] w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-lg font-bold text-ink mb-4">New Announcement</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Title *</label>
-                <input
-                  className="vintage-input"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Flight change, Meeting point update..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Content *</label>
-                <textarea
-                  className="vintage-input"
-                  rows={4}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Write your announcement here..."
-                />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="rounded border-parchment-dark"
-                  checked={pinned}
-                  onChange={(e) => setPinned(e.target.checked)}
-                />
-                <span className="text-sm font-body text-ink-light">Pin this announcement</span>
-              </label>
-            </div>
-            <div className="flex gap-3 mt-5">
-              <button onClick={resetForm} className="btn-secondary flex-1">Cancel</button>
-              <button
-                onClick={handleSubmit}
-                disabled={!title.trim() || !content.trim() || createMutation.isPending}
-                className="btn-primary flex-1 disabled:opacity-50"
-              >
-                {createMutation.isPending ? 'Posting…' : 'Post'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Announcements list */}
       {isLoading ? (

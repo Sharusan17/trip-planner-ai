@@ -1,8 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { travellersApi } from '@/api/travellers';
-import type { Traveller, CreateTravellerInput, TravellerType, TravellerRole } from '@trip-planner-ai/shared';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, Check } from 'lucide-react';
 
@@ -10,9 +10,8 @@ const AVATAR_COLOURS = ['#1B3A5C', '#C65D3E', '#B8963E', '#2A5580', '#D4806A', '
 
 export default function TravellersPage() {
   const { currentTrip, isOrganiser } = useTrip();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState<{ id: string; pin: string } | null>(null);
   const [revealedNotes, setRevealedNotes] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
@@ -24,74 +23,16 @@ export default function TravellersPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Form state
-  const [name, setName] = useState('');
-  const [type, setType] = useState<TravellerType>('adult');
-  const [role, setRole] = useState<TravellerRole>('member');
-  const [colour, setColour] = useState(AVATAR_COLOURS[0]);
-  const [weight, setWeight] = useState('1.00');
-  const [medicalNotes, setMedicalNotes] = useState('');
-  const [medicalPin, setMedicalPin] = useState('');
-
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
     queryFn: () => travellersApi.list(currentTrip!.id),
     enabled: !!currentTrip,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: CreateTravellerInput) => travellersApi.create(currentTrip!.id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['travellers'] }); resetForm(); },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => travellersApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['travellers'] }); resetForm(); },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => travellersApi.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['travellers'] }),
   });
-
-  const resetForm = () => {
-    setShowForm(false);
-    setEditingId(null);
-    setName('');
-    setType('adult');
-    setRole('member');
-    setColour(AVATAR_COLOURS[0]);
-    setWeight('1.00');
-    setMedicalNotes('');
-    setMedicalPin('');
-  };
-
-  const openEdit = (t: Traveller) => {
-    setEditingId(t.id);
-    setName(t.name);
-    setType(t.type);
-    setRole(t.role);
-    setColour(t.avatar_colour);
-    setWeight(String(t.cost_split_weight));
-    setMedicalNotes('');
-    setMedicalPin('');
-    setShowForm(true);
-  };
-
-  const handleSubmit = () => {
-    const data: any = {
-      name, type, role, avatar_colour: colour,
-      cost_split_weight: parseFloat(weight),
-    };
-    if (medicalNotes) data.medical_notes = medicalNotes;
-    if (medicalPin) data.medical_pin = medicalPin;
-
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, data });
-    } else {
-      createMutation.mutate(data);
-    }
-  };
 
   const handleVerifyPin = async (id: string) => {
     if (!pinInput || pinInput.id !== id) return;
@@ -112,7 +53,7 @@ export default function TravellersPage() {
       <div className="flex items-center justify-between">
         <h2 className="font-display text-2xl font-bold text-navy">Travellers</h2>
         {isOrganiser && (
-          <button onClick={() => { resetForm(); setShowForm(true); }} className="btn-primary">
+          <button onClick={() => navigate('/travellers/add')} className="btn-primary">
             + Add Traveller
           </button>
         )}
@@ -227,7 +168,7 @@ export default function TravellersPage() {
             {/* Actions */}
             {isOrganiser && (
               <div className="flex gap-2 mt-3 pt-3 border-t border-gold/20">
-                <button onClick={() => openEdit(t)} className="text-xs text-navy font-display">Edit</button>
+                <button onClick={() => navigate(`/travellers/${t.id}/edit`)} className="text-xs text-navy font-display">Edit</button>
                 <button
                   onClick={() => { if (confirm(`Remove ${t.name}?`)) deleteMutation.mutate(t.id); }}
                   className="text-xs text-terracotta font-display"
@@ -249,84 +190,6 @@ export default function TravellersPage() {
         </div>
       )}
 
-      {/* Form modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onClick={() => resetForm()}>
-          <div className="vintage-card p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-xl font-bold text-navy mb-4">
-              {editingId ? 'Edit Traveller' : 'Add Traveller'}
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Name *</label>
-                <input className="vintage-input" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-display text-ink-light mb-1">Type</label>
-                  <select className="vintage-input" value={type} onChange={(e) => {
-                    const v = e.target.value as TravellerType;
-                    setType(v);
-                    setWeight(v === 'infant' ? '0.00' : v === 'child' ? '0.50' : '1.00');
-                  }}>
-                    <option value="adult">Adult</option>
-                    <option value="child">Child</option>
-                    <option value="infant">Infant</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-display text-ink-light mb-1">Role</label>
-                  <select className="vintage-input" value={role} onChange={(e) => setRole(e.target.value as TravellerRole)}>
-                    <option value="member">Member</option>
-                    <option value="organiser">Organiser</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Avatar Colour</label>
-                <div className="flex flex-wrap gap-2">
-                  {AVATAR_COLOURS.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setColour(c)}
-                      className={`w-8 h-8 rounded-full border-2 transition-all ${colour === c ? 'border-navy scale-110' : 'border-transparent'}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Cost Split Weight</label>
-                <input className="vintage-input" type="number" step="0.05" min="0" max="2" value={weight} onChange={(e) => setWeight(e.target.value)} />
-                <p className="text-xs text-ink-faint mt-1">1.0 = full share, 0.5 = half, 0 = none</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-display text-ink-light mb-1">Medical Notes (optional)</label>
-                <textarea className="vintage-input" rows={3} value={medicalNotes} onChange={(e) => setMedicalNotes(e.target.value)} placeholder="Allergies, medications, conditions..." />
-              </div>
-
-              {medicalNotes && (
-                <div>
-                  <label className="block text-sm font-display text-ink-light mb-1">PIN to protect medical notes</label>
-                  <input className="vintage-input w-32 text-center tracking-widest" type="password" maxLength={4} placeholder="4 digits" value={medicalPin} onChange={(e) => setMedicalPin(e.target.value.replace(/\D/g, ''))} />
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button onClick={resetForm} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={handleSubmit} className="btn-primary flex-1">
-                {editingId ? 'Save Changes' : 'Add Traveller'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

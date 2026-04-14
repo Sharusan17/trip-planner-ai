@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '../context/TripContext';
 import { accommodationApi } from '../api/accommodation';
 import { travellersApi } from '../api/travellers';
-import type { AccommodationBooking, CreateAccommodationInput } from '@trip-planner-ai/shared';
+import type { AccommodationBooking } from '@trip-planner-ai/shared';
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
@@ -19,29 +20,10 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-interface FormData {
-  name: string;
-  address: string;
-  check_in_date: string;
-  check_out_date: string;
-  reference_number: string;
-  price: string;
-  currency: string;
-  notes: string;
-  traveller_ids: string[];
-}
-
-const emptyForm: FormData = {
-  name: '', address: '', check_in_date: '', check_out_date: '',
-  reference_number: '', price: '', currency: 'EUR', notes: '', traveller_ids: [],
-};
-
 export default function AccommodationPage() {
   const { currentTrip, isOrganiser } = useTrip();
+  const navigate = useNavigate();
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<AccommodationBooking | null>(null);
-  const [form, setForm] = useState<FormData>(emptyForm);
 
   const { data: bookings = [], isLoading } = useQuery({
     queryKey: ['accommodation', currentTrip?.id],
@@ -55,72 +37,10 @@ export default function AccommodationPage() {
     enabled: !!currentTrip,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: CreateAccommodationInput) => accommodationApi.create(currentTrip!.id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['accommodation', currentTrip?.id] }); closeForm(); },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateAccommodationInput> }) =>
-      accommodationApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['accommodation', currentTrip?.id] }); closeForm(); },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => accommodationApi.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accommodation', currentTrip?.id] }),
   });
-
-  function closeForm() {
-    setShowForm(false);
-    setEditing(null);
-    setForm(emptyForm);
-  }
-
-  function openEdit(b: AccommodationBooking) {
-    setEditing(b);
-    setForm({
-      name: b.name,
-      address: b.address ?? '',
-      check_in_date: b.check_in_date,
-      check_out_date: b.check_out_date,
-      reference_number: b.reference_number ?? '',
-      price: b.price ? String(b.price) : '',
-      currency: b.currency ?? 'EUR',
-      notes: b.notes ?? '',
-      traveller_ids: b.traveller_ids,
-    });
-    setShowForm(true);
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const data: CreateAccommodationInput = {
-      name: form.name,
-      address: form.address || undefined,
-      check_in_date: form.check_in_date,
-      check_out_date: form.check_out_date,
-      reference_number: form.reference_number || undefined,
-      price: form.price ? parseFloat(form.price) : undefined,
-      currency: form.currency || undefined,
-      notes: form.notes || undefined,
-      traveller_ids: form.traveller_ids,
-    };
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
-  }
-
-  function toggleTraveller(id: string) {
-    setForm((f) => ({
-      ...f,
-      traveller_ids: f.traveller_ids.includes(id)
-        ? f.traveller_ids.filter((t) => t !== id)
-        : [...f.traveller_ids, id],
-    }));
-  }
 
   // Timeline: visual bar relative to trip dates
   const tripStart = currentTrip ? new Date(currentTrip.start_date).getTime() : 0;
@@ -136,7 +56,7 @@ export default function AccommodationPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-bold text-navy">Accommodation</h1>
         {isOrganiser && (
-          <button className="btn-primary" onClick={() => { setEditing(null); setForm(emptyForm); setShowForm(true); }}>
+          <button className="btn-primary" onClick={() => navigate('/logistics/stays/add')}>
             + Add Stay
           </button>
         )}
@@ -182,8 +102,7 @@ export default function AccommodationPage() {
           <p className="text-3xl mb-2">🏨</p>
           <p className="text-ink/60">No accommodation added yet.</p>
           {isOrganiser && (
-            <button className="btn-primary mt-4"
-              onClick={() => { setEditing(null); setForm(emptyForm); setShowForm(true); }}>
+            <button className="btn-primary mt-4" onClick={() => navigate('/logistics/stays/add')}>
               Add first stay
             </button>
           )}
@@ -243,7 +162,7 @@ export default function AccommodationPage() {
                   </div>
                   {isOrganiser && (
                     <div className="flex flex-col gap-2 shrink-0">
-                      <button onClick={() => openEdit(b)} className="btn-secondary text-xs py-1 px-3">Edit</button>
+                      <button onClick={() => navigate(`/logistics/stays/${b.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                       <button
                         onClick={() => { if (confirm('Delete this booking?')) deleteMutation.mutate(b.id); }}
                         className="btn-danger text-xs py-1 px-3"
@@ -259,94 +178,6 @@ export default function AccommodationPage() {
         </div>
       )}
 
-      {/* Form modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
-          <div className="vintage-card w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-display font-bold text-navy mb-4">
-              {editing ? 'Edit Stay' : 'Add Stay'}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Property Name *</label>
-                <input className="vintage-input w-full" value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Address</label>
-                <textarea className="vintage-input w-full" rows={2} value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Check-in *</label>
-                  <input type="date" className="vintage-input w-full" value={form.check_in_date}
-                    onChange={(e) => setForm({ ...form, check_in_date: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Check-out *</label>
-                  <input type="date" className="vintage-input w-full" value={form.check_out_date}
-                    onChange={(e) => setForm({ ...form, check_out_date: e.target.value })} required />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Booking Reference</label>
-                <input className="vintage-input w-full font-mono" value={form.reference_number}
-                  onChange={(e) => setForm({ ...form, reference_number: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Price</label>
-                  <input type="number" step="0.01" min="0" className="vintage-input w-full"
-                    value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-1">Currency</label>
-                  <input className="vintage-input w-full uppercase" maxLength={3}
-                    value={form.currency}
-                    onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-2">Guests</label>
-                <div className="flex flex-wrap gap-2">
-                  {travellers.map((t) => (
-                    <label key={t.id} className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.traveller_ids.includes(t.id)}
-                        onChange={() => toggleTraveller(t.id)}
-                        className="accent-navy"
-                      />
-                      <span
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
-                        style={{ backgroundColor: t.avatar_colour }}
-                      >
-                        {t.name.charAt(0).toUpperCase()}
-                      </span>
-                      <span className="text-sm text-ink">{t.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1">Notes</label>
-                <textarea className="vintage-input w-full" rows={2} value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" className="btn-primary flex-1"
-                  disabled={createMutation.isPending || updateMutation.isPending}>
-                  {editing ? 'Save Changes' : 'Add Stay'}
-                </button>
-                <button type="button" className="btn-secondary flex-1" onClick={closeForm}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
