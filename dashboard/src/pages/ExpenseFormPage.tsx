@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { expensesApi } from '@/api/expenses';
+import type { ReceiptScanResult } from '@/api/expenses';
 import { travellersApi } from '@/api/travellers';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2 } from 'lucide-react';
 
 const CATEGORIES: ExpenseCategory[] = [
   'accommodation', 'food', 'transport', 'activities', 'shopping', 'other',
@@ -60,6 +61,8 @@ export default function ExpenseFormPage() {
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
+  const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
 
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
@@ -109,6 +112,51 @@ export default function ExpenseFormPage() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); navigate('/expenses'); },
   });
+
+  // ── Receipt scan ──────────────────────────────────────────────────────────
+  async function handleScanReceipt() {
+    if (!receiptFile) return;
+    setScanState('scanning');
+    try {
+      const result = await expensesApi.scanReceipt(receiptFile);
+      setScanResult(result);
+
+      // Normalise date: Tabscanner may return DD/MM/YYYY — convert to YYYY-MM-DD
+      let parsedDate = result.date;
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(parsedDate)) {
+        const [d, m, y] = parsedDate.split('/');
+        parsedDate = `${y}-${m}-${d}`;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        description:  prev.description || result.merchant || prev.description,
+        amount:       result.total > 0 ? String(result.total) : prev.amount,
+        currency:     result.currency || prev.currency,
+        expense_date: parsedDate || prev.expense_date,
+        split_mode:   result.lineItems.length > 0 ? 'itemised' : prev.split_mode,
+      }));
+
+      if (result.lineItems.length > 0) {
+        setLineItems(result.lineItems.map((li) => ({
+          description:  li.description,
+          amount:       String(li.amount),
+          traveller_ids: [],
+        })));
+      }
+
+      setScanState('done');
+    } catch {
+      setScanState('error');
+    }
+  }
+
+  function clearReceipt() {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    setScanState('idle');
+    setScanResult(null);
+  }
 
   function computeItemisedSplits(): Record<string, number> {
     const splits: Record<string, number> = {};
@@ -209,6 +257,78 @@ export default function ExpenseFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="vintage-card p-6 space-y-5">
+        {/* Receipt scan — shown first so auto-fill populates the fields below */}
+        <div>
+          <label className="block text-xs font-semibold text-ink-faint mb-2 uppercase tracking-wider">Receipt (optional)</label>
+          <input ref={receiptInputRef} type="file" accept="image/*" className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              setReceiptFile(f);
+              setReceiptPreview(URL.createObjectURL(f));
+              setScanState('idle');
+              setScanResult(null);
+            }} />
+
+          {receiptFile ? (
+            <div className="space-y-2.5">
+              {/* Preview */}
+              <div className="relative rounded-xl overflow-hidden border border-parchment-dark">
+                <img src={receiptPreview!} alt="Receipt" className="w-full max-h-52 object-cover" />
+                <button type="button" onClick={clearReceipt}
+                  className="absolute top-2 right-2 w-6 h-6 bg-ink/60 text-white rounded-full flex items-center justify-center text-sm hover:bg-ink leading-none">×</button>
+              </div>
+
+              {/* Scan CTA / status */}
+              {scanState === 'idle' && (
+                <button type="button" onClick={handleScanReceipt}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-navy text-white text-sm font-semibold hover:bg-navy-dark transition-colors">
+                  <ScanLine size={15} strokeWidth={2} />
+                  Scan &amp; Auto-fill
+                </button>
+              )}
+
+              {scanState === 'scanning' && (
+                <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-parchment/60 border border-parchment-dark text-sm text-ink-faint">
+                  <Loader2 size={15} className="animate-spin text-navy" />
+                  Scanning receipt…
+                </div>
+              )}
+
+              {scanState === 'done' && scanResult && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-emerald-700 font-semibold text-sm">
+                      <CheckCircle2 size={14} /> Scanned
+                    </span>
+                    <button type="button" onClick={() => setScanState('idle')}
+                      className="text-xs text-emerald-600 hover:underline">Rescan</button>
+                  </div>
+                  <div className="text-xs text-emerald-700 space-y-0.5">
+                    {scanResult.merchant   && <div>Merchant · <span className="font-medium">{scanResult.merchant}</span></div>}
+                    {scanResult.total > 0  && <div>Total · <span className="font-medium">{scanResult.currency} {scanResult.total.toFixed(2)}</span></div>}
+                    {scanResult.hasVat     && <div>VAT distributed · <span className="font-medium">{scanResult.currency} {scanResult.tax.toFixed(2)}</span></div>}
+                    {scanResult.lineItems.length > 0 && <div>{scanResult.lineItems.length} line items auto-filled</div>}
+                  </div>
+                </div>
+              )}
+
+              {scanState === 'error' && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between">
+                  <span className="text-xs text-terracotta">Could not read receipt — fill in details manually.</span>
+                  <button type="button" onClick={() => setScanState('idle')} className="text-xs text-terracotta hover:underline ml-3 shrink-0">Retry</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button type="button" onClick={() => receiptInputRef.current?.click()}
+              className="btn-secondary text-sm w-full flex items-center justify-center gap-2 py-2.5">
+              <Paperclip size={14} />
+              Attach receipt
+            </button>
+          )}
+        </div>
+
         {/* Description */}
         <div>
           <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Description *</label>
@@ -411,35 +531,6 @@ export default function ExpenseFormPage() {
           <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Notes</label>
           <textarea className="vintage-input w-full" rows={2} value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-        </div>
-
-        {/* Receipt upload */}
-        <div>
-          <label className="block text-xs font-semibold text-ink-faint mb-2 uppercase tracking-wider">Receipt (optional)</label>
-          <input ref={receiptInputRef} type="file" accept="image/*,application/pdf" className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              setReceiptFile(f);
-              setReceiptPreview(f.type.startsWith('image/') ? URL.createObjectURL(f) : null);
-            }} />
-          {receiptFile ? (
-            receiptPreview ? (
-              <div className="relative rounded-xl overflow-hidden">
-                <img src={receiptPreview} alt="Receipt preview" className="w-full h-32 object-cover" />
-                <button type="button" onClick={() => { setReceiptFile(null); setReceiptPreview(null); }}
-                  className="absolute top-2 right-2 w-6 h-6 bg-ink/60 text-white rounded-full flex items-center justify-center text-sm hover:bg-ink">×</button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 p-3 bg-parchment/50 rounded-xl border border-parchment-dark text-sm">
-                <span className="text-ink flex-1 truncate">{receiptFile.name}</span>
-                <button type="button" onClick={() => setReceiptFile(null)} className="text-terracotta hover:underline text-xs shrink-0">Remove</button>
-              </div>
-            )
-          ) : (
-            <button type="button" onClick={() => receiptInputRef.current?.click()}
-              className="btn-secondary text-sm w-full flex items-center justify-center py-2.5">📎 Attach receipt</button>
-          )}
         </div>
 
         {/* Actions */}

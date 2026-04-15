@@ -4,6 +4,23 @@ import type {
   CreateExpenseInput, UpdateExpenseInput, UpsertBudgetsInput,
 } from '@trip-planner-ai/shared';
 
+export interface ReceiptScanLineItem {
+  description: string;
+  amount: number;
+  amountBeforeVat: number;
+  vatShare: number;
+}
+
+export interface ReceiptScanResult {
+  merchant: string;
+  date: string;       // YYYY-MM-DD or DD/MM/YYYY depending on receipt
+  total: number;
+  currency: string;
+  tax: number;
+  hasVat: boolean;
+  lineItems: ReceiptScanLineItem[];
+}
+
 export const expensesApi = {
   list: (tripId: string) =>
     api.get<Expense[]>(`/trips/${tripId}/expenses`),
@@ -37,4 +54,10 @@ export const expensesApi = {
 
   deleteReceipt: (id: string): Promise<void> =>
     api.delete<void>(`/expenses/${id}/receipt`),
+
+  scanReceipt: (file: File): Promise<ReceiptScanResult> => {
+    const fd = new FormData();
+    fd.append('receipt', file);
+    return api.postFile<ReceiptScanResult>('/receipts/scan', fd);
+  },
 };
