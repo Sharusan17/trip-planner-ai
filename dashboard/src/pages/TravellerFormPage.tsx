@@ -19,7 +19,6 @@ export default function TravellerFormPage() {
   const [type, setType] = useState<TravellerType>('adult');
   const [role, setRole] = useState<TravellerRole>('member');
   const [colour, setColour] = useState(AVATAR_COLOURS[0]);
-  const [weight, setWeight] = useState('1.00');
   const [medicalNotes, setMedicalNotes] = useState('');
   const [medicalPin, setMedicalPin] = useState('');
 
@@ -38,7 +37,6 @@ export default function TravellerFormPage() {
         setType(t.type);
         setRole(t.role);
         setColour(t.avatar_colour);
-        setWeight(String(t.cost_split_weight));
       }
     }
   }, [id, isEditing, travellers]);
@@ -55,7 +53,8 @@ export default function TravellerFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data: any = { name, type, role, avatar_colour: colour, cost_split_weight: parseFloat(weight) };
+    const costWeight = type === 'infant' ? 0 : type === 'child' ? 0.5 : 1.0;
+    const data: any = { name, type, role, avatar_colour: colour, cost_split_weight: costWeight };
     if (medicalNotes) data.medical_notes = medicalNotes;
     if (medicalPin) data.medical_pin = medicalPin;
     if (isEditing) updateMutation.mutate(data);
@@ -89,7 +88,6 @@ export default function TravellerFormPage() {
             <select className="vintage-input" value={type} onChange={(e) => {
               const v = e.target.value as TravellerType;
               setType(v);
-              setWeight(v === 'infant' ? '0.00' : v === 'child' ? '0.50' : '1.00');
             }}>
               <option value="adult">Adult</option>
               <option value="child">Child</option>
@@ -122,13 +120,6 @@ export default function TravellerFormPage() {
             </div>
             <span className="text-sm text-ink-faint">{name || 'Preview'}</span>
           </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Cost Split Weight</label>
-          <input className="vintage-input" type="number" step="0.05" min="0" max="2" value={weight}
-            onChange={(e) => setWeight(e.target.value)} />
-          <p className="text-xs text-ink-faint mt-1">1.0 = full share · 0.5 = half · 0 = excluded</p>
         </div>
 
         <div>

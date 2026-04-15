@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
-import { Plus, Trash2, Pencil, MapPin, Baby, CalendarDays } from 'lucide-react';
+import { Plus, Trash2, Pencil, MapPin, CalendarDays } from 'lucide-react';
 
 const ACTIVITY_COLOURS: Record<ActivityType, { bg: string; text: string; border: string }> = {
   flight:        { bg: 'bg-blue-50',   text: 'text-blue-600',   border: '#3B82F6' },
@@ -23,19 +23,40 @@ export default function ItineraryPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const hasInitDays = useRef(false);
 
-  const { data: days = [] } = useQuery({
+  const { data: days = [], isLoading } = useQuery({
     queryKey: ['days', currentTrip?.id],
     queryFn: () => itineraryApi.getDays(currentTrip!.id),
     enabled: !!currentTrip,
   });
 
-  const activeDay = days.find((d) => d.id === (selectedDayId ?? days[0]?.id)) ?? days[0] ?? null;
+  // Auto-create all days from trip start_date → end_date
+  useEffect(() => {
+    if (!currentTrip || hasInitDays.current || isLoading) return;
+    const start = new Date(currentTrip.start_date);
+    const end = new Date(currentTrip.end_date);
+    const expectedDates: string[] = [];
+    const cur = new Date(start);
+    while (cur <= end) {
+      expectedDates.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+    const existingDates = new Set(days.map((d) => d.date.slice(0, 10)));
+    const missing = expectedDates.filter((d) => !existingDates.has(d));
+    if (missing.length === 0) { hasInitDays.current = true; return; }
+    hasInitDays.current = true;
+    Promise.all(
+      missing.map((date) =>
+        itineraryApi.createDay(currentTrip.id, {
+          date,
+          day_number: expectedDates.indexOf(date) + 1,
+        })
+      )
+    ).then(() => queryClient.invalidateQueries({ queryKey: ['days'] }));
+  }, [currentTrip, days, isLoading, queryClient]);
 
-  const deleteDayMutation = useMutation({
-    mutationFn: (id: string) => itineraryApi.deleteDay(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['days'] }),
-  });
+  const activeDay = days.find((d) => d.id === (selectedDayId ?? days[0]?.id)) ?? days[0] ?? null;
 
   const deleteActivityMutation = useMutation({
     mutationFn: (id: string) => itineraryApi.deleteActivity(id),
@@ -46,19 +67,15 @@ export default function ItineraryPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-2xl font-bold text-navy">Itinerary</h2>
-        {isOrganiser && (
-          <button onClick={() => navigate('/itinerary/days/add')} className="btn-primary flex items-center gap-1.5">
-            <Plus size={15} strokeWidth={2.5} />
-            Add Day
-          </button>
-        )}
       </div>
 
-      {days.length === 0 ? (
+      {isLoading || days.length === 0 ? (
         <div className="vintage-card p-12 text-center">
           <CalendarDays size={36} className="text-ink-faint mx-auto mb-3" strokeWidth={1.5} />
-          <h3 className="font-display text-lg font-semibold text-navy mb-1">No days planned yet</h3>
-          <p className="text-sm text-ink-faint">Start building your itinerary day by day</p>
+          <h3 className="font-display text-lg font-semibold text-navy mb-1">
+            {isLoading ? 'Loading itinerary…' : 'Preparing your itinerary…'}
+          </h3>
+          <p className="text-sm text-ink-faint">Days are being set up from your trip dates</p>
         </div>
       ) : (
         <>
@@ -102,14 +119,6 @@ export default function ItineraryPage() {
                       {' · '}{activeDay.activities.length} activit{activeDay.activities.length === 1 ? 'y' : 'ies'}
                     </p>
                   </div>
-                  {isOrganiser && (
-                    <button
-                      onClick={() => { if (confirm(`Delete Day ${activeDay.day_number}?`)) deleteDayMutation.mutate(activeDay.id); }}
-                      className="p-1.5 -mr-1 text-ink-faint hover:text-terracotta transition-colors rounded-lg hover:bg-red-50"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
                 </div>
                 {activeDay.notes && (
                   <p className="text-sm text-ink-light mt-2.5 bg-parchment/60 rounded-lg px-3 py-2 border border-parchment-dark">
@@ -130,7 +139,14 @@ export default function ItineraryPage() {
                       <div className="absolute left-[17px] top-10 bottom-8 w-px border-l-2 border-dashed border-parchment-dark pointer-events-none" />
                     )}
                     <div className="space-y-3">
-                      {activeDay.activities.map((a) => {
+                      {[...activeDay.activities]
+                        .sort((a, b) => {
+                          if (!a.time && !b.time) return 0;
+                          if (!a.time) return 1;
+                          if (!b.time) return -1;
+                          return a.time.localeCompare(b.time);
+                        })
+                        .map((a) => {
                         const colour = ACTIVITY_COLOURS[a.type];
                         return (
                           <div key={a.id} className="flex gap-3 items-start">
@@ -145,45 +161,33 @@ export default function ItineraryPage() {
                             <div className="flex-1 bg-parchment/40 rounded-xl border border-parchment-dark px-3.5 py-2.5 min-w-0">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-semibold text-ink text-sm leading-snug">{a.description}</p>
-                                  <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                    {a.location_tag && (
-                                      <span className="flex items-center gap-1 text-xs text-ink-faint">
-                                        <MapPin size={10} />
-                                        {a.location_tag}
-                                      </span>
-                                    )}
-                                    {a.kid_friendly && (
-                                      <span className="flex items-center gap-1 text-xs text-ink-faint">
-                                        <Baby size={10} />
-                                        Kid-friendly
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
                                   {a.time && (
-                                    <span className="text-xs text-ink-light font-mono bg-white border border-parchment-dark px-2 py-0.5 rounded-full">
-                                      {a.time.slice(0, 5)}
+                                    <p className="text-xs text-ink-faint font-mono mb-0.5">{a.time.slice(0, 5)}</p>
+                                  )}
+                                  <p className="font-semibold text-ink text-sm leading-snug">{a.description}</p>
+                                  {a.location_tag && (
+                                    <span className="flex items-center gap-1 text-xs text-ink-faint mt-1">
+                                      <MapPin size={10} />
+                                      {a.location_tag}
                                     </span>
                                   )}
-                                  {isOrganiser && (
-                                    <div className="flex gap-1">
-                                      <button
-                                        onClick={() => navigate(`/itinerary/activities/${a.id}/edit`)}
-                                        className="w-6 h-6 rounded-full bg-white border border-parchment-dark flex items-center justify-center text-ink-faint hover:text-navy transition-colors"
-                                      >
-                                        <Pencil size={11} />
-                                      </button>
-                                      <button
-                                        onClick={() => { if (confirm('Delete activity?')) deleteActivityMutation.mutate(a.id); }}
-                                        className="w-6 h-6 rounded-full bg-white border border-parchment-dark flex items-center justify-center text-ink-faint hover:text-terracotta transition-colors"
-                                      >
-                                        <Trash2 size={11} />
-                                      </button>
-                                    </div>
-                                  )}
                                 </div>
+                                {isOrganiser && (
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button
+                                      onClick={() => navigate(`/itinerary/activities/${a.id}/edit`)}
+                                      className="w-6 h-6 rounded-full bg-white border border-parchment-dark flex items-center justify-center text-ink-faint hover:text-navy transition-colors"
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                    <button
+                                      onClick={() => { if (confirm('Delete activity?')) deleteActivityMutation.mutate(a.id); }}
+                                      className="w-6 h-6 rounded-full bg-white border border-parchment-dark flex items-center justify-center text-ink-faint hover:text-terracotta transition-colors"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
