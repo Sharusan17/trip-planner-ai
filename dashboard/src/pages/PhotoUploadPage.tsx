@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { photosApi } from '@/api/photos';
 import { itineraryApi } from '@/api/itinerary';
-import { ArrowLeft, Upload, X } from 'lucide-react';
+import { compressImage } from '@/utils/compressImage';
+import { ArrowLeft, Upload, X, Loader2 } from 'lucide-react';
 
 export default function PhotoUploadPage() {
   const navigate = useNavigate();
@@ -14,6 +15,8 @@ export default function PhotoUploadPage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
+  const [sizeInfo, setSizeInfo] = useState<{ originalMB: number; compressedMB: number } | null>(null);
   const [caption, setCaption] = useState('');
   const [dayId, setDayId] = useState('');
 
@@ -28,11 +31,35 @@ export default function PhotoUploadPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['photos'] }); navigate('/community'); },
   });
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setSelectedFile(file);
-    setPreview(URL.createObjectURL(file));
+    // Reset input so same file can be re-selected after clearing
+    e.target.value = '';
+    setCompressing(true);
+    setSizeInfo(null);
+    try {
+      const result = await compressImage(file);
+      // Revoke previous preview URL if any
+      if (preview) URL.revokeObjectURL(preview);
+      setSelectedFile(result.file);
+      setPreview(result.previewUrl);
+      setSizeInfo({ originalMB: result.originalMB, compressedMB: result.compressedMB });
+    } catch {
+      // Fallback: use original file if compression fails (e.g. non-image)
+      if (preview) URL.revokeObjectURL(preview);
+      setSelectedFile(file);
+      setPreview(URL.createObjectURL(file));
+    } finally {
+      setCompressing(false);
+    }
+  }
+
+  function clearFile() {
+    if (preview) URL.revokeObjectURL(preview);
+    setSelectedFile(null);
+    setPreview(null);
+    setSizeInfo(null);
   }
 
   return (
@@ -49,7 +76,12 @@ export default function PhotoUploadPage() {
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
         {/* File picker */}
-        {!selectedFile ? (
+        {compressing ? (
+          <div className="w-full h-48 border-2 border-dashed border-navy/30 rounded-xl flex flex-col items-center justify-center gap-3 bg-parchment/40">
+            <Loader2 size={28} className="text-navy animate-spin" strokeWidth={2} />
+            <p className="text-sm font-medium text-ink-light">Compressing image…</p>
+          </div>
+        ) : !selectedFile ? (
           <button type="button" onClick={() => fileInputRef.current?.click()}
             className="w-full h-48 border-2 border-dashed border-parchment-dark rounded-xl flex flex-col items-center justify-center gap-3 hover:border-navy/40 hover:bg-parchment/50 transition-colors">
             <div className="w-12 h-12 rounded-full bg-parchment flex items-center justify-center">
@@ -57,17 +89,24 @@ export default function PhotoUploadPage() {
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-ink-light">Click to choose a photo</p>
-              <p className="text-xs text-ink-faint mt-0.5">JPG, PNG, HEIC up to 10 MB</p>
+              <p className="text-xs text-ink-faint mt-0.5">JPG, PNG, HEIC — any size</p>
             </div>
           </button>
         ) : (
-          <div className="relative rounded-xl overflow-hidden">
-            <img src={preview!} alt="Preview" className="w-full h-56 object-cover" />
-            <button type="button"
-              onClick={() => { setSelectedFile(null); setPreview(null); }}
-              className="absolute top-3 right-3 w-8 h-8 bg-[#1C1917]/70 text-white rounded-full flex items-center justify-center hover:bg-[#1C1917]">
-              <X size={15} />
-            </button>
+          <div>
+            <div className="relative rounded-xl overflow-hidden">
+              <img src={preview!} alt="Preview" className="w-full h-56 object-cover" />
+              <button type="button"
+                onClick={clearFile}
+                className="absolute top-3 right-3 w-8 h-8 bg-[#1C1917]/70 text-white rounded-full flex items-center justify-center hover:bg-[#1C1917]">
+                <X size={15} />
+              </button>
+            </div>
+            {sizeInfo && sizeInfo.originalMB !== sizeInfo.compressedMB && (
+              <p className="text-xs text-ink-faint mt-1.5 text-center">
+                Compressed {sizeInfo.originalMB} MB → {sizeInfo.compressedMB} MB
+              </p>
+            )}
           </div>
         )}
 
@@ -95,7 +134,7 @@ export default function PhotoUploadPage() {
           <button type="button" onClick={() => navigate('/community')} className="btn-secondary flex-1">Cancel</button>
           <button
             onClick={() => uploadMutation.mutate()}
-            disabled={!selectedFile || uploadMutation.isPending}
+            disabled={!selectedFile || uploadMutation.isPending || compressing}
             className="btn-primary flex-1 disabled:opacity-50">
             {uploadMutation.isPending ? 'Uploading…' : 'Upload Photo'}
           </button>

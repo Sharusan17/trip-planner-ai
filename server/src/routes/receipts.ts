@@ -4,7 +4,7 @@ import { uploadReceipt } from '../middleware/upload';
 const router = Router();
 
 const TABSCANNER_PROCESS = 'https://api.tabscanner.com/api/2/process';
-const TABSCANNER_RESULT  = 'https://api.tabscanner.com/api/results';
+const TABSCANNER_RESULT  = 'https://api.tabscanner.com/api/result';
 const POLL_INTERVAL_MS   = 2500;
 const POLL_MAX_ATTEMPTS  = 12; // 30 seconds max
 
