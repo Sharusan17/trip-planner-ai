@@ -22,7 +22,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
 
     // ── Step 1: Upload to Tabscanner ──────────────────────────────────────────
     const uploadForm = new FormData();
-    const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+    const blob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
     uploadForm.append('file', blob, req.file.originalname || 'receipt.jpg');
 
     const uploadRes = await fetch(TABSCANNER_PROCESS, {
