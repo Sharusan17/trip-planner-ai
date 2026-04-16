@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
-import { Plus, Trash2, Pencil, MapPin, CalendarDays } from 'lucide-react';
+import { Plus, Trash2, Pencil, MapPin, CalendarDays, Check } from 'lucide-react';
 
 const ACTIVITY_COLOURS: Record<ActivityType, { bg: string; text: string; border: string }> = {
   flight:        { bg: 'bg-blue-50',   text: 'text-blue-600',   border: '#3B82F6' },
@@ -24,6 +24,8 @@ export default function ItineraryPage() {
   const queryClient = useQueryClient();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const hasInitDays = useRef(false);
+  const [editingTitle, setEditingTitle] = useState<string | null>(null); // dayId being edited
+  const [titleDraft, setTitleDraft] = useState('');
 
   const { data: days = [], isLoading } = useQuery({
     queryKey: ['days', currentTrip?.id],
@@ -62,6 +64,23 @@ export default function ItineraryPage() {
     mutationFn: (id: string) => itineraryApi.deleteActivity(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['days'] }),
   });
+
+  const updateDayMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      itineraryApi.updateDay(id, { title: title.trim() || undefined }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['days'] }),
+  });
+
+  function startEditTitle(day: { id: string; title: string | null }) {
+    setEditingTitle(day.id);
+    setTitleDraft(day.title ?? '');
+  }
+
+  function commitTitle() {
+    if (!editingTitle) return;
+    updateDayMutation.mutate({ id: editingTitle, title: titleDraft });
+    setEditingTitle(null);
+  }
 
   return (
     <div className="space-y-5">
@@ -110,10 +129,37 @@ export default function ItineraryPage() {
               {/* Day header */}
               <div className="px-5 pt-5 pb-4 border-b border-parchment-dark">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-display text-lg font-bold text-navy">
-                      {activeDay.title || `Day ${activeDay.day_number}`}
-                    </h3>
+                  <div className="flex-1 min-w-0">
+                    {isOrganiser && editingTitle === activeDay.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          className="font-display text-lg font-bold text-navy bg-transparent border-b-2 border-navy outline-none flex-1 min-w-0"
+                          value={titleDraft}
+                          onChange={(e) => setTitleDraft(e.target.value)}
+                          onBlur={commitTitle}
+                          onKeyDown={(e) => { if (e.key === 'Enter') commitTitle(); if (e.key === 'Escape') setEditingTitle(null); }}
+                          placeholder={`Day ${activeDay.day_number}`}
+                        />
+                        <button onClick={commitTitle} className="text-navy shrink-0">
+                          <Check size={16} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 group/title">
+                        <h3 className="font-display text-lg font-bold text-navy">
+                          {activeDay.title || `Day ${activeDay.day_number}`}
+                        </h3>
+                        {isOrganiser && (
+                          <button
+                            onClick={() => startEditTitle(activeDay)}
+                            className="opacity-0 group-hover/title:opacity-100 transition-opacity text-ink-faint hover:text-navy"
+                          >
+                            <Pencil size={13} strokeWidth={2} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p className="text-sm text-ink-faint mt-0.5">
                       {new Date(activeDay.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
                       {' · '}{activeDay.activities.length} activit{activeDay.activities.length === 1 ? 'y' : 'ies'}
