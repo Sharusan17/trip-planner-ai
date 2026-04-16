@@ -42,7 +42,8 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
       return res.status(502).json({ error: 'Tabscanner upload returned non-JSON', raw: uploadRaw });
     }
 
-    const token: string | undefined = uploadData?.token;
+    // If duplicate, use the duplicateToken for the result lookup
+    const token: string | undefined = uploadData?.duplicateToken ?? uploadData?.token;
     if (!token) {
       return res.status(502).json({ error: 'No token in Tabscanner response', raw: uploadData });
     }
@@ -57,10 +58,9 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
     for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
       await sleep(POLL_INTERVAL_MS);
 
-      const pollRes = await fetch(TABSCANNER_RESULT, {
-        method: 'POST',
-        headers: { apikey: apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+      const pollRes = await fetch(`${TABSCANNER_RESULT}/${token}`, {
+        method: 'GET',
+        headers: { apikey: apiKey },
       });
 
       const pollRaw = await pollRes.text();
