@@ -141,30 +141,30 @@ export default function PhotoAlbumPage() {
                     {/* Dark overlay */}
                     <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/20 transition-colors duration-200 pointer-events-none" />
 
-                    {/* Delete (own photos) */}
+                    {/* Delete (own photos) — always visible on mobile, hover-only on desktop */}
                     {photo.uploader_id === activeTraveller?.id && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm('Delete this photo?')) deleteMutation.mutate(photo.id);
                         }}
-                        className="absolute top-1.5 right-1.5 w-6 h-6 bg-ink/60 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-terracotta z-10"
+                        className="absolute top-1.5 right-1.5 w-6 h-6 bg-ink/60 text-white rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-terracotta z-10"
                       >
                         <Trash2 size={11} />
                       </button>
                     )}
 
-                    {/* Uploader dot */}
+                    {/* Uploader dot — always visible on mobile, hover-only on desktop */}
                     <div
-                      className="absolute bottom-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute bottom-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                       style={{ backgroundColor: photo.uploader_colour ?? '#2563EB' }}
                     >
                       {(photo.uploader_name ?? '?').charAt(0).toUpperCase()}
                     </div>
 
-                    {/* Caption hint */}
+                    {/* Caption hint — always visible on mobile, hover-only on desktop */}
                     {photo.caption && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink/70 to-transparent px-2 py-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-ink/70 to-transparent px-2 py-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <p className="text-[10px] text-white font-body truncate">{photo.caption}</p>
                       </div>
                     )}
