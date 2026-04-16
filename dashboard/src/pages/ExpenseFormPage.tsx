@@ -130,7 +130,8 @@ export default function ExpenseFormPage() {
 
       setForm((prev) => ({
         ...prev,
-        description:  prev.description || result.merchant || prev.description,
+        // Always use merchant name from receipt as the expense description
+        description:  result.merchant || prev.description,
         amount:       result.total > 0 ? String(result.total) : prev.amount,
         currency:     result.currency || prev.currency,
         expense_date: parsedDate || prev.expense_date,
@@ -139,8 +140,9 @@ export default function ExpenseFormPage() {
 
       if (result.lineItems.length > 0) {
         setLineItems(result.lineItems.map((li) => ({
-          description:  li.description,
-          amount:       String(li.amount),
+          description:   li.description,
+          // Use the total amount per line item (after VAT share included)
+          amount:        String(li.amount),
           traveller_ids: [],
         })));
       }

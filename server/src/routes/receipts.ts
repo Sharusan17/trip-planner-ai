@@ -111,9 +111,11 @@ interface TabscannerResult {
   tax?: string | number;
   currency?: string;
   lineItems?: Array<{
-    lineText?: string;
+    desc?: string;       // item description (Tabscanner field name)
+    lineText?: string;   // fallback alias
     lineTotal?: string | number;
     qty?: string | number;
+    price?: string | number;   // unit price (Tabscanner field name)
     unitPrice?: string | number;
   }>;
 }
@@ -129,9 +131,22 @@ function formatResult(raw: TabscannerResult) {
   const rawTax      = toNum(raw.tax);
   const currency    = (raw.currency ?? 'GBP').toUpperCase();
 
-  const rawItems   = raw.lineItems ?? [];
-  const validItems = rawItems.filter((li) => toNum(li.lineTotal) > 0);
-  const itemsSum   = validItems.reduce((s, li) => s + toNum(li.lineTotal), 0);
+  const rawItems = raw.lineItems ?? [];
+
+  // Resolve per-item total: prefer lineTotal, fall back to qty × price
+  const withAmounts = rawItems.map((li) => {
+    const lineTotal = toNum(li.lineTotal);
+    const unitPrice = toNum(li.price ?? li.unitPrice);
+    const qty       = toNum(li.qty) || 1;
+    const amount    = lineTotal > 0 ? lineTotal : round2(unitPrice * qty);
+    const rawDesc   = (li.desc ?? li.lineText ?? '').trim();
+    // Strip trailing $ or currency symbols that Tabscanner sometimes appends
+    const desc = rawDesc.replace(/\s*\$\s*$/, '').trim();
+    return { desc, qty, amount };
+  });
+
+  const validItems = withAmounts.filter((li) => li.amount > 0);
+  const itemsSum   = validItems.reduce((s, li) => s + li.amount, 0);
 
   let vatToDistribute = rawTax;
   if (vatToDistribute === 0 && totalAmount > 0 && itemsSum > 0 && (totalAmount - itemsSum) > 0.005) {
@@ -142,13 +157,15 @@ function formatResult(raw: TabscannerResult) {
   }
 
   const lineItems = validItems.map((li) => {
-    const itemAmount = toNum(li.lineTotal);
-    const vatShare   = itemsSum > 0 ? (itemAmount / itemsSum) * vatToDistribute : 0;
+    const vatShare = itemsSum > 0 ? (li.amount / itemsSum) * vatToDistribute : 0;
+    // Build description: prefix with quantity if > 1
+    const description = li.qty > 1 ? `${li.qty}x ${li.desc}` : li.desc;
     return {
-      description:     (li.lineText ?? '').trim(),
-      amountBeforeVat: round2(itemAmount),
+      description,
+      qty:             li.qty,
+      amountBeforeVat: round2(li.amount),
       vatShare:        round2(vatShare),
-      amount:          round2(itemAmount + vatShare),
+      amount:          round2(li.amount + vatShare),
     };
   });
 
