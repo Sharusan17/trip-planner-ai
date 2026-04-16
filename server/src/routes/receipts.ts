@@ -5,11 +5,10 @@ const router = Router();
 
 const TABSCANNER_PROCESS = 'https://api.tabscanner.com/api/2/process';
 const TABSCANNER_RESULT  = 'https://api.tabscanner.com/api/results';
-const POLL_INTERVAL_MS   = 2000;
-const POLL_MAX_ATTEMPTS  = 15; // 30 seconds max
+const POLL_INTERVAL_MS   = 2500;
+const POLL_MAX_ATTEMPTS  = 12; // 30 seconds max
 
 // POST /api/v1/receipts/scan
-// Accepts a receipt image, scans it with Tabscanner, returns structured data + VAT distribution
 router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.TABSCANNER_API_KEY;
@@ -20,7 +19,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
       return res.status(400).json({ error: 'No receipt file provided' });
     }
 
-    // ── Step 1: Upload to Tabscanner ──────────────────────────────────────────
+    // ── Step 1: Upload ────────────────────────────────────────────────────────
     const uploadForm = new FormData();
     const blob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
     uploadForm.append('file', blob, req.file.originalname || 'receipt.jpg');
@@ -31,20 +30,26 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
       body: uploadForm,
     });
 
+    const uploadRaw = await uploadRes.text();
+    console.log('[Tabscanner] upload status:', uploadRes.status, '| body:', uploadRaw);
+
     if (!uploadRes.ok) {
-      const txt = await uploadRes.text();
-      return res.status(502).json({ error: 'Tabscanner upload failed', details: txt });
+      return res.status(502).json({ error: 'Tabscanner upload failed', details: uploadRaw });
     }
 
-    const uploadData = await uploadRes.json() as any;
+    let uploadData: any;
+    try { uploadData = JSON.parse(uploadRaw); } catch {
+      return res.status(502).json({ error: 'Tabscanner upload returned non-JSON', raw: uploadRaw });
+    }
+
     const token: string | undefined = uploadData?.token;
-
     if (!token) {
-      return res.status(502).json({ error: 'Tabscanner did not return a token', raw: uploadData });
+      return res.status(502).json({ error: 'No token in Tabscanner response', raw: uploadData });
     }
 
-    // If already done on upload (synchronous), skip polling
-    if (uploadData?.status === 'done' && uploadData?.result) {
+    // If the result is already included in the upload response
+    if (uploadData?.result && isSuccess(uploadData?.status)) {
+      console.log('[Tabscanner] result in upload response');
       return res.json(formatResult(uploadData.result));
     }
 
@@ -58,21 +63,32 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
         body: JSON.stringify({ token }),
       });
 
+      const pollRaw = await pollRes.text();
+      console.log(`[Tabscanner] poll #${attempt + 1} status:`, pollRes.status, '| body:', pollRaw.slice(0, 500));
+
       if (!pollRes.ok) continue;
 
-      const pollData = await pollRes.json() as any;
+      let pollData: any;
+      try { pollData = JSON.parse(pollRaw); } catch { continue; }
 
-      if (pollData?.status === 'done' && pollData?.result) {
+      // Return as soon as a result object is present — don't rely solely on status string
+      if (pollData?.result) {
+        console.log('[Tabscanner] got result, status:', pollData?.status);
         return res.json(formatResult(pollData.result));
       }
-      if (pollData?.status === 'error') {
+
+      // Explicit failure
+      if (pollData?.status === 'fail' || pollData?.status === 'error') {
+        console.log('[Tabscanner] explicit failure:', pollData);
         return res.status(422).json({ error: 'Tabscanner could not read the receipt', details: pollData });
       }
-      // status === 'pending' → keep polling
+
+      // Otherwise still pending — keep looping
     }
 
-    return res.status(504).json({ error: 'Tabscanner timed out — receipt may be unclear' });
+    return res.status(504).json({ error: 'Tabscanner timed out after 30s — try a clearer photo' });
   } catch (err) {
+    console.error('[Tabscanner] unexpected error:', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });
@@ -83,13 +99,16 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isSuccess(status?: string) {
+  return !status || ['done', 'success', 'complete', 'finished'].includes(status.toLowerCase());
+}
+
 interface TabscannerResult {
   establishment?: string;
   date?: string;
   total?: string | number;
   subtotal?: string | number;
   tax?: string | number;
-  taxPercent?: string | number;
   currency?: string;
   lineItems?: Array<{
     lineText?: string;
@@ -110,14 +129,10 @@ function formatResult(raw: TabscannerResult) {
   const rawTax      = toNum(raw.tax);
   const currency    = (raw.currency ?? 'GBP').toUpperCase();
 
-  const rawItems = raw.lineItems ?? [];
+  const rawItems   = raw.lineItems ?? [];
   const validItems = rawItems.filter((li) => toNum(li.lineTotal) > 0);
-  const itemsSum = validItems.reduce((s, li) => s + toNum(li.lineTotal), 0);
+  const itemsSum   = validItems.reduce((s, li) => s + toNum(li.lineTotal), 0);
 
-  // Resolve VAT to distribute:
-  //   1. Mindee-style: use explicit tax field
-  //   2. Fallback: infer from total − items sum (VAT shown as lump sum at bottom)
-  //   3. Fallback: infer from total − subtotal
   let vatToDistribute = rawTax;
   if (vatToDistribute === 0 && totalAmount > 0 && itemsSum > 0 && (totalAmount - itemsSum) > 0.005) {
     vatToDistribute = round2(totalAmount - itemsSum);
@@ -126,7 +141,6 @@ function formatResult(raw: TabscannerResult) {
     vatToDistribute = round2(totalAmount - subtotal);
   }
 
-  // Distribute VAT proportionally across line items
   const lineItems = validItems.map((li) => {
     const itemAmount = toNum(li.lineTotal);
     const vatShare   = itemsSum > 0 ? (itemAmount / itemsSum) * vatToDistribute : 0;
