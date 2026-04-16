@@ -179,10 +179,22 @@ export default function ExpenseFormPage() {
     e.preventDefault();
 
     if (form.split_mode === 'itemised') {
-      const computedSplits = computeItemisedSplits();
       const validLineItems: ExpenseLineItem[] = lineItems
         .filter((li) => li.description.trim() && parseFloat(li.amount) > 0)
         .map((li) => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+
+      // Validate: line items must sum to the expense total
+      const expenseTotal   = parseFloat(form.amount) || 0;
+      const lineItemsTotal = Math.round(validLineItems.reduce((s, li) => s + li.amount, 0) * 100) / 100;
+      if (expenseTotal > 0 && Math.abs(lineItemsTotal - expenseTotal) >= 0.01) {
+        alert(
+          `Line items total (${fmt(lineItemsTotal, form.currency)}) must equal the expense total (${fmt(expenseTotal, form.currency)}).\n\n` +
+          `Difference: ${fmt(Math.abs(lineItemsTotal - expenseTotal), form.currency)} ${lineItemsTotal > expenseTotal ? 'over' : 'under'}.`
+        );
+        return;
+      }
+
+      const computedSplits = computeItemisedSplits();
       const data: CreateExpenseInput = {
         description: form.description, amount: parseFloat(form.amount),
         currency: form.currency, category: form.category,
@@ -463,6 +475,29 @@ export default function ExpenseFormPage() {
                 </div>
               ))}
             </div>
+            {/* Live balance indicator */}
+            {(() => {
+              const liTotal   = Math.round(lineItems.reduce((s, li) => s + (parseFloat(li.amount) || 0), 0) * 100) / 100;
+              const exTotal   = parseFloat(form.amount) || 0;
+              const diff      = Math.round((liTotal - exTotal) * 100) / 100;
+              const balanced  = exTotal > 0 && Math.abs(diff) < 0.01;
+              const hasItems  = liTotal > 0;
+              if (!hasItems && exTotal === 0) return null;
+              return (
+                <div className={`mt-3 flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium border ${
+                  balanced
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                }`}>
+                  <span>{balanced ? '✓ Items balance' : diff > 0 ? `Over by ${fmt(Math.abs(diff), form.currency)}` : `Under by ${fmt(Math.abs(diff), form.currency)}`}</span>
+                  <span className="font-mono text-xs">
+                    {fmt(liTotal, form.currency)} / {fmt(exTotal, form.currency)}
+                  </span>
+                </div>
+              );
+            })()}
+
+            {/* Per-person split preview */}
             {(() => {
               const splits = computeItemisedSplits();
               return Object.keys(splits).length > 0 ? (
