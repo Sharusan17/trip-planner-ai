@@ -4,13 +4,15 @@ import { ChevronLeft, ChevronRight, SkipForward } from 'lucide-react';
 import { useTrip } from '@/context/TripContext';
 import { useSetupProgress } from '@/hooks/useSetupProgress';
 import SetupProgressStrip from '@/components/setup/SetupProgressStrip';
+import SetupStepHolidayType from '@/components/setup/SetupStepHolidayType';
 import SetupStepTravellers from '@/components/setup/SetupStepTravellers';
 import SetupStepAccommodation from '@/components/setup/SetupStepAccommodation';
 import SetupStepTransport from '@/components/setup/SetupStepTransport';
 import SetupStepActivities from '@/components/setup/SetupStepActivities';
 
-const STEP_LABELS = ['Travellers', 'Accommodation', 'Transport', 'Activities'];
+const STEP_LABELS = ['Holiday Type', 'Travellers', 'Accommodation', 'Transport', 'Activities'];
 const STEP_DESCRIPTIONS = [
+  "Tell us what kind of trip this is — we'll tailor tips and suggestions to match.",
   'Add everyone in your group. You can always edit these later.',
   'Enter your hotels and stays — dates, cost, and who they cover.',
   'Add flights, trains, and any other transport bookings.',
@@ -23,12 +25,19 @@ export default function TripSetupPage() {
   const { currentTrip, isOrganiser } = useTrip();
   const progress = useSetupProgress();
 
-  // Start at the first incomplete step, unless a ?step= override is present
+  const [holidayType, setHolidayType] = useState<string>('');
+
+  // Determine the starting step.
+  // For a brand new trip (sectionsDone === 0, no stays/transport/activities), start at step 0.
+  // For a returning organiser, skip step 0 and resume at the first incomplete content step.
   const initialStep = useMemo(() => {
     const q = new URLSearchParams(location.search).get('step');
     const parsed = q ? parseInt(q, 10) : NaN;
     if (!isNaN(parsed) && parsed >= 0 && parsed < STEP_LABELS.length) return parsed;
-    return progress.firstIncompleteStep;
+    // If all content sections are untouched → new trip → step 0
+    if (progress.sectionsDone === 0) return 0;
+    // Otherwise resume at first incomplete content step (offset by 1 for holiday type step)
+    return progress.firstIncompleteStep + 1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -36,19 +45,21 @@ export default function TripSetupPage() {
 
   if (!currentTrip) return null;
   if (!isOrganiser) {
-    // Members shouldn't see the wizard — bounce them to the dashboard
     navigate('/dashboard', { replace: true });
     return null;
   }
 
   const doneFlags = [
-    progress.travellersCount > 1,
-    progress.staysCount >= 1,
-    progress.transportCount >= 1,
-    progress.activitiesCount >= 1,
+    holidayType !== '',               // step 0: holiday type selected
+    progress.travellersCount > 1,     // step 1: travellers
+    progress.staysCount >= 1,         // step 2: accommodation
+    progress.transportCount >= 1,     // step 3: transport
+    progress.activitiesCount >= 1,    // step 4: activities
   ];
 
   const goNext = () => {
+    // Auto-set a default holiday type if the user skipped step 0
+    if (step === 0 && !holidayType) setHolidayType('general');
     if (step < STEP_LABELS.length - 1) setStep(step + 1);
     else navigate('/dashboard');
   };
@@ -96,14 +107,32 @@ export default function TripSetupPage() {
           <p className="text-sm text-ink-faint mt-0.5">{STEP_DESCRIPTIONS[step]}</p>
         </div>
 
-        {step === 0 && <SetupStepTravellers tripId={currentTrip.id} />}
-        {step === 1 && <SetupStepAccommodation tripId={currentTrip.id} homeCurrency={currentTrip.home_currency} />}
-        {step === 2 && <SetupStepTransport tripId={currentTrip.id} homeCurrency={currentTrip.home_currency} />}
+        {step === 0 && (
+          <SetupStepHolidayType value={holidayType} onChange={setHolidayType} />
+        )}
+        {step === 1 && (
+          <SetupStepTravellers tripId={currentTrip.id} holidayType={holidayType} />
+        )}
+        {step === 2 && (
+          <SetupStepAccommodation
+            tripId={currentTrip.id}
+            homeCurrency={currentTrip.home_currency}
+            holidayType={holidayType}
+          />
+        )}
         {step === 3 && (
+          <SetupStepTransport
+            tripId={currentTrip.id}
+            homeCurrency={currentTrip.home_currency}
+            holidayType={holidayType}
+          />
+        )}
+        {step === 4 && (
           <SetupStepActivities
             tripId={currentTrip.id}
             startDate={currentTrip.start_date}
             endDate={currentTrip.end_date}
+            holidayType={holidayType}
           />
         )}
       </div>

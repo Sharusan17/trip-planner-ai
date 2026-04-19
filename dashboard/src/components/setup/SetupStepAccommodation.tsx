@@ -4,11 +4,22 @@ import { Trash2, Plus } from 'lucide-react';
 import { accommodationApi } from '@/api/accommodation';
 import { travellersApi } from '@/api/travellers';
 import type { CreateAccommodationInput } from '@trip-planner-ai/shared';
+import SetupTip from './SetupTip';
+
+const TIPS: Record<string, string> = {
+  beach:    'Most beach resorts allow early bag drop even if check-in is later — save the address for the driver.',
+  ski:      "Note the chalet reference in 'Booking ref' — ski transfers often need it.",
+  city:     'Add the hotel address so the whole group can navigate there on arrival.',
+  family:   'Two rooms? Add them as separate entries with the same dates so costs split correctly.',
+  cruise:   "Your ship's port hotel counts here — add it if you're staying the night before departure.",
+};
 
 interface Draft {
   name: string;
+  address: string;
   check_in_date: string;
   check_out_date: string;
+  reference_number: string;
   price: string;
   currency: string;
 }
@@ -16,9 +27,10 @@ interface Draft {
 interface Props {
   tripId: string;
   homeCurrency: string;
+  holidayType: string;
 }
 
-export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) {
+export default function SetupStepAccommodation({ tripId, homeCurrency, holidayType }: Props) {
   const qc = useQueryClient();
   const { data: stays = [] } = useQuery({
     queryKey: ['accommodation', tripId],
@@ -31,8 +43,10 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
 
   const [draft, setDraft] = useState<Draft>({
     name: '',
+    address: '',
     check_in_date: '',
     check_out_date: '',
+    reference_number: '',
     price: '',
     currency: homeCurrency,
   });
@@ -42,7 +56,7 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
     mutationFn: (data: CreateAccommodationInput) => accommodationApi.create(tripId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['accommodation', tripId] });
-      setDraft({ name: '', check_in_date: '', check_out_date: '', price: '', currency: homeCurrency });
+      setDraft({ name: '', address: '', check_in_date: '', check_out_date: '', reference_number: '', price: '', currency: homeCurrency });
       setRowError(null);
     },
     onError: (err: Error) => setRowError(err.message || 'Failed to add stay'),
@@ -59,11 +73,12 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
     const priceNum = parseFloat(draft.price);
     createMutation.mutate({
       name,
+      address: draft.address.trim() || undefined,
       check_in_date: draft.check_in_date,
       check_out_date: draft.check_out_date,
+      reference_number: draft.reference_number.trim() || undefined,
       price: isNaN(priceNum) ? undefined : priceNum,
       currency: draft.price ? draft.currency : undefined,
-      // Default: covers all travellers
       traveller_ids: travellers.map((t) => t.id),
     });
   };
@@ -75,6 +90,8 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
 
   return (
     <div className="space-y-3">
+      <SetupTip tip={TIPS[holidayType]} />
+
       {/* Existing stays */}
       {stays.length > 0 && (
         <div className="space-y-2">
@@ -87,8 +104,10 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
                 <div className="font-display text-sm font-semibold text-ink truncate">{s.name}</div>
                 <div className="text-xs text-ink-faint">
                   {fmtDate(s.check_in_date)} &rarr; {fmtDate(s.check_out_date)}
+                  {s.reference_number && ` · Ref: ${s.reference_number}`}
                   {s.price != null && ` · ${s.currency ?? ''} ${s.price.toFixed(2)}`}
                 </div>
+                {s.address && <div className="text-xs text-ink-faint truncate">{s.address}</div>}
               </div>
               <button
                 type="button"
@@ -111,6 +130,12 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         />
+        <input
+          className="vintage-input w-full"
+          placeholder="Address (optional — helps with maps)"
+          value={draft.address}
+          onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+        />
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-xs text-ink-faint mb-1">Check-in</label>
@@ -131,12 +156,18 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
             />
           </div>
         </div>
+        <input
+          className="vintage-input w-full"
+          placeholder="Booking ref / confirmation number (optional)"
+          value={draft.reference_number}
+          onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
+        />
         <div className="grid grid-cols-3 gap-2">
           <input
             type="number"
             step="0.01"
             min="0"
-            placeholder="Price"
+            placeholder="Total price"
             className="vintage-input col-span-2"
             value={draft.price}
             onChange={(e) => setDraft({ ...draft, price: e.target.value })}
@@ -155,10 +186,7 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
           type="button"
           onClick={saveDraft}
           disabled={
-            !draft.name.trim()
-            || !draft.check_in_date
-            || !draft.check_out_date
-            || createMutation.isPending
+            !draft.name.trim() || !draft.check_in_date || !draft.check_out_date || createMutation.isPending
           }
           className="btn-primary w-full flex items-center justify-center gap-1.5 disabled:opacity-50"
         >
@@ -167,7 +195,6 @@ export default function SetupStepAccommodation({ tripId, homeCurrency }: Props) 
       </div>
 
       {rowError && <p className="text-xs text-terracotta">{rowError}</p>}
-
       <p className="text-xs text-ink-faint">
         {stays.length} {stays.length === 1 ? 'stay' : 'stays'} added
       </p>

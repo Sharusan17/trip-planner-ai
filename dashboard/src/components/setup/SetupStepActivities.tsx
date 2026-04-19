@@ -4,25 +4,39 @@ import { Trash2, Plus } from 'lucide-react';
 import { itineraryApi } from '@/api/itinerary';
 import type { CreateActivityInput, ActivityType } from '@trip-planner-ai/shared';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
+import SetupTip from './SetupTip';
+
+const TIPS: Record<string, string> = {
+  beach:     'Add snorkelling, sunset dinners, water sports, and beach club bookings.',
+  city:      'Walking tours, food markets, galleries, and day trips work great here.',
+  adventure: 'List each activity with the operator name — handy in an emergency.',
+  family:    "Mark activities as kid-friendly — they'll be highlighted on the itinerary.",
+  ski:       'Add ski school sessions, equipment rental pick-up, and après-ski evenings.',
+  road_trip: 'Add key stops and overnight spots as activities tied to each driving day.',
+  cruise:    "Add port excursions per day — they're usually the highlight of any cruise.",
+};
+
+const ACTIVITY_TYPE_OPTIONS: ActivityType[] = [
+  'sightseeing', 'food', 'beach', 'shopping', 'entertainment',
+  'hotel', 'flight', 'transport', 'custom',
+];
 
 interface Draft {
   day_id: string;
   time: string;
   type: ActivityType;
   description: string;
+  location_tag: string;
+  kid_friendly: boolean;
 }
 
 interface Props {
   tripId: string;
   startDate: string;
   endDate: string;
+  holidayType: string;
 }
 
-const ACTIVITY_TYPE_OPTIONS: ActivityType[] = [
-  'sightseeing', 'food', 'beach', 'shopping', 'entertainment', 'hotel', 'flight', 'transport', 'custom',
-];
-
-/** Build an inclusive array of YYYY-MM-DD strings from start..end. */
 function datesBetween(start: string, end: string): string[] {
   const out: string[] = [];
   const s = new Date(start);
@@ -36,14 +50,14 @@ function datesBetween(start: string, end: string): string[] {
   return out;
 }
 
-export default function SetupStepActivities({ tripId, startDate, endDate }: Props) {
+export default function SetupStepActivities({ tripId, startDate, endDate, holidayType }: Props) {
   const qc = useQueryClient();
   const { data: days = [], isLoading } = useQuery({
     queryKey: ['days', tripId],
     queryFn: () => itineraryApi.getDays(tripId),
   });
 
-  // Auto-create days if none exist yet (fire once per trip)
+  // Auto-create days if none exist yet
   const hasBootstrappedRef = useRef(false);
   useEffect(() => {
     if (isLoading || hasBootstrappedRef.current) return;
@@ -51,33 +65,31 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
     const targetDates = datesBetween(startDate, endDate);
     if (targetDates.length === 0) return;
     hasBootstrappedRef.current = true;
-
     (async () => {
       for (let i = 0; i < targetDates.length; i++) {
-        try {
-          await itineraryApi.createDay(tripId, {
-            date: targetDates[i],
-            day_number: i + 1,
-          });
-        } catch {
-          // Ignore — if one fails, keep going (likely a duplicate-date unique constraint)
-        }
+        try { await itineraryApi.createDay(tripId, { date: targetDates[i], day_number: i + 1 }); }
+        catch { /* ignore duplicates */ }
       }
       qc.invalidateQueries({ queryKey: ['days', tripId] });
     })();
   }, [isLoading, days.length, startDate, endDate, tripId, qc]);
+
+  const showKidFriendly = holidayType === 'family';
 
   const [draft, setDraft] = useState<Draft>({
     day_id: '',
     time: '',
     type: 'sightseeing',
     description: '',
+    location_tag: '',
+    kid_friendly: false,
   });
   const [rowError, setRowError] = useState<string | null>(null);
 
-  // Keep day_id in sync with available days
   useEffect(() => {
-    if (!draft.day_id && days.length > 0) setDraft((d) => ({ ...d, day_id: days[0].id }));
+    if (!draft.day_id && days.length > 0) {
+      setDraft((d) => ({ ...d, day_id: days[0].id }));
+    }
   }, [days, draft.day_id]);
 
   const createMutation = useMutation({
@@ -85,7 +97,7 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
       itineraryApi.createActivity(dayId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['days', tripId] });
-      setDraft((d) => ({ ...d, time: '', description: '' }));
+      setDraft((d) => ({ ...d, time: '', description: '', location_tag: '', kid_friendly: false }));
       setRowError(null);
     },
     onError: (err: Error) => setRowError(err.message || 'Failed to add activity'),
@@ -104,11 +116,12 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
         time: draft.time || undefined,
         type: draft.type,
         description: draft.description.trim(),
+        location_tag: draft.location_tag.trim() || undefined,
+        kid_friendly: draft.kid_friendly || undefined,
       },
     });
   };
 
-  // Flatten activities with day context for display
   const allActivities = days.flatMap((d) =>
     (d.activities ?? []).map((a) => ({ ...a, dayNumber: d.day_number, dayDate: d.date })),
   );
@@ -122,9 +135,9 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
 
   return (
     <div className="space-y-3">
-      {isLoading && (
-        <p className="text-xs text-ink-faint">Loading days&hellip;</p>
-      )}
+      <SetupTip tip={TIPS[holidayType]} />
+
+      {isLoading && <p className="text-xs text-ink-faint">Loading days&hellip;</p>}
 
       {/* Existing activities */}
       {allActivities.length > 0 && (
@@ -136,11 +149,11 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
             >
               <span className="text-xl flex-shrink-0">{ACTIVITY_ICONS[a.type]}</span>
               <div className="flex-1 min-w-0">
-                <div className="font-display text-sm font-semibold text-ink truncate">
-                  {a.description}
-                </div>
+                <div className="font-display text-sm font-semibold text-ink truncate">{a.description}</div>
                 <div className="text-xs text-ink-faint">
                   Day {a.dayNumber}{a.time ? ` · ${a.time}` : ''}
+                  {a.location_tag ? ` · 📍 ${a.location_tag}` : ''}
+                  {a.kid_friendly ? ' · 👶 Kid-friendly' : ''}
                 </div>
               </div>
               <button
@@ -156,47 +169,84 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
         </div>
       )}
 
-      {/* Draft row */}
+      {/* Draft form */}
       {days.length > 0 ? (
         <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
-          <select
-            className="vintage-input w-full"
-            value={draft.day_id}
-            onChange={(e) => setDraft({ ...draft, day_id: e.target.value })}
-          >
-            {days.map((d) => (
-              <option key={d.id} value={d.id}>
-                {fmtDayLabel(d.date, d.day_number)}
-              </option>
-            ))}
-          </select>
+          {/* Day + time */}
           <div className="grid grid-cols-3 gap-2">
+            <select
+              className="vintage-input col-span-2"
+              value={draft.day_id}
+              onChange={(e) => setDraft({ ...draft, day_id: e.target.value })}
+            >
+              {days.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {fmtDayLabel(d.date, d.day_number)}
+                </option>
+              ))}
+            </select>
             <input
               type="time"
-              className="vintage-input w-full"
+              className="vintage-input"
               placeholder="Time"
               value={draft.time}
               onChange={(e) => setDraft({ ...draft, time: e.target.value })}
             />
-            <select
-              className="vintage-input w-full col-span-2"
-              value={draft.type}
-              onChange={(e) => setDraft({ ...draft, type: e.target.value as ActivityType })}
-            >
-              {ACTIVITY_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {ACTIVITY_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}
-                </option>
-              ))}
-            </select>
           </div>
+
+          {/* Activity type — emoji chip grid */}
+          <div>
+            <p className="text-xs text-ink-faint mb-1.5">Activity type</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ACTIVITY_TYPE_OPTIONS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setDraft({ ...draft, type: t })}
+                  className={`
+                    flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors
+                    ${draft.type === t
+                      ? 'border-navy bg-navy text-white'
+                      : 'border-parchment-dark bg-white text-ink hover:border-navy/40'}
+                  `}
+                >
+                  <span>{ACTIVITY_ICONS[t]}</span>
+                  <span className="truncate capitalize">{t === 'sightseeing' ? 'Sights' : t === 'entertainment' ? 'Fun' : t}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Description */}
           <input
             className="vintage-input w-full"
-            placeholder="Description (e.g. Beach morning)"
+            placeholder="Description (e.g. Snorkelling trip)"
             value={draft.description}
             onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
           />
+
+          {/* Location */}
+          <input
+            className="vintage-input w-full"
+            placeholder="Location (optional — e.g. Praia da Rocha)"
+            value={draft.location_tag}
+            onChange={(e) => setDraft({ ...draft, location_tag: e.target.value })}
+          />
+
+          {/* Kid-friendly toggle — only for family trips */}
+          {showKidFriendly && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="accent-navy w-4 h-4"
+                checked={draft.kid_friendly}
+                onChange={(e) => setDraft({ ...draft, kid_friendly: e.target.checked })}
+              />
+              <span className="text-sm text-ink">Kid-friendly 👶</span>
+            </label>
+          )}
+
           <button
             type="button"
             onClick={saveDraft}
@@ -215,7 +265,6 @@ export default function SetupStepActivities({ tripId, startDate, endDate }: Prop
       )}
 
       {rowError && <p className="text-xs text-terracotta">{rowError}</p>}
-
       <p className="text-xs text-ink-faint">
         {allActivities.length} {allActivities.length === 1 ? 'activity' : 'activities'} planned
         &middot; {days.length} {days.length === 1 ? 'day' : 'days'} in itinerary
