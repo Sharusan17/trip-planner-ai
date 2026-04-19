@@ -33,6 +33,7 @@ import {
   Pin,
 } from 'lucide-react';
 import WeatherWidget from '@/components/WeatherWidget';
+import SetupCard from '@/components/dashboard/SetupCard';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -126,6 +127,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
+
+      {/* ── Onboarding card (organiser only, until all 4 sections filled) ── */}
+      <SetupCard />
 
       {/* ── Quick stats ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

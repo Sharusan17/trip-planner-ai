@@ -132,7 +132,9 @@ export default function LandingPage() {
       });
       setCurrentTrip(trip);
       setActiveTraveller(traveller);
-      navigate('/dashboard');
+      // Send the organiser straight into the bulk-entry setup wizard.
+      // They can skip to /dashboard at any time from inside.
+      navigate('/setup');
     } catch (err) {
       setError((err as Error).message);
     } finally {

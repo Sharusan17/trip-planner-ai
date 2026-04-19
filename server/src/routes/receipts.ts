@@ -111,12 +111,16 @@ interface TabscannerResult {
   tax?: string | number;
   currency?: string;
   lineItems?: Array<{
-    desc?: string;       // item description (Tabscanner field name)
-    lineText?: string;   // fallback alias
+    desc?: string;           // primary description field
+    lineText?: string;       // alias used in some responses
+    descr?: string;          // alternate spelling seen in some API versions
+    text?: string;           // generic text field fallback
+    name?: string;           // another common alias
     lineTotal?: string | number;
     qty?: string | number;
-    price?: string | number;   // unit price (Tabscanner field name)
-    unitPrice?: string | number;
+    price?: string | number;     // unit price
+    unitPrice?: string | number; // alternate field name
+    [key: string]: unknown;      // allow any additional fields for logging
   }>;
 }
 
@@ -132,6 +136,7 @@ function formatResult(raw: TabscannerResult) {
   const currency    = (raw.currency ?? 'GBP').toUpperCase();
 
   const rawItems = raw.lineItems ?? [];
+  console.log('[Tabscanner] raw lineItems:', JSON.stringify(rawItems));
 
   // Resolve per-item total: prefer lineTotal, fall back to qty × price
   const withAmounts = rawItems.map((li) => {
@@ -139,14 +144,26 @@ function formatResult(raw: TabscannerResult) {
     const unitPrice = toNum(li.price ?? li.unitPrice);
     const qty       = Math.max(1, Math.round(toNum(li.qty) || 1));
     const amount    = lineTotal > 0 ? lineTotal : round2(unitPrice * qty);
-    const rawDesc   = (li.desc ?? li.lineText ?? '').trim();
-    // Strip trailing $ / price symbols and leading "Nx " qty prefix (Tabscanner embeds qty in desc)
-    const desc = rawDesc
-      .replace(/\s*\$[\d.,\s]*$/, '')   // trailing "$ 35.00" or just "$"
-      .replace(/^\d+[xX]\s+/, '')        // leading "2x " or "1X " prefix
+
+    // Try every known Tabscanner description field name
+    const rawDesc = (
+      li.desc ?? li.lineText ?? li.descr ?? li.text ?? li.name ?? ''
+    ).trim();
+
+    // Strip trailing price/$ symbols (e.g. "Item $ 3.50" or "Item $")
+    // and leading qty prefix (e.g. "2x " or "1X ")
+    const cleaned = rawDesc
+      .replace(/\s*\$\s*[\d.,]*\s*$/, '')   // trailing "$ 3.50" or lone "$"
+      .replace(/^\d+[xX]\s+/, '')             // leading "2x " or "1X " prefix
       .trim();
+
+    // If cleaning wiped the name (e.g. the whole string was "$3.50"), fall back to rawDesc minus qty prefix
+    const desc = cleaned || rawDesc.replace(/^\d+[xX]\s+/, '').trim();
+
     return { desc, qty, amount };
   });
+
+  console.log('[Tabscanner] cleaned items:', JSON.stringify(withAmounts));
 
   const validItems = withAmounts.filter((li) => li.amount > 0);
   const itemsSum   = validItems.reduce((s, li) => s + li.amount, 0);
