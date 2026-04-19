@@ -11,14 +11,16 @@ const AVATAR_COLOURS = [
 ];
 
 const TIPS: Record<string, string> = {
-  family:   "Don't forget to add the kids — cost splitting uses their age group automatically.",
-  ski:      'Add everyone including beginners — you can assign equipment costs per person later.',
-  cruise:   "Add all cabin members — you'll need them for expense splitting on excursions.",
-  default:  "Each person gets their own colour — makes splitting costs easy to track.",
+  family:      "Add all the kids — they'll be on the trip too!",
+  couple:      'Just the two of you? Add both names so costs split equally.',
+  friends:     'Add everyone in the group — each person gets their own colour for tracking costs.',
+  celebration: "Don't forget the guest of honour! Add all attendees, including any latecomers.",
+  business:    'Add each attendee so expenses can be tracked and split per person.',
+  solo:        'Just add yourself — you can still add a contact for reference if needed.',
 };
 
 function getTip(holidayType: string) {
-  return TIPS[holidayType] ?? TIPS.default;
+  return TIPS[holidayType];
 }
 
 interface Draft {

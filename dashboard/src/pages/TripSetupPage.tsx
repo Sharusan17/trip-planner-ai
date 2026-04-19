@@ -12,7 +12,7 @@ import SetupStepActivities from '@/components/setup/SetupStepActivities';
 
 const STEP_LABELS = ['Holiday Type', 'Travellers', 'Accommodation', 'Transport', 'Activities'];
 const STEP_DESCRIPTIONS = [
-  "Tell us what kind of trip this is — we'll tailor tips and suggestions to match.",
+  "Who are you travelling with? We'll tailor tips and suggestions to your group.",
   'Add everyone in your group. You can always edit these later.',
   'Enter your hotels and stays — dates, cost, and who they cover.',
   'Add flights, trains, and any other transport bookings.',
@@ -58,8 +58,8 @@ export default function TripSetupPage() {
   ];
 
   const goNext = () => {
-    // Auto-set a default holiday type if the user skipped step 0
-    if (step === 0 && !holidayType) setHolidayType('general');
+    // Auto-set a default if the user skipped step 0
+    if (step === 0 && !holidayType) setHolidayType('friends');
     if (step < STEP_LABELS.length - 1) setStep(step + 1);
     else navigate('/dashboard');
   };

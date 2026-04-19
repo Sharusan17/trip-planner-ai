@@ -9,12 +9,12 @@ import SetupTip from './SetupTip';
 import PlaceAutocomplete from './PlaceAutocomplete';
 
 const TIPS: Record<string, string> = {
-  beach:     "Don't forget your return flight — and any airport transfers to/from the resort!",
-  city:      'Add the airport express or taxi booking as a separate entry.',
-  ski:       'Add the transfer coach/shuttle from airport to resort here.',
-  road_trip: 'Add ferry crossings, toll-road sections, or overnight stops as separate entries.',
-  family:    "Add child seat bookings as a note in the entry — handy when collecting the car.",
-  cruise:    'Your cruise is also transport — add departure and return port dates here.',
+  family:      "Add child seat bookings as a note on the car hire entry — handy when collecting the car.",
+  couple:      "Don't forget the return flight — easy to overlook when you're busy planning the outbound trip.",
+  friends:     'Book group transfers early — taxis for a large group add up fast.',
+  celebration: 'Add any minibus or coach bookings so everyone has the pickup time and details.',
+  business:    'Add your booking reference — makes expense claims much easier.',
+  solo:        "Add your return journey too — solo travellers sometimes forget the way back!",
 };
 
 interface Draft {

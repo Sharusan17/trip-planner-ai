@@ -8,11 +8,12 @@ import SetupTip from './SetupTip';
 import PlaceAutocomplete from './PlaceAutocomplete';
 
 const TIPS: Record<string, string> = {
-  beach:    'Most beach resorts allow early bag drop even if check-in is later — save the address for the driver.',
-  ski:      "Note the chalet reference in 'Booking ref' — ski transfers often need it.",
-  city:     'Add the hotel address so the whole group can navigate there on arrival.',
-  family:   'Two rooms? Add them as separate entries with the same dates so costs split correctly.',
-  cruise:   "Your ship's port hotel counts here — add it if you're staying the night before departure.",
+  family:      'Two rooms? Add them as separate entries with the same dates so costs split correctly.',
+  couple:      'Save the hotel address — handy when navigating there after a long journey.',
+  friends:     "Sharing an Airbnb or villa? Add it as one entry and split the total across the group.",
+  celebration: 'Add the main venue hotel and any overflow accommodation as separate entries.',
+  business:    'Add the conference hotel and any client dinner venue as separate entries.',
+  solo:        'Save your hostel or hotel address — handy when you land and need to navigate.',
 };
 
 interface Draft {

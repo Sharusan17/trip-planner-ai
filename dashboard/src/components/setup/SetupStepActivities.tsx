@@ -7,13 +7,12 @@ import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
 
 const TIPS: Record<string, string> = {
-  beach:     'Add snorkelling, sunset dinners, water sports, and beach club bookings.',
-  city:      'Walking tours, food markets, galleries, and day trips work great here.',
-  adventure: 'List each activity with the operator name — handy in an emergency.',
-  family:    "Mark activities as kid-friendly — they'll be highlighted on the itinerary.",
-  ski:       'Add ski school sessions, equipment rental pick-up, and après-ski evenings.',
-  road_trip: 'Add key stops and overnight spots as activities tied to each driving day.',
-  cruise:    "Add port excursions per day — they're usually the highlight of any cruise.",
+  family:      "Mark activities as kid-friendly — they'll be highlighted on the itinerary.",
+  couple:      'Add dinner reservations and experiences here for a romantic day-by-day itinerary.',
+  friends:     'Add group nights out, tours, and excursions — great for keeping everyone in sync.',
+  celebration: 'Add the main event plus any pre/post activities so everyone knows the schedule.',
+  business:    'Add conference sessions, client dinners, and networking events here.',
+  solo:        'Add walking tours and day trips — great for meeting other travellers along the way.',
 };
 
 const ACTIVITY_TYPE_OPTIONS: ActivityType[] = [

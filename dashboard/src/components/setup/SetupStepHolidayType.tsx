@@ -6,14 +6,12 @@ interface HolidayTypeOption {
 }
 
 const HOLIDAY_TYPES: HolidayTypeOption[] = [
-  { value: 'beach',      label: 'Beach',       emoji: '🏖️', description: 'Sun, sea & sand' },
-  { value: 'city',       label: 'City Break',  emoji: '🏙️', description: 'Culture & nightlife' },
-  { value: 'adventure',  label: 'Adventure',   emoji: '🧗', description: 'Outdoors & thrills' },
-  { value: 'family',     label: 'Family',      emoji: '👨‍👩‍👧', description: 'Kids & all ages' },
-  { value: 'ski',        label: 'Ski',         emoji: '⛷️', description: 'Slopes & après' },
-  { value: 'cruise',     label: 'Cruise',      emoji: '🚢', description: 'Ports & sea days' },
-  { value: 'cultural',   label: 'Cultural',    emoji: '🏛️', description: 'History & food' },
-  { value: 'road_trip',  label: 'Road Trip',   emoji: '🚗', description: 'Drive & explore' },
+  { value: 'family',      label: 'Family',       emoji: '👨‍👩‍👧', description: 'All ages welcome' },
+  { value: 'couple',      label: 'Couple',        emoji: '💑',    description: 'Just the two of you' },
+  { value: 'friends',     label: 'Friends',       emoji: '🎉',    description: 'Group getaway' },
+  { value: 'celebration', label: 'Celebration',   emoji: '🥂',    description: 'Birthday, hen/stag, anniversary' },
+  { value: 'business',    label: 'Business',      emoji: '💼',    description: 'Work trip or conference' },
+  { value: 'solo',        label: 'Solo',          emoji: '🎓',    description: 'Flying solo' },
 ];
 
 interface Props {
@@ -25,9 +23,9 @@ export default function SetupStepHolidayType({ value, onChange }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-faint">
-        This helps us give you the right prompts and suggestions throughout the setup.
+        Who are you travelling with? We&rsquo;ll tailor prompts and tips to match your trip.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {HOLIDAY_TYPES.map((type) => {
           const selected = value === type.value;
           return (
