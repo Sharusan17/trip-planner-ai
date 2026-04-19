@@ -53,8 +53,7 @@ export default function TravellerFormPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const costWeight = type === 'infant' ? 0 : type === 'child' ? 0.5 : 1.0;
-    const data: any = { name, type, role, avatar_colour: colour, cost_split_weight: costWeight };
+    const data: any = { name, type, role, avatar_colour: colour, cost_split_weight: 1.0 };
     if (medicalNotes) data.medical_notes = medicalNotes;
     if (medicalPin) data.medical_pin = medicalPin;
     if (isEditing) updateMutation.mutate(data);

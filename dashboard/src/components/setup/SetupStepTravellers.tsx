@@ -59,7 +59,6 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
   const saveDraft = () => {
     const name = draft.name.trim();
     if (!name) return;
-    const costWeight = draft.type === 'infant' ? 0 : draft.type === 'child' ? 0.5 : 1.0;
     const usedColours = new Set(travellers.map((t) => t.avatar_colour));
     const colour =
       AVATAR_COLOURS.find((c) => !usedColours.has(c)) ??
@@ -69,7 +68,7 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
       type: draft.type,
       role: 'member',
       avatar_colour: colour,
-      cost_split_weight: costWeight,
+      cost_split_weight: 1.0,
     });
   };
 
@@ -114,25 +113,25 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
         </div>
       )}
 
-      {/* Draft row — name on own line, type + button on next row */}
-      <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
-        <input
-          className="vintage-input w-full"
-          placeholder="Name (e.g. Alex, Sarah…)"
-          value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
-          autoComplete="off"
-        />
-        <div className="flex gap-2">
-          <select
+      {/* Draft row — name + type on one line */}
+      <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30">
+        <div className="flex gap-2 items-center">
+          <input
             className="vintage-input flex-1"
+            placeholder="Name (e.g. Alex, Sarah…)"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
+            autoComplete="off"
+          />
+          <select
+            className="vintage-input w-24 text-sm flex-shrink-0"
             value={draft.type}
             onChange={(e) => setDraft({ ...draft, type: e.target.value as TravellerType })}
           >
             <option value="adult">Adult</option>
-            <option value="child">Child (half cost)</option>
-            <option value="infant">Infant (no cost)</option>
+            <option value="child">Child</option>
+            <option value="infant">Infant</option>
           </select>
           <button
             type="button"
