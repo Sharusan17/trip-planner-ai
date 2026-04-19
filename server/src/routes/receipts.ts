@@ -137,11 +137,14 @@ function formatResult(raw: TabscannerResult) {
   const withAmounts = rawItems.map((li) => {
     const lineTotal = toNum(li.lineTotal);
     const unitPrice = toNum(li.price ?? li.unitPrice);
-    const qty       = toNum(li.qty) || 1;
+    const qty       = Math.max(1, Math.round(toNum(li.qty) || 1));
     const amount    = lineTotal > 0 ? lineTotal : round2(unitPrice * qty);
     const rawDesc   = (li.desc ?? li.lineText ?? '').trim();
-    // Strip trailing $ or currency symbols that Tabscanner sometimes appends
-    const desc = rawDesc.replace(/\s*\$\s*$/, '').trim();
+    // Strip trailing $ / price symbols and leading "Nx " qty prefix (Tabscanner embeds qty in desc)
+    const desc = rawDesc
+      .replace(/\s*\$[\d.,\s]*$/, '')   // trailing "$ 35.00" or just "$"
+      .replace(/^\d+[xX]\s+/, '')        // leading "2x " or "1X " prefix
+      .trim();
     return { desc, qty, amount };
   });
 
@@ -158,10 +161,8 @@ function formatResult(raw: TabscannerResult) {
 
   const lineItems = validItems.map((li) => {
     const vatShare = itemsSum > 0 ? (li.amount / itemsSum) * vatToDistribute : 0;
-    // Build description: prefix with quantity if > 1
-    const description = li.qty > 1 ? `${li.qty}x ${li.desc}` : li.desc;
     return {
-      description,
+      description:     li.desc,           // clean name, no qty prefix
       qty:             li.qty,
       amountBeforeVat: round2(li.amount),
       vatShare:        round2(vatShare),

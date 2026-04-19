@@ -55,8 +55,8 @@ export default function ExpenseFormPage() {
     paid_by: activeTraveller?.id ?? '', split_mode: 'equal',
     traveller_ids: [], custom_splits: {}, notes: '',
   });
-  const [lineItems, setLineItems] = useState<Array<{ description: string; amount: string; traveller_ids: string[] }>>([
-    { description: '', amount: '', traveller_ids: [] },
+  const [lineItems, setLineItems] = useState<Array<{ description: string; qty: number; amount: string; traveller_ids: string[] }>>([
+    { description: '', qty: 1, amount: '', traveller_ids: [] },
   ]);
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -90,7 +90,7 @@ export default function ExpenseFormPage() {
     });
     if (exp.split_mode === 'itemised' && exp.line_items?.length) {
       setLineItems(exp.line_items.map((li) => ({
-        description: li.description, amount: String(li.amount), traveller_ids: li.traveller_ids,
+        description: li.description, qty: (li as any).qty ?? 1, amount: String(li.amount), traveller_ids: li.traveller_ids,
       })));
     }
   }, [isEdit, id, expenses]);
@@ -141,7 +141,7 @@ export default function ExpenseFormPage() {
       if (result.lineItems.length > 0) {
         setLineItems(result.lineItems.map((li) => ({
           description:   li.description,
-          // Use the total amount per line item (after VAT share included)
+          qty:           li.qty ?? 1,
           amount:        String(li.amount),
           traveller_ids: [],
         })));
@@ -433,7 +433,7 @@ export default function ExpenseFormPage() {
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-semibold text-ink-faint uppercase tracking-wider">Line Items</label>
               <button type="button"
-                onClick={() => setLineItems((p) => [...p, { description: '', amount: '', traveller_ids: [] }])}
+                onClick={() => setLineItems((p) => [...p, { description: '', qty: 1, amount: '', traveller_ids: [] }])}
                 className="text-xs text-navy hover:underline font-medium">+ Add item</button>
             </div>
             <div className="space-y-3">
@@ -443,6 +443,9 @@ export default function ExpenseFormPage() {
                     <input className="vintage-input flex-1 text-sm" placeholder="Item (e.g. Burger)"
                       value={item.description}
                       onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })} />
+                    <input type="number" step="1" min="1" className="vintage-input w-14 text-sm text-center" placeholder="Qty"
+                      value={item.qty}
+                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, parseInt(e.target.value) || 1) }; return n; })} />
                     <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm text-right" placeholder="0.00"
                       value={item.amount}
                       onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })} />

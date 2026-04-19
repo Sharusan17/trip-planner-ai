@@ -31,13 +31,30 @@ router.get('/photos/:id/image', async (req: Request, res: Response) => {
       [req.params.id]
     );
     if (result.rows.length === 0 || !result.rows[0].data) {
+      console.warn('[photo] Not found or no data for id:', req.params.id);
       return res.status(404).json({ error: 'Not found' });
     }
     const { data, mime_type } = result.rows[0];
+
+    // pg returns bytea as Buffer, but handle hex-string fallback just in case
+    let buf: Buffer;
+    if (Buffer.isBuffer(data)) {
+      buf = data;
+    } else if (typeof data === 'string') {
+      const hex = data.startsWith('\\x') ? data.slice(2) : data;
+      buf = Buffer.from(hex, 'hex');
+    } else {
+      buf = Buffer.from(data as any);
+    }
+
+    console.log('[photo] Serving id:', req.params.id, 'size:', buf.length, 'type:', mime_type);
+
     res.set('Content-Type', mime_type || 'image/jpeg');
     res.set('Cache-Control', 'public, max-age=31536000');
-    res.send(data);
+    res.set('Content-Length', String(buf.length));
+    res.end(buf);
   } catch (err) {
+    console.error('[photo] Error serving photo:', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

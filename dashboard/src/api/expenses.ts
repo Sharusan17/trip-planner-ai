@@ -6,6 +6,7 @@ import type {
 
 export interface ReceiptScanLineItem {
   description: string;
+  qty: number;
   amount: number;
   amountBeforeVat: number;
   vatShare: number;
