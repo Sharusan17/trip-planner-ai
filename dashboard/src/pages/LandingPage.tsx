@@ -276,7 +276,7 @@ export default function LandingPage() {
                       )}
                     </span>
                     <input
-                      className={`vintage-input pl-9 pr-8 ${locationPinned ? 'border-emerald-400 bg-emerald-50/40' : ''}`}
+                      className={`vintage-input pl-10 pr-8 ${locationPinned ? 'border-emerald-400 bg-emerald-50/40' : ''}`}
                       placeholder="Search for a city or place…"
                       value={locationQuery}
                       onChange={(e) => {
@@ -329,7 +329,7 @@ export default function LandingPage() {
                 {locationPinned && (
                   <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
                     <Check size={11} strokeWidth={2.5} />
-                    Location pinned · {locationPinned.lat.toFixed(4)}, {locationPinned.lng.toFixed(4)}
+                    Location pinned
                   </p>
                 )}
               </div>

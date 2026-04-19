@@ -116,10 +116,10 @@ export default function TravellersPage() {
                     : <User size={14} className="text-navy shrink-0" strokeWidth={2} />}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`badge ${t.type === 'child' ? 'badge-gold' : t.type === 'infant' ? 'badge-terracotta' : 'badge-navy'}`}>
+                  <span className={`badge capitalize ${t.type === 'child' ? 'badge-gold' : t.type === 'infant' ? 'badge-terracotta' : 'badge-navy'}`}>
                     {t.type}
                   </span>
-                  <span className={`badge ${t.role === 'organiser' ? 'badge-gold' : 'badge-navy'}`}>
+                  <span className={`badge capitalize ${t.role === 'organiser' ? 'badge-gold' : 'badge-navy'}`}>
                     {t.role}
                   </span>
                 </div>
