@@ -141,27 +141,28 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
 
       {/* Draft row */}
       <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
-        <select
-          className="vintage-input w-full"
-          value={draft.transport_type}
-          onChange={(e) => setDraft({ ...draft, transport_type: e.target.value as TransportType })}
-        >
-          {TYPE_OPTIONS.map((t) => (
-            <option key={t} value={t}>
-              {TRANSPORT_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}
-            </option>
-          ))}
-        </select>
-        <div className="grid grid-cols-2 gap-2">
+        {/* Type + From + To on one line */}
+        <div className="flex gap-2">
+          <select
+            className="vintage-input w-28 text-sm flex-shrink-0"
+            value={draft.transport_type}
+            onChange={(e) => setDraft({ ...draft, transport_type: e.target.value as TransportType })}
+          >
+            {TYPE_OPTIONS.map((t) => (
+              <option key={t} value={t}>
+                {TRANSPORT_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}
+              </option>
+            ))}
+          </select>
           <input
-            className="vintage-input w-full"
-            placeholder="From (e.g. London / LHR)"
+            className="vintage-input flex-1 min-w-0"
+            placeholder="From (e.g. LHR)"
             value={draft.from_location}
             onChange={(e) => setDraft({ ...draft, from_location: e.target.value })}
           />
           <input
-            className="vintage-input w-full"
-            placeholder="To (e.g. Faro / FAO)"
+            className="vintage-input flex-1 min-w-0"
+            placeholder="To (e.g. FAO)"
             value={draft.to_location}
             onChange={(e) => setDraft({ ...draft, to_location: e.target.value })}
           />

@@ -194,37 +194,27 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
             />
           </div>
 
-          {/* Activity type — emoji chip grid */}
-          <div>
-            <p className="text-xs text-ink-faint mb-1.5">Activity type</p>
-            <div className="grid grid-cols-3 gap-1.5">
+          {/* Description + type on one line */}
+          <div className="flex gap-2">
+            <input
+              className="vintage-input flex-1 min-w-0"
+              placeholder="Description (e.g. Snorkelling trip)"
+              value={draft.description}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
+            />
+            <select
+              className="vintage-input w-28 text-sm flex-shrink-0"
+              value={draft.type}
+              onChange={(e) => setDraft({ ...draft, type: e.target.value as ActivityType })}
+            >
               {ACTIVITY_TYPE_OPTIONS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setDraft({ ...draft, type: t })}
-                  className={`
-                    flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors
-                    ${draft.type === t
-                      ? 'border-navy bg-navy text-white'
-                      : 'border-parchment-dark bg-white text-ink hover:border-navy/40'}
-                  `}
-                >
-                  <span>{ACTIVITY_ICONS[t]}</span>
-                  <span className="truncate capitalize">{t === 'sightseeing' ? 'Sights' : t === 'entertainment' ? 'Fun' : t}</span>
-                </button>
+                <option key={t} value={t}>
+                  {ACTIVITY_ICONS[t]} {t === 'sightseeing' ? 'Sights' : t === 'entertainment' ? 'Fun' : t.charAt(0).toUpperCase() + t.slice(1)}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
-
-          {/* Description */}
-          <input
-            className="vintage-input w-full"
-            placeholder="Description (e.g. Snorkelling trip)"
-            value={draft.description}
-            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
-          />
 
           {/* Location */}
           <input
