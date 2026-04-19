@@ -6,6 +6,7 @@ import { travellersApi } from '@/api/travellers';
 import type { CreateTransportInput, TransportType } from '@trip-planner-ai/shared';
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
+import PlaceAutocomplete from './PlaceAutocomplete';
 
 const TIPS: Record<string, string> = {
   beach:     "Don't forget your return flight — and any airport transfers to/from the resort!",
@@ -154,17 +155,21 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
               </option>
             ))}
           </select>
-          <input
-            className="vintage-input flex-1 min-w-0"
-            placeholder="From (e.g. LHR)"
+          <PlaceAutocomplete
+            searchType="location"
+            placeholder="From (e.g. London / LHR)"
             value={draft.from_location}
-            onChange={(e) => setDraft({ ...draft, from_location: e.target.value })}
+            onChange={(val) => setDraft({ ...draft, from_location: val })}
+            onSelect={(s) => setDraft((d) => ({ ...d, from_location: s.name }))}
+            className="flex-1 min-w-0"
           />
-          <input
-            className="vintage-input flex-1 min-w-0"
-            placeholder="To (e.g. FAO)"
+          <PlaceAutocomplete
+            searchType="location"
+            placeholder="To (e.g. Faro / FAO)"
             value={draft.to_location}
-            onChange={(e) => setDraft({ ...draft, to_location: e.target.value })}
+            onChange={(val) => setDraft({ ...draft, to_location: val })}
+            onSelect={(s) => setDraft((d) => ({ ...d, to_location: s.name }))}
+            className="flex-1 min-w-0"
           />
         </div>
         <div>

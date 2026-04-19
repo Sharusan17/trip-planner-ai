@@ -5,6 +5,7 @@ import { accommodationApi } from '@/api/accommodation';
 import { travellersApi } from '@/api/travellers';
 import type { CreateAccommodationInput } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
+import PlaceAutocomplete from './PlaceAutocomplete';
 
 const TIPS: Record<string, string> = {
   beach:    'Most beach resorts allow early bag drop even if check-in is later — save the address for the driver.',
@@ -124,15 +125,20 @@ export default function SetupStepAccommodation({ tripId, homeCurrency, holidayTy
 
       {/* Draft row */}
       <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
-        <input
-          className="vintage-input w-full"
+        <PlaceAutocomplete
+          searchType="hotel"
           placeholder="Hotel / stay name (e.g. Hilton Faro)"
           value={draft.name}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          onChange={(val) => setDraft({ ...draft, name: val })}
+          onSelect={(s) => setDraft((d) => ({
+            ...d,
+            name: s.name,
+            address: s.address ?? d.address,
+          }))}
         />
         <input
           className="vintage-input w-full"
-          placeholder="Address (optional — helps with maps)"
+          placeholder="Address (auto-filled or type manually)"
           value={draft.address}
           onChange={(e) => setDraft({ ...draft, address: e.target.value })}
         />
