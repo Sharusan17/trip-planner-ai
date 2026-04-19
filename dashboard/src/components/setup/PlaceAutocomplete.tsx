@@ -13,69 +13,63 @@ interface Props {
   onSelect: (suggestion: PlaceSuggestion) => void;
   placeholder?: string;
   className?: string;
-  /** 'hotel' uses Photon POI search filtered to accommodation.
-   *  'location' uses Nominatim general place/city/airport search. */
+  /** 'hotel' formats results as venue name + full address.
+   *  'location' formats results as city/place name. */
   searchType?: 'hotel' | 'location';
 }
 
-// ── Photon (hotel POI search) ─────────────────────────────────────────────────
-
-interface PhotonFeature {
-  properties: {
-    name?: string;
-    housenumber?: string;
-    street?: string;
-    city?: string;
-    state?: string;
-    country?: string;
-    postcode?: string;
-  };
-}
-
-async function searchHotels(q: string): Promise<PlaceSuggestion[]> {
-  const url =
-    `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&layer=poi` +
-    `&osm_tag=tourism:hotel&osm_tag=tourism:hostel&osm_tag=tourism:guest_house` +
-    `&osm_tag=tourism:apartment&osm_tag=tourism:motel&osm_tag=tourism:chalet`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return (data.features as PhotonFeature[])
-    .filter((f) => f.properties.name)
-    .map((f) => {
-      const p = f.properties;
-      const parts = [p.housenumber, p.street, p.city, p.country].filter(Boolean);
-      const address = parts.join(', ');
-      const label = [p.name, p.city, p.country].filter(Boolean).join(', ');
-      return { label, name: p.name!, address: address || undefined };
-    });
-}
-
-// ── Nominatim (general location / airport search) ─────────────────────────────
+// ── Nominatim (both hotel and location search) ────────────────────────────────
+// Both modes use the same Nominatim API — they just format results differently.
+// 'hotel' mode: name = venue name (first part of display_name), address = rest
+// 'location' mode: name = city/airport name, no separate address
 
 interface NominatimResult {
   display_name: string;
   address?: {
     aerodrome?: string;
+    hotel?: string;
     city?: string;
     town?: string;
     village?: string;
+    suburb?: string;
     country?: string;
-    'ISO3166-2-lvl4'?: string;
+    road?: string;
+    house_number?: string;
+    postcode?: string;
   };
   type?: string;
   class?: string;
 }
 
-async function searchLocations(q: string): Promise<PlaceSuggestion[]> {
+async function nominatimSearch(q: string): Promise<NominatimResult[]> {
   const url =
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}` +
-    `&format=json&limit=6&addressdetails=1`;
+    `&format=json&limit=7&addressdetails=1`;
   const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-  const data: NominatimResult[] = await res.json();
+  return res.json();
+}
+
+async function searchHotels(q: string): Promise<PlaceSuggestion[]> {
+  const data = await nominatimSearch(q);
+  return data.map((r) => {
+    const parts = r.display_name.split(', ');
+    // First segment is typically the venue name; rest is the address
+    const name = parts[0];
+    const address = parts.slice(1).join(', ');
+    // Label: venue name + city + country for quick recognition
+    const a = r.address ?? {};
+    const city = a.city ?? a.town ?? a.village ?? a.suburb ?? '';
+    const label = [name, city, a.country].filter(Boolean).join(', ');
+    return { label, name, address: address || undefined };
+  });
+}
+
+async function searchLocations(q: string): Promise<PlaceSuggestion[]> {
+  const data = await nominatimSearch(q);
   return data.map((r) => {
     const a = r.address ?? {};
-    const city = a.aerodrome ?? a.city ?? a.town ?? a.village ?? r.display_name.split(',')[0];
-    const label = [city, a.country].filter(Boolean).join(', ');
+    const place = a.aerodrome ?? a.city ?? a.town ?? a.village ?? r.display_name.split(',')[0];
+    const label = [place, a.country].filter(Boolean).join(', ');
     return { label, name: label };
   });
 }
