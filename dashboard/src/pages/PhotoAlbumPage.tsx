@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { photosApi } from '@/api/photos';
 import { itineraryApi } from '@/api/itinerary';
+import { API_BASE } from '@/api/client';
 import type { TripPhoto } from '@trip-planner-ai/shared';
 import { Camera, Trash2, X, Image, CalendarDays } from 'lucide-react';
 
@@ -41,7 +42,7 @@ export default function PhotoAlbumPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['photos'] }),
   });
 
-  const photoUrl = (id: string) => `/api/v1/photos/${id}/image`;
+  const photoUrl = (id: string) => `${API_BASE}/photos/${id}/image`;
 
   // Group photos: tagged-to-day first (sorted by day), then untagged
   const dayMap = new Map(days.map((d) => [d.id, d]));

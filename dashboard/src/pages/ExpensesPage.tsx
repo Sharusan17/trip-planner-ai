@@ -7,6 +7,7 @@ import { travellersApi } from '../api/travellers';
 import { settlementsApi } from '../api/settlements';
 import { depositsApi } from '../api/deposits';
 import { currencyApi } from '../api/currency';
+import { API_BASE } from '../api/client';
 import type {
   Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
 } from '@trip-planner-ai/shared';
@@ -408,7 +409,7 @@ export default function ExpensesPage() {
                                 )}
                                 <span className="text-xs text-ink-faint">{exp.splits.length} {exp.splits.length === 1 ? 'person' : 'people'}</span>
                                 {exp.receipt_filename && (
-                                  <button onClick={() => setViewingReceipt(`/api/v1/expenses/${exp.id}/receipt`)}
+                                  <button onClick={() => setViewingReceipt(`${API_BASE}/expenses/${exp.id}/receipt`)}
                                     className="text-xs text-navy hover:underline flex items-center gap-0.5">
                                     📎 Receipt
                                   </button>

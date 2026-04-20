@@ -7,6 +7,8 @@
  * poi      → Photon (komoot) — restaurants, beaches, museums, attractions
  */
 
+import { API_BASE } from '@/api/client';
+
 export interface PlaceSuggestion {
   label: string;    // text shown in dropdown
   name: string;     // fills the main input
@@ -52,7 +54,7 @@ async function photonSearch(q: string): Promise<PhotonFeature[]> {
 export async function searchHotels(q: string): Promise<PlaceSuggestion[]> {
   // Try server proxy first
   try {
-    const res = await fetch(`/api/v1/hotels/search?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`${API_BASE}/hotels/search?q=${encodeURIComponent(q)}`);
     if (res.ok) {
       const data: PlaceSuggestion[] = await res.json();
       if (data.length > 0) return data;
@@ -114,7 +116,7 @@ interface NominatimResult {
 /** Returns airports by IATA code or name from the server's static airport bundle. */
 export async function searchAirports(q: string): Promise<PlaceSuggestion[]> {
   try {
-    const res = await fetch(`/api/v1/airports/search?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`${API_BASE}/airports/search?q=${encodeURIComponent(q)}`);
     if (res.ok) {
       return await res.json() as PlaceSuggestion[];
     }
