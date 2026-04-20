@@ -8,7 +8,6 @@ import type { TransportType, CreateTransportInput } from '@trip-planner-ai/share
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft } from 'lucide-react';
 import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
-import FlightSearch, { parseIata } from '@/components/transport/FlightSearch';
 
 const TRANSPORT_TYPES: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
 
@@ -179,26 +178,6 @@ export default function TransportBookingFormPage() {
             onChange={(e) => setForm({ ...form, reference_number: e.target.value })}
             placeholder="e.g. TP1234" />
         </div>
-
-        {/* Flight lookup — only shown when transport type is flight */}
-        {form.transport_type === 'flight' && (
-          <FlightSearch
-            flightNumber={form.reference_number}
-            fromIata={parseIata(form.from_location)}
-            toIata={parseIata(form.to_location)}
-            departureDate={form.departure_time.slice(0, 10)}
-            onAutoFill={(data) =>
-              setForm((f) => ({
-                ...f,
-                ...(data.from_location  ? { from_location:  data.from_location }  : {}),
-                ...(data.to_location    ? { to_location:    data.to_location }    : {}),
-                ...(data.departure_time ? { departure_time: data.departure_time } : {}),
-                ...(data.arrival_time   ? { arrival_time:   data.arrival_time }   : {}),
-                ...(data.reference_number ? { reference_number: data.reference_number } : {}),
-              }))
-            }
-          />
-        )}
 
         {/* Price + Currency */}
         <div className="grid grid-cols-2 gap-3">

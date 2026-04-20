@@ -1,9 +1,8 @@
 /**
  * Airport cache service
  *
- * Fetches the full airport list from a public GitHub dataset once at startup
- * and holds it in process memory. The search endpoint filters this cache,
- * so zero API calls are needed for autocomplete — no rate limits.
+ * Fetches the full airport list from a public GitHub dataset once on first use
+ * and holds it in process memory. Zero API calls — no rate limits, no key needed.
  *
  * Source: https://github.com/mwgg/Airports (~9 000 airports worldwide)
  */
@@ -33,8 +32,9 @@ export interface AirportRecord {
 
 let cache: AirportRecord[] = [];
 let loaded = false;
+let loadPromise: Promise<void> | null = null;
 
-export async function loadAirports(): Promise<void> {
+async function doLoad(): Promise<void> {
   try {
     const res = await fetch(AIRPORTS_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -53,15 +53,37 @@ export async function loadAirports(): Promise<void> {
     console.log(`[airportCache] Loaded ${cache.length} airports`);
   } catch (err) {
     console.warn('[airportCache] Failed to load airports:', (err as Error).message);
+    // Reset so the next request retries
+    loadPromise = null;
   }
 }
 
-export function searchAirports(q: string, limit = 8): AirportRecord[] {
-  if (!loaded || !q) return [];
+/** Kick off the background load at server startup. */
+export function loadAirports(): void {
+  if (!loadPromise) {
+    loadPromise = doLoad();
+  }
+}
+
+/**
+ * Search the cached airport list.
+ * Awaits the initial load if not yet complete — first call may be slightly slow.
+ */
+export async function searchAirports(q: string, limit = 8): Promise<AirportRecord[]> {
+  // Lazy-start load if never triggered
+  if (!loadPromise) {
+    loadPromise = doLoad();
+  }
+  // Await first load
+  if (!loaded) {
+    await loadPromise;
+  }
+  if (!q) return [];
+
   const upper = q.toUpperCase().trim();
   const lower = q.toLowerCase().trim();
 
-  // IATA exact prefix first (e.g. "LHR"), then name/city substring
+  // IATA prefix exact match first (e.g. "LHR"), then name/city substring
   const exactCode = cache.filter((a) => a.iata.startsWith(upper));
   const byName    = cache.filter(
     (a) =>

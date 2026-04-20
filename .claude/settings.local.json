@@ -8,7 +8,24 @@
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "Bash(node_modules/.bin/tsc --noEmit --project dashboard/tsconfig.app.json)",
-      "Bash(./node_modules/.bin/tsc --noEmit --project dashboard/tsconfig.app.json)"
+      "Bash(./node_modules/.bin/tsc --noEmit --project dashboard/tsconfig.app.json)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(python3 \"C:/Users/s.hariharan/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"travel group holiday planner social mobile modern clean\" --design-system -p \"Trip Planner AI\" -f markdown)",
+      "Read(//c/Users/s.hariharan/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(py scripts/search.py \"travel group holiday planner social mobile modern clean\" --design-system -p \"Trip Planner AI\" -f markdown)",
+      "Bash(py scripts/search.py \"travel social group modern mobile\" --domain color -f markdown)",
+      "Bash(py scripts/search.py \"travel planner productivity\" --domain product -f markdown)",
+      "Bash(py scripts/search.py \"card navigation modal mobile\" --domain ux -n 5 -f markdown)",
+      "Bash(git commit:*)",
+      "Bash(echo \"EXIT=$?\")",
+      "WebFetch(domain:docs.liteapi.travel)",
+      "WebFetch(domain:api.liteapi.travel)",
+      "WebFetch(domain:liteapi.travel)",
+      "WebSearch",
+      "Bash(curl -s \"http://localhost:3001/api/v1/airports/search?q=LHR\")"
     ]
   }
 }

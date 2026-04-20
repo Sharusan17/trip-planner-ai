@@ -7,7 +7,6 @@ import type { CreateTransportInput, TransportType } from '@trip-planner-ai/share
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
 import PlaceAutocomplete from './PlaceAutocomplete';
-import FlightSearch, { parseIata } from '@/components/transport/FlightSearch';
 
 const TIPS: Record<string, string> = {
   family:      "Add child seat bookings as a note on the car hire entry — handy when collecting the car.",
@@ -212,25 +211,6 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
           onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
         />
 
-        {/* Flight lookup — only shown when transport type is flight */}
-        {draft.transport_type === 'flight' && (
-          <FlightSearch
-            flightNumber={draft.reference_number}
-            fromIata={parseIata(draft.from_location)}
-            toIata={parseIata(draft.to_location)}
-            departureDate={draft.departure_time.slice(0, 10)}
-            onAutoFill={(data) =>
-              setDraft((d) => ({
-                ...d,
-                ...(data.from_location   ? { from_location:   data.from_location }   : {}),
-                ...(data.to_location     ? { to_location:     data.to_location }     : {}),
-                ...(data.departure_time  ? { departure_time:  data.departure_time, showArrival: true } : {}),
-                ...(data.arrival_time    ? { arrival_time:    data.arrival_time }    : {}),
-                ...(data.reference_number ? { reference_number: data.reference_number } : {}),
-              }))
-            }
-          />
-        )}
         <div className="grid grid-cols-3 gap-2">
           <input
             type="number"
