@@ -17,6 +17,8 @@ import pollsRouter from './routes/polls';
 import photosRouter from './routes/photos';
 import receiptsRouter from './routes/receipts';
 import hotelSearchRouter from './routes/hotelSearch';
+import flightSearchRouter from './routes/flightSearch';
+import { loadAirports } from './services/airportCache';
 
 const app = express();
 
@@ -42,6 +44,10 @@ app.use('/api/v1', pollsRouter);
 app.use('/api/v1', photosRouter);
 app.use('/api/v1', receiptsRouter);
 app.use('/api/v1', hotelSearchRouter);
+app.use('/api/v1', flightSearchRouter);
+
+// Pre-load airport cache in background (doesn't block startup)
+loadAirports();
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

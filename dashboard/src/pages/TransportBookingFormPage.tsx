@@ -7,6 +7,8 @@ import { travellersApi } from '@/api/travellers';
 import type { TransportType, CreateTransportInput } from '@trip-planner-ai/shared';
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft } from 'lucide-react';
+import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
+import FlightSearch, { parseIata } from '@/components/transport/FlightSearch';
 
 const TRANSPORT_TYPES: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
 
@@ -136,15 +138,23 @@ export default function TransportBookingFormPage() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">From *</label>
-            <input className="vintage-input w-full" required value={form.from_location}
-              onChange={(e) => setForm({ ...form, from_location: e.target.value })}
-              placeholder="e.g. Lisbon LIS" />
+            <PlaceAutocomplete
+              searchType={form.transport_type === 'flight' ? 'airport' : 'location'}
+              placeholder={form.transport_type === 'flight' ? 'e.g. LHR, London' : 'e.g. Lisbon'}
+              value={form.from_location}
+              onChange={(val) => setForm({ ...form, from_location: val })}
+              onSelect={(s) => setForm((f) => ({ ...f, from_location: s.name }))}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">To *</label>
-            <input className="vintage-input w-full" required value={form.to_location}
-              onChange={(e) => setForm({ ...form, to_location: e.target.value })}
-              placeholder="e.g. London LHR" />
+            <PlaceAutocomplete
+              searchType={form.transport_type === 'flight' ? 'airport' : 'location'}
+              placeholder={form.transport_type === 'flight' ? 'e.g. FAO, Faro' : 'e.g. London'}
+              value={form.to_location}
+              onChange={(val) => setForm({ ...form, to_location: val })}
+              onSelect={(s) => setForm((f) => ({ ...f, to_location: s.name }))}
+            />
           </div>
         </div>
 
@@ -169,6 +179,26 @@ export default function TransportBookingFormPage() {
             onChange={(e) => setForm({ ...form, reference_number: e.target.value })}
             placeholder="e.g. TP1234" />
         </div>
+
+        {/* Flight lookup — only shown when transport type is flight */}
+        {form.transport_type === 'flight' && (
+          <FlightSearch
+            flightNumber={form.reference_number}
+            fromIata={parseIata(form.from_location)}
+            toIata={parseIata(form.to_location)}
+            departureDate={form.departure_time.slice(0, 10)}
+            onAutoFill={(data) =>
+              setForm((f) => ({
+                ...f,
+                ...(data.from_location  ? { from_location:  data.from_location }  : {}),
+                ...(data.to_location    ? { to_location:    data.to_location }    : {}),
+                ...(data.departure_time ? { departure_time: data.departure_time } : {}),
+                ...(data.arrival_time   ? { arrival_time:   data.arrival_time }   : {}),
+                ...(data.reference_number ? { reference_number: data.reference_number } : {}),
+              }))
+            }
+          />
+        )}
 
         {/* Price + Currency */}
         <div className="grid grid-cols-2 gap-3">
