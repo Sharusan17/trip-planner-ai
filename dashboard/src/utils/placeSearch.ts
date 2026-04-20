@@ -43,21 +43,32 @@ async function photonSearch(q: string): Promise<PhotonFeature[]> {
   return (data.features ?? []) as PhotonFeature[];
 }
 
-/** Returns only accommodation venues (hotels, hostels, etc.) with full address. */
+/**
+ * Returns accommodation venues with address.
+ * Primary: server proxy → LiteAPI /data/hotels (real hotel database, key stays server-side).
+ * Fallback: Photon with client-side OSM type filter (used if LiteAPI key not configured).
+ */
 export async function searchHotels(q: string): Promise<PlaceSuggestion[]> {
-  const features = await photonSearch(q);
+  // Try server proxy first
+  try {
+    const res = await fetch(`/api/v1/hotels/search?q=${encodeURIComponent(q)}`);
+    if (res.ok) {
+      const data: PlaceSuggestion[] = await res.json();
+      if (data.length > 0) return data;
+    }
+  } catch {
+    // fall through to Photon fallback
+  }
 
-  // Prefer results that OSM-tagged as accommodation
+  // Photon fallback (OSM data — used when LITEAPI_API_KEY not set)
+  const features = await photonSearch(q);
   const hotels = features.filter(
     (f) =>
       f.properties.name &&
       f.properties.osm_key === 'tourism' &&
       ACCOMMODATION_VALUES.has(f.properties.osm_value ?? ''),
   );
-
-  // Fall back to top named results if OSM filter returns nothing
   const pool = hotels.length > 0 ? hotels : features.filter((f) => f.properties.name).slice(0, 5);
-
   return pool.slice(0, 7).map((f) => {
     const p = f.properties;
     const addressParts = [

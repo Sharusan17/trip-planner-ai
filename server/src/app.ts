@@ -16,6 +16,7 @@ import announcementsRouter from './routes/announcements';
 import pollsRouter from './routes/polls';
 import photosRouter from './routes/photos';
 import receiptsRouter from './routes/receipts';
+import hotelSearchRouter from './routes/hotelSearch';
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use('/api/v1', announcementsRouter);
 app.use('/api/v1', pollsRouter);
 app.use('/api/v1', photosRouter);
 app.use('/api/v1', receiptsRouter);
+app.use('/api/v1', hotelSearchRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
