@@ -5,7 +5,8 @@
     "rootDir": "src",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "types": ["node"]
+    "types": ["node"],
+    "resolveJsonModule": true
   },
   "include": ["src"],
   "references": [{ "path": "../shared" }]

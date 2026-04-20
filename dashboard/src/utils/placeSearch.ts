@@ -1,9 +1,10 @@
 /**
  * Place search utilities
  *
- * hotel    → Photon (komoot) — all results, client-filtered to accommodation OSM types
- * location → Nominatim (OSM) — great for cities, airports, train stations
- * poi      → Photon (komoot) — named POIs: restaurants, beaches, museums, attractions
+ * hotel    → LiteAPI hotel database (Photon fallback)
+ * location → Nominatim (OSM) — cities, train stations, general places
+ * airport  → server static bundle (7 900+ airports, no API key needed)
+ * poi      → Photon (komoot) — restaurants, beaches, museums, attractions
  */
 
 export interface PlaceSuggestion {
@@ -110,22 +111,17 @@ interface NominatimResult {
   };
 }
 
-/**
- * Returns airports by IATA code or name via LiteAPI.
- * Falls back to Nominatim if the server proxy isn't configured.
- */
+/** Returns airports by IATA code or name from the server's static airport bundle. */
 export async function searchAirports(q: string): Promise<PlaceSuggestion[]> {
   try {
     const res = await fetch(`/api/v1/airports/search?q=${encodeURIComponent(q)}`);
     if (res.ok) {
-      const data: PlaceSuggestion[] = await res.json();
-      if (data.length > 0) return data;
+      return await res.json() as PlaceSuggestion[];
     }
   } catch {
-    // fall through to Nominatim fallback
+    // server unreachable — return empty rather than wrong city results
   }
-  // Fallback: Nominatim (good for city/airport name resolution)
-  return searchLocations(q);
+  return [];
 }
 
 /** Returns cities, airports, train stations — best for transport from/to fields. */
