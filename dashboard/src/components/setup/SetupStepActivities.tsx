@@ -5,6 +5,7 @@ import { itineraryApi } from '@/api/itinerary';
 import type { CreateActivityInput, ActivityType } from '@trip-planner-ai/shared';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
+import PlaceAutocomplete from './PlaceAutocomplete';
 
 const TIPS: Record<string, string> = {
   family:      "Mark activities as kid-friendly — they'll be highlighted on the itinerary.",
@@ -203,7 +204,8 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
               onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
             />
             <select
-              className="vintage-input w-28 text-sm flex-shrink-0"
+              className="vintage-input text-sm flex-shrink-0"
+              style={{ width: 'auto' }}
               value={draft.type}
               onChange={(e) => setDraft({ ...draft, type: e.target.value as ActivityType })}
             >
@@ -216,11 +218,12 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
           </div>
 
           {/* Location */}
-          <input
-            className="vintage-input w-full"
+          <PlaceAutocomplete
+            searchType="poi"
             placeholder="Location (optional — e.g. Praia da Rocha)"
             value={draft.location_tag}
-            onChange={(e) => setDraft({ ...draft, location_tag: e.target.value })}
+            onChange={(val) => setDraft({ ...draft, location_tag: val })}
+            onSelect={(s) => setDraft((d) => ({ ...d, location_tag: s.name }))}
           />
 
           {/* Kid-friendly toggle — only for family trips */}

@@ -127,7 +127,8 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
             autoComplete="off"
           />
           <select
-            className="vintage-input w-24 text-sm flex-shrink-0"
+            className="vintage-input text-sm flex-shrink-0"
+            style={{ width: 'auto' }}
             value={draft.type}
             onChange={(e) => setDraft({ ...draft, type: e.target.value as TravellerType })}
           >

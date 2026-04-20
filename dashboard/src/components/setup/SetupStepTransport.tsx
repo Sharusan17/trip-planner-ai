@@ -145,7 +145,8 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
         {/* Type + From + To on one line */}
         <div className="flex gap-2">
           <select
-            className="vintage-input w-28 text-sm flex-shrink-0"
+            className="vintage-input text-sm flex-shrink-0"
+            style={{ width: 'auto' }}
             value={draft.transport_type}
             onChange={(e) => setDraft({ ...draft, transport_type: e.target.value as TransportType })}
           >

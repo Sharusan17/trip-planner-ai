@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
+import { searchHotels, searchLocations, searchPOIs } from '@/utils/placeSearch';
+import type { PlaceSuggestion } from '@/utils/placeSearch';
 
-export interface PlaceSuggestion {
-  label: string;       // display text in dropdown
-  name: string;        // fills the main input
-  address?: string;    // optional — fills address field if provided
-}
+export type { PlaceSuggestion };
 
 interface Props {
   value: string;
@@ -13,66 +11,19 @@ interface Props {
   onSelect: (suggestion: PlaceSuggestion) => void;
   placeholder?: string;
   className?: string;
-  /** 'hotel' formats results as venue name + full address.
-   *  'location' formats results as city/place name. */
-  searchType?: 'hotel' | 'location';
+  /**
+   * hotel    — Photon filtered to accommodation venues; populates address field
+   * location — Nominatim cities / airports / stations; best for transport from/to
+   * poi      — Photon named POIs (restaurants, beaches, museums, attractions)
+   */
+  searchType?: 'hotel' | 'location' | 'poi';
 }
 
-// ── Nominatim (both hotel and location search) ────────────────────────────────
-// Both modes use the same Nominatim API — they just format results differently.
-// 'hotel' mode: name = venue name (first part of display_name), address = rest
-// 'location' mode: name = city/airport name, no separate address
-
-interface NominatimResult {
-  display_name: string;
-  address?: {
-    aerodrome?: string;
-    hotel?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    suburb?: string;
-    country?: string;
-    road?: string;
-    house_number?: string;
-    postcode?: string;
-  };
-  type?: string;
-  class?: string;
-}
-
-async function nominatimSearch(q: string): Promise<NominatimResult[]> {
-  const url =
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}` +
-    `&format=json&limit=7&addressdetails=1`;
-  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-  return res.json();
-}
-
-async function searchHotels(q: string): Promise<PlaceSuggestion[]> {
-  const data = await nominatimSearch(q);
-  return data.map((r) => {
-    const parts = r.display_name.split(', ');
-    // First segment is typically the venue name; rest is the address
-    const name = parts[0];
-    const address = parts.slice(1).join(', ');
-    // Label: venue name + city + country for quick recognition
-    const a = r.address ?? {};
-    const city = a.city ?? a.town ?? a.village ?? a.suburb ?? '';
-    const label = [name, city, a.country].filter(Boolean).join(', ');
-    return { label, name, address: address || undefined };
-  });
-}
-
-async function searchLocations(q: string): Promise<PlaceSuggestion[]> {
-  const data = await nominatimSearch(q);
-  return data.map((r) => {
-    const a = r.address ?? {};
-    const place = a.aerodrome ?? a.city ?? a.town ?? a.village ?? r.display_name.split(',')[0];
-    const label = [place, a.country].filter(Boolean).join(', ');
-    return { label, name: label };
-  });
-}
+const SEARCH_FN: Record<string, (q: string) => Promise<PlaceSuggestion[]>> = {
+  hotel:    searchHotels,
+  location: searchLocations,
+  poi:      searchPOIs,
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -105,12 +56,11 @@ export default function PlaceAutocomplete({
   useEffect(() => {
     if (pinnedRef.current) { pinnedRef.current = false; return; }
     if (value.length < 2) { setSuggestions([]); setOpen(false); return; }
+    const fn = SEARCH_FN[searchType];
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const results = searchType === 'hotel'
-          ? await searchHotels(value)
-          : await searchLocations(value);
+        const results = await fn(value);
         setSuggestions(results);
         setOpen(results.length > 0);
       } catch {

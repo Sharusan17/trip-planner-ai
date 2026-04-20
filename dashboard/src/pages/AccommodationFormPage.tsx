@@ -6,6 +6,7 @@ import { accommodationApi } from '@/api/accommodation';
 import { travellersApi } from '@/api/travellers';
 import type { CreateAccommodationInput } from '@trip-planner-ai/shared';
 import { ArrowLeft } from 'lucide-react';
+import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
 
 interface FormData {
   name: string; address: string; check_in_date: string; check_out_date: string;
@@ -104,9 +105,13 @@ export default function AccommodationFormPage() {
         {/* Name */}
         <div>
           <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Property Name *</label>
-          <input className="vintage-input w-full" required value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Hotel Bairro Alto" />
+          <PlaceAutocomplete
+            searchType="hotel"
+            placeholder="e.g. Hotel Bairro Alto"
+            value={form.name}
+            onChange={(val) => setForm((f) => ({ ...f, name: val }))}
+            onSelect={(s) => setForm((f) => ({ ...f, name: s.name, address: s.address ?? f.address }))}
+          />
         </div>
 
         {/* Address */}
@@ -114,7 +119,7 @@ export default function AccommodationFormPage() {
           <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Address</label>
           <input className="vintage-input w-full" value={form.address}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
-            placeholder="e.g. Praça Luís de Camões 8, Lisbon" />
+            placeholder="Auto-filled from search, or type manually" />
         </div>
 
         {/* Check-in / Check-out */}
