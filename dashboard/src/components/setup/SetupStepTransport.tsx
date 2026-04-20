@@ -157,16 +157,16 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
             ))}
           </select>
           <PlaceAutocomplete
-            searchType="location"
-            placeholder="From (e.g. London / LHR)"
+            searchType={draft.transport_type === 'flight' ? 'airport' : 'location'}
+            placeholder={draft.transport_type === 'flight' ? 'From (e.g. LHR, London)' : 'From'}
             value={draft.from_location}
             onChange={(val) => setDraft({ ...draft, from_location: val })}
             onSelect={(s) => setDraft((d) => ({ ...d, from_location: s.name }))}
             className="flex-1 min-w-0"
           />
           <PlaceAutocomplete
-            searchType="location"
-            placeholder="To (e.g. Faro / FAO)"
+            searchType={draft.transport_type === 'flight' ? 'airport' : 'location'}
+            placeholder={draft.transport_type === 'flight' ? 'To (e.g. FAO, Faro)' : 'To'}
             value={draft.to_location}
             onChange={(val) => setDraft({ ...draft, to_location: val })}
             onSelect={(s) => setDraft((d) => ({ ...d, to_location: s.name }))}

@@ -110,6 +110,24 @@ interface NominatimResult {
   };
 }
 
+/**
+ * Returns airports by IATA code or name via LiteAPI.
+ * Falls back to Nominatim if the server proxy isn't configured.
+ */
+export async function searchAirports(q: string): Promise<PlaceSuggestion[]> {
+  try {
+    const res = await fetch(`/api/v1/airports/search?q=${encodeURIComponent(q)}`);
+    if (res.ok) {
+      const data: PlaceSuggestion[] = await res.json();
+      if (data.length > 0) return data;
+    }
+  } catch {
+    // fall through to Nominatim fallback
+  }
+  // Fallback: Nominatim (good for city/airport name resolution)
+  return searchLocations(q);
+}
+
 /** Returns cities, airports, train stations — best for transport from/to fields. */
 export async function searchLocations(q: string): Promise<PlaceSuggestion[]> {
   const url =

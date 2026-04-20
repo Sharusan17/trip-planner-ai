@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
-import { searchHotels, searchLocations, searchPOIs } from '@/utils/placeSearch';
+import { searchHotels, searchLocations, searchPOIs, searchAirports } from '@/utils/placeSearch';
 import type { PlaceSuggestion } from '@/utils/placeSearch';
 
 export type { PlaceSuggestion };
@@ -12,16 +12,18 @@ interface Props {
   placeholder?: string;
   className?: string;
   /**
-   * hotel    — Photon filtered to accommodation venues; populates address field
-   * location — Nominatim cities / airports / stations; best for transport from/to
+   * hotel    — LiteAPI hotel database (Photon fallback); populates address field
+   * location — Nominatim cities / stations / general places
+   * airport  — LiteAPI airport IATA search (Nominatim fallback); best for flights
    * poi      — Photon named POIs (restaurants, beaches, museums, attractions)
    */
-  searchType?: 'hotel' | 'location' | 'poi';
+  searchType?: 'hotel' | 'location' | 'airport' | 'poi';
 }
 
 const SEARCH_FN: Record<string, (q: string) => Promise<PlaceSuggestion[]>> = {
   hotel:    searchHotels,
   location: searchLocations,
+  airport:  searchAirports,
   poi:      searchPOIs,
 };
 
