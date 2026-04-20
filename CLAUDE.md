@@ -1,5 +1,7 @@
 # Trip Planner AI — Claude Code Reference
 
+> **⚠️ Deployment note:** This project runs on **Railway (production only)**. The user does NOT run the server or dashboard locally. When verifying changes, assume they are tested via the deployed Railway URLs, not `localhost`. Do not suggest `npm run dev` as the verification step — suggest pushing to GitHub (Railway auto-deploys from `main`). API keys and env vars are configured in the Railway dashboard, not a local `.env` file.
+
 ## Project Overview
 
 A **generic Group Holiday Planner** PWA. An organiser creates a trip and shares a group code (e.g. `FARO-XK3M`) or QR code. Members join by entering the code and selecting their name. No authentication in Phase 1/2 — roles stored in localStorage.
