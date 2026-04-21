@@ -7,6 +7,7 @@ import type { CreateTransportInput, TransportType } from '@trip-planner-ai/share
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
 import PlaceAutocomplete from './PlaceAutocomplete';
+import FlightLookup, { type FlightAutoFill } from '@/components/transport/FlightLookup';
 
 const TIPS: Record<string, string> = {
   family:      "Add child seat bookings as a note on the car hire entry — handy when collecting the car.",
@@ -27,6 +28,10 @@ interface Draft {
   price: string;
   currency: string;
   showArrival: boolean;
+  airline: string;
+  departure_terminal: string;
+  arrival_terminal: string;
+  aircraft_type: string;
 }
 
 interface Props {
@@ -58,6 +63,10 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     price: '',
     currency: homeCurrency,
     showArrival: false,
+    airline: '',
+    departure_terminal: '',
+    arrival_terminal: '',
+    aircraft_type: '',
   });
 
   const [draft, setDraft] = useState<Draft>(blankDraft());
@@ -90,6 +99,10 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
       reference_number: draft.reference_number.trim() || undefined,
       price: isNaN(priceNum) ? undefined : priceNum,
       currency: draft.price ? draft.currency : undefined,
+      airline: draft.airline.trim() || undefined,
+      departure_terminal: draft.departure_terminal.trim() || undefined,
+      arrival_terminal: draft.arrival_terminal.trim() || undefined,
+      aircraft_type: draft.aircraft_type.trim() || undefined,
       traveller_ids: travellers.map((t) => t.id),
     });
   };
@@ -210,6 +223,29 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
           value={draft.reference_number}
           onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
         />
+        {draft.transport_type === 'flight' && (
+          <FlightLookup
+            flightNumber={draft.reference_number}
+            bookingDate={draft.departure_time.slice(0, 10)}
+            onAutoFill={(data: FlightAutoFill) => {
+              const datePart = draft.departure_time.slice(0, 10);
+              const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : draft.departure_time;
+              const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : draft.arrival_time;
+              setDraft({
+                ...draft,
+                from_location: data.from_location,
+                to_location: data.to_location,
+                airline: data.airline,
+                departure_terminal: data.departure_terminal ?? '',
+                arrival_terminal: data.arrival_terminal ?? '',
+                aircraft_type: data.aircraft_type ?? '',
+                departure_time: depDT,
+                arrival_time: arrDT,
+                showArrival: arrDT ? true : draft.showArrival,
+              });
+            }}
+          />
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           <input
