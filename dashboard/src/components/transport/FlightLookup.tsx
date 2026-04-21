@@ -140,14 +140,12 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
   if (!groups.length) {
     return (
       <p className="text-xs text-ink-faint mt-2">
-        {debouncedIata} not found in recent history. Enter details manually.
+        {debouncedIata} isn't currently tracked. Enter details manually.
       </p>
     );
   }
 
-  const headline = groups.length === 1
-    ? `Recent ${debouncedIata} schedule${bookingDateLabel ? ` — use as template for ${bookingDateLabel}` : ''}`
-    : `Recent ${debouncedIata} schedules — pick one${bookingDateLabel ? ` for ${bookingDateLabel}` : ''}`;
+  const headline = `Current ${debouncedIata} schedule${bookingDateLabel ? ` — use as template for ${bookingDateLabel}` : ''}`;
 
   return (
     <div className="mt-3 space-y-2">
@@ -186,9 +184,11 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
               {mins > 0 && ` · ${formatDuration(mins)}`}
               {g.sample.aircraft_type && ` · ${g.sample.aircraft_type}`}
             </div>
-            <div className="text-xs text-ink-faint mt-1">
-              Flown on: {g.days.join(', ')}
-            </div>
+            {g.days.length > 1 && (
+              <div className="text-xs text-ink-faint mt-1">
+                Flown on: {g.days.join(', ')}
+              </div>
+            )}
             <div className="mt-2 flex items-center gap-1 text-xs text-navy font-medium">
               <Search size={12} strokeWidth={2} /> Use this schedule
             </div>

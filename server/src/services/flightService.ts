@@ -51,16 +51,9 @@ interface CacheRow {
   data: FlightInstance | null;
 }
 
-/** Return last 7 dates (today + 6 previous) as YYYY-MM-DD. */
-function recentDates(): string[] {
-  const out: string[] = [];
-  const today = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setUTCDate(today.getUTCDate() - i);
-    out.push(d.toISOString().slice(0, 10));
-  }
-  return out;
+/** Today's date (UTC) as YYYY-MM-DD — our cache key for free-tier real-time lookups. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /** Extract HH:MM from an Aviationstack ISO string like "2026-04-21T08:00:00+00:00". */
@@ -104,8 +97,13 @@ function mapToInstance(av: Record<string, unknown>, iata: string, date: string):
   };
 }
 
-async function fetchOneDay(iata: string, date: string, apiKey: string): Promise<FlightInstance | null> {
-  const url = `${AVIATIONSTACK_BASE}/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(iata)}&flight_date=${date}&limit=1`;
+/**
+ * Fetch the current real-time record for a flight from Aviationstack.
+ * Free tier only supports real-time (no `flight_date` historical queries),
+ * so we omit the date and take whatever's currently indexed.
+ */
+async function fetchRealtime(iata: string, apiKey: string, dateToStamp: string): Promise<FlightInstance | null> {
+  const url = `${AVIATIONSTACK_BASE}/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(iata)}&limit=1`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
@@ -113,7 +111,10 @@ async function fetchOneDay(iata: string, date: string, apiKey: string): Promise<
     if (!res.ok) return null;
     const body = await res.json() as { data?: Record<string, unknown>[] };
     const first = body.data?.[0];
-    return first ? mapToInstance(first, iata, date) : null;
+    if (!first) return null;
+    // Aviationstack returns its own flight_date; prefer that, fall back to dateToStamp.
+    const actualDate = (first.flight_date as string) ?? dateToStamp;
+    return mapToInstance(first, iata, actualDate);
   } catch {
     return null;
   } finally {
@@ -122,49 +123,42 @@ async function fetchOneDay(iata: string, date: string, apiKey: string): Promise<
 }
 
 /**
- * Look up last 7 days of a flight via cache-first read.
- * Uncached dates get fetched from Aviationstack in parallel and written back.
- * Returns instances where Aviationstack had data, most-recent-first.
+ * Look up a flight via 24h shared DB cache + single real-time Aviationstack call.
+ * Returns an array (0 or 1 instances) so callers can keep the list-based UI.
  */
 export async function lookupFlight(rawIata: string): Promise<FlightInstance[]> {
   const apiKey = process.env.AVIATIONSTACK_API_KEY;
   if (!apiKey) throw new Error('AVIATIONSTACK_API_KEY not configured');
 
   const iata = normaliseFlightIata(rawIata);
-  const dates = recentDates();
+  const cacheKey = today();
+
+  // Cache hit? Return stored instance (or empty array for negative cache)
   const cacheRes = await pool.query<CacheRow>(
     `SELECT flight_iata, flight_date::text AS flight_date, data
        FROM flight_lookup_cache
-      WHERE flight_iata = $1 AND flight_date = ANY($2::date[])`,
-    [iata, dates]
+      WHERE flight_iata = $1 AND flight_date = $2
+        AND fetched_at > NOW() - INTERVAL '24 hours'`,
+    [iata, cacheKey]
   );
-  const cached = new Map(cacheRes.rows.map((r) => [r.flight_date, r]));
-
-  const missing = dates.filter((d) => !cached.has(d));
-  const fetched = await Promise.all(
-    missing.map(async (date) => ({ date, instance: await fetchOneDay(iata, date, apiKey) }))
-  );
-
-  // Persist fresh results (including negatives)
-  for (const { date, instance } of fetched) {
-    await pool.query(
-      `INSERT INTO flight_lookup_cache (flight_iata, flight_date, data, fetched_at)
-       VALUES ($1, $2, $3::jsonb, NOW())
-       ON CONFLICT (flight_iata, flight_date)
-       DO UPDATE SET data = EXCLUDED.data, fetched_at = NOW()`,
-      [iata, date, instance ? JSON.stringify(instance) : null]
-    );
+  if (cacheRes.rows.length > 0) {
+    const row = cacheRes.rows[0];
+    return row.data ? [row.data] : [];
   }
 
-  // Merge cache + fresh, keep only non-null, sort most-recent-first
-  const all: FlightInstance[] = [];
-  for (const d of dates) {
-    const hit = cached.get(d);
-    if (hit && hit.data) { all.push(hit.data); continue; }
-    const fresh = fetched.find((f) => f.date === d);
-    if (fresh?.instance) all.push(fresh.instance);
-  }
-  return all.sort((a, b) => b.flight_date.localeCompare(a.flight_date));
+  // Cache miss → one real-time call
+  const instance = await fetchRealtime(iata, apiKey, cacheKey);
+
+  // Persist (including negative result)
+  await pool.query(
+    `INSERT INTO flight_lookup_cache (flight_iata, flight_date, data, fetched_at)
+     VALUES ($1, $2, $3::jsonb, NOW())
+     ON CONFLICT (flight_iata, flight_date)
+     DO UPDATE SET data = EXCLUDED.data, fetched_at = NOW()`,
+    [iata, cacheKey, instance ? JSON.stringify(instance) : null]
+  );
+
+  return instance ? [instance] : [];
 }
 
 // ─── Live status (5-minute in-memory cache) ────────────────────────────────
@@ -181,7 +175,8 @@ export async function getLiveStatus(rawIata: string, date: string): Promise<Flig
   const hit = liveCache.get(key);
   if (hit && Date.now() - hit.at < LIVE_TTL_MS) return hit.value;
 
-  const url = `${AVIATIONSTACK_BASE}/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(iata)}&flight_date=${date}&limit=1`;
+  // Free tier: no flight_date. Live status is inherently real-time anyway.
+  const url = `${AVIATIONSTACK_BASE}/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(iata)}&limit=1`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
