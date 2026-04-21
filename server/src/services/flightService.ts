@@ -25,6 +25,25 @@ export interface FlightLiveStatus {
 
 const AVIATIONSTACK_BASE = 'https://api.aviationstack.com/v1';
 
+/**
+ * Normalise a flight IATA/ICAO code the way Aviationstack indexes it.
+ * Airlines brand flights with zero-padded numbers ("BA0300", "LH0400"), but
+ * Aviationstack stores them without the padding ("BA300", "LH400"). Strip
+ * leading zeros from the numeric portion while keeping the airline prefix.
+ *
+ * Airline prefix is either 3 letters (ICAO, e.g. "BAW") or 2 alphanumerics
+ * (IATA, e.g. "BA", "W9", "U2"). We prefer the ICAO match when both succeed.
+ */
+export function normaliseFlightIata(raw: string): string {
+  const s = raw.trim().toUpperCase().replace(/\s+/g, '');
+  // Try ICAO (3 letters) first, then IATA (2 alphanumeric)
+  const icao = s.match(/^([A-Z]{3})0*(\d+)([A-Z]?)$/);
+  if (icao) return icao[1] + icao[2] + icao[3];
+  const iata = s.match(/^([A-Z0-9]{2})0*(\d+)([A-Z]?)$/);
+  if (iata) return iata[1] + iata[2] + iata[3];
+  return s;
+}
+
 /** Cache hits return this shape; `data` is null for negative hits. */
 interface CacheRow {
   flight_iata: string;
@@ -107,10 +126,11 @@ async function fetchOneDay(iata: string, date: string, apiKey: string): Promise<
  * Uncached dates get fetched from Aviationstack in parallel and written back.
  * Returns instances where Aviationstack had data, most-recent-first.
  */
-export async function lookupFlight(iata: string): Promise<FlightInstance[]> {
+export async function lookupFlight(rawIata: string): Promise<FlightInstance[]> {
   const apiKey = process.env.AVIATIONSTACK_API_KEY;
   if (!apiKey) throw new Error('AVIATIONSTACK_API_KEY not configured');
 
+  const iata = normaliseFlightIata(rawIata);
   const dates = recentDates();
   const cacheRes = await pool.query<CacheRow>(
     `SELECT flight_iata, flight_date::text AS flight_date, data
@@ -152,10 +172,11 @@ export async function lookupFlight(iata: string): Promise<FlightInstance[]> {
 const liveCache = new Map<string, { at: number; value: FlightLiveStatus | null }>();
 const LIVE_TTL_MS = 5 * 60 * 1000;
 
-export async function getLiveStatus(iata: string, date: string): Promise<FlightLiveStatus | null> {
+export async function getLiveStatus(rawIata: string, date: string): Promise<FlightLiveStatus | null> {
   const apiKey = process.env.AVIATIONSTACK_API_KEY;
   if (!apiKey) throw new Error('AVIATIONSTACK_API_KEY not configured');
 
+  const iata = normaliseFlightIata(rawIata);
   const key = `${iata}|${date}`;
   const hit = liveCache.get(key);
   if (hit && Date.now() - hit.at < LIVE_TTL_MS) return hit.value;
