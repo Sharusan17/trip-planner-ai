@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plane, Search, Loader2 } from 'lucide-react';
+import { Plane, Loader2, Check, Clock, Building2 } from 'lucide-react';
 import { flightsApi, type FlightInstance } from '@/api/flights';
 
 export interface FlightAutoFill {
@@ -38,13 +38,17 @@ function normaliseIata(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, '');
 }
 
-function minutesBetween(hhmmA: string, hhmmB: string): number {
-  if (!hhmmA || !hhmmB) return 0;
+function minutesBetween(hhmmA: string, hhmmB: string): { minutes: number; crossesMidnight: boolean } {
+  if (!hhmmA || !hhmmB) return { minutes: 0, crossesMidnight: false };
   const [aH, aM] = hhmmA.split(':').map(Number);
   const [bH, bM] = hhmmB.split(':').map(Number);
   let diff = (bH * 60 + bM) - (aH * 60 + aM);
-  if (diff < 0) diff += 24 * 60; // handle crossing midnight
-  return diff;
+  let crossesMidnight = false;
+  if (diff < 0) {
+    diff += 24 * 60;
+    crossesMidnight = true;
+  }
+  return { minutes: diff, crossesMidnight };
 }
 
 function formatDuration(mins: number): string {
@@ -76,6 +80,7 @@ function groupBySchedule(instances: FlightInstance[]): ScheduleGroup[] {
 
 export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: Props) {
   const [debouncedIata, setDebouncedIata] = useState('');
+  const [selectedSignature, setSelectedSignature] = useState<string>('');
 
   useEffect(() => {
     const normalised = normaliseIata(flightNumber);
@@ -83,11 +88,17 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
     // ICAO codes are 3 letters (e.g. BAW). Followed by 1-4 digit flight number and optional suffix letter.
     if (normalised.length < 3 || !/^([A-Z0-9]{2}|[A-Z]{3})\d{1,4}[A-Z]?$/.test(normalised)) {
       setDebouncedIata('');
+      setSelectedSignature('');
       return;
     }
     const t = setTimeout(() => setDebouncedIata(normalised), 500);
     return () => clearTimeout(t);
   }, [flightNumber]);
+
+  // Reset selection when lookup key changes
+  useEffect(() => {
+    setSelectedSignature('');
+  }, [debouncedIata, bookingDate]);
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['flight-lookup', debouncedIata, bookingDate],
@@ -153,47 +164,107 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
     <div className="mt-3 space-y-2">
       <p className="text-xs font-semibold text-ink-faint uppercase tracking-wider">{headline}</p>
       {groups.map((g) => {
-        const mins = minutesBetween(g.sample.departure_time_local, g.sample.arrival_time_local);
+        const { minutes, crossesMidnight } = minutesBetween(
+          g.sample.departure_time_local,
+          g.sample.arrival_time_local,
+        );
+        const isSelected = selectedSignature === g.signature;
         const fromLabel = `${g.sample.departure_airport} (${g.sample.departure_iata})`;
         const toLabel = `${g.sample.arrival_airport} (${g.sample.arrival_iata})`;
+
+        const handleSelect = () => {
+          setSelectedSignature(g.signature);
+          onAutoFill({
+            airline: g.sample.airline,
+            from_location: fromLabel,
+            to_location: toLabel,
+            departure_terminal: g.sample.departure_terminal,
+            arrival_terminal: g.sample.arrival_terminal,
+            aircraft_type: g.sample.aircraft_type,
+            departure_time_hhmm: g.sample.departure_time_local,
+            arrival_time_hhmm: g.sample.arrival_time_local,
+          });
+        };
+
         return (
           <button
             key={g.signature}
             type="button"
-            onClick={() => onAutoFill({
-              airline: g.sample.airline,
-              from_location: fromLabel,
-              to_location: toLabel,
-              departure_terminal: g.sample.departure_terminal,
-              arrival_terminal: g.sample.arrival_terminal,
-              aircraft_type: g.sample.aircraft_type,
-              departure_time_hhmm: g.sample.departure_time_local,
-              arrival_time_hhmm: g.sample.arrival_time_local,
-            })}
-            className="w-full text-left rounded-xl border border-parchment-dark bg-white hover:border-navy hover:bg-navy/5 transition-colors p-3"
+            onClick={handleSelect}
+            aria-pressed={isSelected}
+            className={[
+              'w-full text-left rounded-xl p-3 transition-all',
+              isSelected
+                ? 'border-2 border-navy bg-navy/5 ring-2 ring-navy/20 shadow-sm'
+                : 'border border-parchment-dark bg-white hover:border-navy hover:bg-navy/5',
+            ].join(' ')}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <Plane size={14} className="text-navy" strokeWidth={2} />
-              <span className="text-sm font-semibold text-ink">{g.sample.airline || debouncedIata}</span>
+            {/* Row 1: airline name (left) + selected check (right) */}
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Plane size={14} className="text-navy shrink-0" strokeWidth={2} />
+                <span className="text-sm font-semibold text-ink truncate">
+                  {g.sample.airline || debouncedIata}
+                </span>
+              </div>
+              {isSelected ? (
+                <span className="flex items-center gap-1 text-xs font-semibold text-navy shrink-0">
+                  <Check size={14} strokeWidth={3} />
+                  Selected
+                </span>
+              ) : (
+                <span className="text-xs text-ink-faint shrink-0">Tap to select</span>
+              )}
             </div>
-            <div className="text-sm text-ink">
-              {g.sample.departure_iata}{g.sample.departure_terminal ? ` T${g.sample.departure_terminal}` : ''}
-              {' → '}
-              {g.sample.arrival_iata}{g.sample.arrival_terminal ? ` T${g.sample.arrival_terminal}` : ''}
+
+            {/* Row 2: route (left) + times (right) */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-base font-bold text-ink">
+                {g.sample.departure_iata}
+                <span className="text-ink-faint mx-1.5">→</span>
+                {g.sample.arrival_iata}
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-semibold text-ink">
+                  {g.sample.departure_time_local}
+                  <span className="text-ink-faint mx-1">→</span>
+                  {g.sample.arrival_time_local}
+                  {crossesMidnight && (
+                    <sup className="text-xs text-gold ml-0.5" title="Arrives next day">+1</sup>
+                  )}
+                </div>
+                {minutes > 0 && (
+                  <div className="flex items-center justify-end gap-1 text-xs text-ink-faint mt-0.5">
+                    <Clock size={11} strokeWidth={2} />
+                    {formatDuration(minutes)}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-xs text-ink-faint mt-0.5">
-              {g.sample.departure_time_local} → {g.sample.arrival_time_local}
-              {mins > 0 && ` · ${formatDuration(mins)}`}
-              {g.sample.aircraft_type && ` · ${g.sample.aircraft_type}`}
-            </div>
-            {g.days.length > 1 && (
-              <div className="text-xs text-ink-faint mt-1">
-                Flown on: {g.days.join(', ')}
+
+            {/* Row 3: terminals (small, only if either known) */}
+            {(g.sample.departure_terminal || g.sample.arrival_terminal) && (
+              <div className="flex items-center gap-1.5 text-xs text-ink-faint mt-1.5">
+                <Building2 size={11} strokeWidth={2} className="shrink-0" />
+                <span>
+                  Terminal: {g.sample.departure_terminal ?? '—'}
+                  <span className="mx-1">→</span>
+                  Terminal: {g.sample.arrival_terminal ?? '—'}
+                </span>
               </div>
             )}
-            <div className="mt-2 flex items-center gap-1 text-xs text-navy font-medium">
-              <Search size={12} strokeWidth={2} /> Use this flight
-            </div>
+
+            {/* Row 4: extra details (aircraft, multi-day schedule) */}
+            {(g.sample.aircraft_type || g.days.length > 1) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint mt-1.5">
+                {g.sample.aircraft_type && (
+                  <span>Aircraft: {g.sample.aircraft_type}</span>
+                )}
+                {g.days.length > 1 && (
+                  <span>Flown on: {g.days.join(', ')}</span>
+                )}
+              </div>
+            )}
           </button>
         );
       })}
