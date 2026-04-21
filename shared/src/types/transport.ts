@@ -22,6 +22,10 @@ export interface TransportBooking {
   currency: string | null;
   price_home: number | null;
   notes: string | null;
+  airline: string | null;
+  departure_terminal: string | null;
+  arrival_terminal: string | null;
+  aircraft_type: string | null;
   traveller_ids: string[];
   created_at: string;
   updated_at: string;
@@ -37,6 +41,10 @@ export interface CreateTransportInput {
   price?: number;
   currency?: string;
   notes?: string;
+  airline?: string;
+  departure_terminal?: string;
+  arrival_terminal?: string;
+  aircraft_type?: string;
   traveller_ids: string[];
 }
 
