@@ -23,25 +23,37 @@ export interface FlightLiveStatus {
   arrival_gate: string | null;
 }
 
-const AVIATIONSTACK_BASE = 'https://api.aviationstack.com/v1';
+const FLIGHTAPI_BASE = 'https://api.flightapi.io/airline';
 
 /**
- * Normalise a flight IATA/ICAO code the way Aviationstack indexes it.
- * Airlines brand flights with zero-padded numbers ("BA0300", "LH0400"), but
- * Aviationstack stores them without the padding ("BA300", "LH400"). Strip
- * leading zeros from the numeric portion while keeping the airline prefix.
- *
- * Airline prefix is either 3 letters (ICAO, e.g. "BAW") or 2 alphanumerics
- * (IATA, e.g. "BA", "W9", "U2"). We prefer the ICAO match when both succeed.
+ * Normalise a raw flight code to canonical form: uppercase, no spaces,
+ * leading zeros stripped from the numeric portion.
+ *   "ba0300" → "BA300"
+ *   "W9 5731" → "W95731"
+ *   "bAW0123" → "BAW123"
  */
 export function normaliseFlightIata(raw: string): string {
   const s = raw.trim().toUpperCase().replace(/\s+/g, '');
-  // Try ICAO (3 letters) first, then IATA (2 alphanumeric)
   const icao = s.match(/^([A-Z]{3})0*(\d+)([A-Z]?)$/);
   if (icao) return icao[1] + icao[2] + icao[3];
   const iata = s.match(/^([A-Z0-9]{2})0*(\d+)([A-Z]?)$/);
   if (iata) return iata[1] + iata[2] + iata[3];
   return s;
+}
+
+/**
+ * Split a normalised flight code into airline prefix + number.
+ * FlightAPI.io wants these as two separate query params.
+ *   "BA300"   → { name: "BA",  num: "300" }
+ *   "W95731"  → { name: "W9",  num: "5731" }
+ *   "BAW300"  → { name: "BAW", num: "300" }
+ */
+function splitFlightCode(normalised: string): { name: string; num: string } | null {
+  const icao = normalised.match(/^([A-Z]{3})(\d+)([A-Z]?)$/);
+  if (icao) return { name: icao[1], num: icao[2] + icao[3] };
+  const iata = normalised.match(/^([A-Z0-9]{2})(\d+)([A-Z]?)$/);
+  if (iata) return { name: iata[1], num: iata[2] + iata[3] };
+  return null;
 }
 
 /** Cache hits return this shape; `data` is null for negative hits. */
@@ -51,99 +63,145 @@ interface CacheRow {
   data: FlightInstance | null;
 }
 
-/** Today's date (UTC) as YYYY-MM-DD — our cache key for free-tier real-time lookups. */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Extract HH:MM from an Aviationstack ISO string like "2026-04-21T08:00:00+00:00". */
+/** "2026-04-21" → "20260421" */
+function toYYYYMMDD(iso: string): string {
+  return iso.replace(/-/g, '');
+}
+
+/** Extract HH:MM from an ISO string like "2025-07-16T15:27:00+02:00". */
 function extractHHMM(iso: string | null | undefined): string {
-  if (!iso) return '';
+  if (!iso || typeof iso !== 'string') return '';
   const m = iso.match(/T(\d{2}:\d{2})/);
   return m ? m[1] : '';
 }
 
-/** Normalise terminal: Aviationstack often returns "5" or "Terminal 5". Store the bare identifier. */
-function normaliseTerminal(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const cleaned = raw.replace(/^Terminal\s+/i, '').trim();
-  return cleaned.length ? cleaned : null;
-}
-
-/** Map Aviationstack flight object → FlightInstance. Returns null if essential fields missing. */
-function mapToInstance(av: Record<string, unknown>, iata: string, date: string): FlightInstance | null {
-  const departure = av.departure as Record<string, unknown> | undefined;
-  const arrival = av.arrival as Record<string, unknown> | undefined;
-  const airline = av.airline as Record<string, unknown> | undefined;
-  const aircraft = av.aircraft as Record<string, unknown> | undefined;
-  if (!departure || !arrival || !airline) return null;
-  const depIata = departure.iata as string | undefined;
-  const arrIata = arrival.iata as string | undefined;
-  if (!depIata || !arrIata) return null;
-
-  return {
-    flight_iata: iata,
-    flight_date: date,
-    airline: (airline.name as string) ?? '',
-    departure_iata: depIata,
-    departure_airport: (departure.airport as string) ?? '',
-    departure_terminal: normaliseTerminal(departure.terminal),
-    departure_time_local: extractHHMM(departure.scheduled as string),
-    arrival_iata: arrIata,
-    arrival_airport: (arrival.airport as string) ?? '',
-    arrival_terminal: normaliseTerminal(arrival.terminal),
-    arrival_time_local: extractHHMM(arrival.scheduled as string),
-    aircraft_type: (aircraft?.iata as string) ?? null,
+/** FlightAPI.io's response is an array of `{departure}` and `{arrival}` objects. */
+interface FlightAPILeg {
+  departure?: {
+    airport?: string;
+    airportCode?: string;
+    terminal?: string | null;
+    gate?: string | null;
+    scheduledTime?: string;
+    estimatedTime?: string | null;
+    departureDateTime?: string;
+    offGroundTime?: string | null;
+    outGateTime?: string | null;
+  };
+  arrival?: {
+    airport?: string;
+    airportCode?: string;
+    terminal?: string | null;
+    gate?: string | null;
+    scheduledTime?: string;
+    estimatedTime?: string | null;
+    arrivalDateTime?: string;
+    onGroundTime?: string | null;
+    inGateTime?: string | null;
+    timeRemaining?: string | null;
   };
 }
 
-/**
- * Fetch the current real-time record for a flight from Aviationstack.
- * Free tier only supports real-time (no `flight_date` historical queries),
- * so we omit the date and take whatever's currently indexed.
- */
-async function fetchRealtime(iata: string, apiKey: string, dateToStamp: string): Promise<FlightInstance | null> {
-  const url = `${AVIATIONSTACK_BASE}/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(iata)}&limit=1`;
+interface ParsedFlight {
+  instance: FlightInstance | null;
+  status: FlightLiveStatus | null;
+}
+
+/** Find the first `departure` and `arrival` objects in a FlightAPI.io response. */
+function extractLegs(body: FlightAPILeg[]): { dep: NonNullable<FlightAPILeg['departure']> | null; arr: NonNullable<FlightAPILeg['arrival']> | null } {
+  let dep: FlightAPILeg['departure'] | null = null;
+  let arr: FlightAPILeg['arrival'] | null = null;
+  for (const item of body) {
+    if (item.departure && !dep) dep = item.departure;
+    if (item.arrival && !arr) arr = item.arrival;
+  }
+  return { dep: dep ?? null, arr: arr ?? null };
+}
+
+function parseFlightAPIResponse(body: unknown, iata: string, dateIso: string): ParsedFlight {
+  if (!Array.isArray(body) || body.length === 0) return { instance: null, status: null };
+  const { dep, arr } = extractLegs(body as FlightAPILeg[]);
+  if (!dep || !arr) return { instance: null, status: null };
+
+  // Essential fields — both airport codes must be present
+  if (!dep.airportCode || !arr.airportCode) return { instance: null, status: null };
+
+  const instance: FlightInstance = {
+    flight_iata: iata,
+    flight_date: dateIso,
+    airline: '', // FlightAPI.io doesn't return airline name; UI falls back to the IATA prefix
+    departure_iata: dep.airportCode,
+    departure_airport: dep.airport ?? '',
+    departure_terminal: dep.terminal?.trim() || null,
+    departure_time_local: extractHHMM(dep.departureDateTime),
+    arrival_iata: arr.airportCode,
+    arrival_airport: arr.airport ?? '',
+    arrival_terminal: arr.terminal?.trim() || null,
+    arrival_time_local: extractHHMM(arr.arrivalDateTime),
+    aircraft_type: null, // not provided by FlightAPI.io
+  };
+
+  // Derive status from ground-time signals
+  let flight_status = 'scheduled';
+  if (arr.onGroundTime || arr.inGateTime) flight_status = 'landed';
+  else if (dep.offGroundTime) flight_status = 'active';
+
+  const status: FlightLiveStatus = {
+    flight_status,
+    departure_gate: dep.gate?.trim() || null,
+    departure_delay_minutes: null, // FlightAPI.io times are fuzzy strings — skip delay calc
+    arrival_gate: arr.gate?.trim() || null,
+  };
+
+  return { instance, status };
+}
+
+async function fetchFromFlightAPI(iata: string, dateIso: string, apiKey: string): Promise<ParsedFlight> {
+  const split = splitFlightCode(iata);
+  if (!split) {
+    console.warn(`[flightService] ${iata}: could not split into airline/number`);
+    return { instance: null, status: null };
+  }
+  const url = `${FLIGHTAPI_BASE}/${apiKey}?num=${encodeURIComponent(split.num)}&name=${encodeURIComponent(split.name)}&date=${toYYYYMMDD(dateIso)}`;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 5000);
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
     const res = await fetch(url, { signal: ctrl.signal });
     if (!res.ok) {
-      console.warn(`[flightService] ${iata}: HTTP ${res.status} from Aviationstack`);
-      return null;
+      console.warn(`[flightService] ${iata} (${dateIso}): HTTP ${res.status} from FlightAPI.io`);
+      return { instance: null, status: null };
     }
-    const body = await res.json() as { data?: Record<string, unknown>[]; error?: unknown; pagination?: { total?: number } };
-    if (body.error) {
-      console.warn(`[flightService] ${iata}: API error`, body.error);
-      return null;
+    const body = await res.json();
+    const parsed = parseFlightAPIResponse(body, iata, dateIso);
+    if (parsed.instance) {
+      console.log(`[flightService] ${iata} (${dateIso}): OK`);
+    } else {
+      console.log(`[flightService] ${iata} (${dateIso}): no usable data in response`);
     }
-    const first = body.data?.[0];
-    if (!first) {
-      console.log(`[flightService] ${iata}: no results (pagination.total=${body.pagination?.total ?? 0})`);
-      return null;
-    }
-    console.log(`[flightService] ${iata}: OK, matched=${body.pagination?.total ?? 1}`);
-    // Aviationstack returns its own flight_date; prefer that, fall back to dateToStamp.
-    const actualDate = (first.flight_date as string) ?? dateToStamp;
-    return mapToInstance(first, iata, actualDate);
+    return parsed;
   } catch (err) {
-    console.warn(`[flightService] ${iata}: fetch failed`, (err as Error).message);
-    return null;
+    console.warn(`[flightService] ${iata} (${dateIso}): fetch failed`, (err as Error).message);
+    return { instance: null, status: null };
   } finally {
     clearTimeout(timer);
   }
 }
 
 /**
- * Look up a flight via 24h shared DB cache + single real-time Aviationstack call.
+ * Look up a flight via 24h shared DB cache + single FlightAPI.io call.
+ * If `targetDate` is provided, queries that date; otherwise falls back to today.
  * Returns an array (0 or 1 instances) so callers can keep the list-based UI.
  */
-export async function lookupFlight(rawIata: string): Promise<FlightInstance[]> {
-  const apiKey = process.env.AVIATIONSTACK_API_KEY;
-  if (!apiKey) throw new Error('AVIATIONSTACK_API_KEY not configured');
+export async function lookupFlight(rawIata: string, targetDate?: string): Promise<FlightInstance[]> {
+  const apiKey = process.env.FLIGHTAPI_KEY;
+  if (!apiKey) throw new Error('FLIGHTAPI_KEY not configured');
 
   const iata = normaliseFlightIata(rawIata);
-  const cacheKey = today();
+  const dateIso = targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate) ? targetDate : today();
 
   // Cache hit? Return stored instance (or empty array for negative cache)
   const cacheRes = await pool.query<CacheRow>(
@@ -151,15 +209,15 @@ export async function lookupFlight(rawIata: string): Promise<FlightInstance[]> {
        FROM flight_lookup_cache
       WHERE flight_iata = $1 AND flight_date = $2
         AND fetched_at > NOW() - INTERVAL '24 hours'`,
-    [iata, cacheKey]
+    [iata, dateIso]
   );
   if (cacheRes.rows.length > 0) {
     const row = cacheRes.rows[0];
     return row.data ? [row.data] : [];
   }
 
-  // Cache miss → one real-time call
-  const instance = await fetchRealtime(iata, apiKey, cacheKey);
+  // Cache miss → one FlightAPI.io call
+  const { instance } = await fetchFromFlightAPI(iata, dateIso, apiKey);
 
   // Persist (including negative result)
   await pool.query(
@@ -167,7 +225,7 @@ export async function lookupFlight(rawIata: string): Promise<FlightInstance[]> {
      VALUES ($1, $2, $3::jsonb, NOW())
      ON CONFLICT (flight_iata, flight_date)
      DO UPDATE SET data = EXCLUDED.data, fetched_at = NOW()`,
-    [iata, cacheKey, instance ? JSON.stringify(instance) : null]
+    [iata, dateIso, instance ? JSON.stringify(instance) : null]
   );
 
   return instance ? [instance] : [];
@@ -179,40 +237,17 @@ const liveCache = new Map<string, { at: number; value: FlightLiveStatus | null }
 const LIVE_TTL_MS = 5 * 60 * 1000;
 
 export async function getLiveStatus(rawIata: string, date: string): Promise<FlightLiveStatus | null> {
-  const apiKey = process.env.AVIATIONSTACK_API_KEY;
-  if (!apiKey) throw new Error('AVIATIONSTACK_API_KEY not configured');
+  const apiKey = process.env.FLIGHTAPI_KEY;
+  if (!apiKey) throw new Error('FLIGHTAPI_KEY not configured');
 
   const iata = normaliseFlightIata(rawIata);
   const key = `${iata}|${date}`;
   const hit = liveCache.get(key);
   if (hit && Date.now() - hit.at < LIVE_TTL_MS) return hit.value;
 
-  // Free tier: no flight_date. Live status is inherently real-time anyway.
-  const url = `${AVIATIONSTACK_BASE}/flights?access_key=${apiKey}&flight_iata=${encodeURIComponent(iata)}&limit=1`;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 5000);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) { liveCache.set(key, { at: Date.now(), value: null }); return null; }
-    const body = await res.json() as { data?: Record<string, unknown>[] };
-    const first = body.data?.[0];
-    if (!first) { liveCache.set(key, { at: Date.now(), value: null }); return null; }
-    const departure = first.departure as Record<string, unknown> | undefined;
-    const arrival = first.arrival as Record<string, unknown> | undefined;
-    const value: FlightLiveStatus = {
-      flight_status: (first.flight_status as string) ?? 'scheduled',
-      departure_gate: (departure?.gate as string) ?? null,
-      departure_delay_minutes: typeof departure?.delay === 'number' ? (departure.delay as number) : null,
-      arrival_gate: (arrival?.gate as string) ?? null,
-    };
-    liveCache.set(key, { at: Date.now(), value });
-    return value;
-  } catch {
-    liveCache.set(key, { at: Date.now(), value: null });
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const { status } = await fetchFromFlightAPI(iata, date, apiKey);
+  liveCache.set(key, { at: Date.now(), value: status });
+  return status;
 }
 
 /** Delete cache rows older than 48h. Called at server startup. */

@@ -77,7 +77,7 @@ Two separate services — `server` and `dashboard`:
 - `DASHBOARD_URL=https://your-dashboard.up.railway.app` — for CORS
 - `LITEAPI_API_KEY` — optional, enables hotel search autocomplete
 - `TABSCANNER_API_KEY` — optional, enables receipt OCR scanning
-- `AVIATIONSTACK_API_KEY` — optional, enables flight number lookup + live status (100 req/month free tier)
+- `FLIGHTAPI_KEY` — optional, enables flight number lookup + live status (FlightAPI.io, supports date param + budget carriers)
 
 **dashboard service env vars:**
 - `VITE_API_URL=https://your-server.up.railway.app` — points dashboard at the server API
@@ -164,7 +164,7 @@ All mounted at `/api/v1` (except `trips` at `/api/v1/trips`, weather/currency at
 | `currencyService.ts` | Fetch FX rates with 1-hour DB cache |
 | `weatherService.ts` | Fetch Open-Meteo forecast + marine data |
 | `airportCache.ts` | Load static airports.json into memory, filter by IATA/name/city |
-| `flightService.ts` | Aviationstack flight lookup + live status; reads/writes `flight_lookup_cache` (24h TTL), 5-min in-memory status cache |
+| `flightService.ts` | FlightAPI.io flight lookup + live status by date; reads/writes `flight_lookup_cache` (24h TTL), 5-min in-memory status cache |
 
 ---
 

@@ -27,17 +27,22 @@ router.get('/airports/search', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/v1/flights/lookup?iata=BA456
+ * GET /api/v1/flights/lookup?iata=BA456&date=2026-05-15
  *
- * Returns last 7 days of instances (cache-read-through to Aviationstack).
+ * Returns a single-element array with the flight's schedule on the given date
+ * (or today if date is omitted). Cache-read-through to FlightAPI.io, 24h TTL.
  */
 router.get('/flights/lookup', async (req: Request, res: Response) => {
   const raw = (req.query.iata as string ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  const date = (req.query.date as string ?? '').trim();
   if (!/^([A-Z0-9]{2}|[A-Z]{3})\d{1,4}[A-Z]?$/.test(raw)) {
     return res.status(400).json({ error: 'Invalid flight IATA format' });
   }
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Invalid date format (expected YYYY-MM-DD)' });
+  }
   try {
-    const instances = await lookupFlight(raw);
+    const instances = await lookupFlight(raw, date || undefined);
     res.json(instances);
   } catch (err) {
     const msg = (err as Error).message;

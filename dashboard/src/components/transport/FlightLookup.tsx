@@ -90,8 +90,8 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
   }, [flightNumber]);
 
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['flight-lookup', debouncedIata],
-    queryFn: () => flightsApi.lookup(debouncedIata),
+    queryKey: ['flight-lookup', debouncedIata, bookingDate],
+    queryFn: () => flightsApi.lookup(debouncedIata, bookingDate || undefined),
     enabled: debouncedIata.length >= 3,
     staleTime: 60 * 60 * 1000,
     retry: false,

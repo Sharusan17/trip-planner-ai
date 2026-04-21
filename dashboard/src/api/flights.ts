@@ -23,8 +23,11 @@ export interface FlightLiveStatus {
 }
 
 export const flightsApi = {
-  lookup: (iata: string) =>
-    api.get<FlightInstance[]>(`/flights/lookup?iata=${encodeURIComponent(iata)}`),
+  lookup: (iata: string, date?: string) => {
+    const params = new URLSearchParams({ iata });
+    if (date) params.set('date', date);
+    return api.get<FlightInstance[]>(`/flights/lookup?${params.toString()}`);
+  },
   status: (iata: string, date: string) =>
     api.get<FlightLiveStatus>(`/flights/status?iata=${encodeURIComponent(iata)}&date=${encodeURIComponent(date)}`),
 };
