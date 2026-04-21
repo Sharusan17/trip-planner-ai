@@ -33,7 +33,7 @@ router.get('/airports/search', (req: Request, res: Response) => {
  */
 router.get('/flights/lookup', async (req: Request, res: Response) => {
   const raw = (req.query.iata as string ?? '').trim().toUpperCase().replace(/\s+/g, '');
-  if (!/^[A-Z]{2,3}\d{1,4}[A-Z]?$/.test(raw)) {
+  if (!/^([A-Z0-9]{2}|[A-Z]{3})\d{1,4}[A-Z]?$/.test(raw)) {
     return res.status(400).json({ error: 'Invalid flight IATA format' });
   }
   try {
@@ -57,7 +57,7 @@ router.get('/flights/lookup', async (req: Request, res: Response) => {
 router.get('/flights/status', async (req: Request, res: Response) => {
   const iata = (req.query.iata as string ?? '').trim().toUpperCase().replace(/\s+/g, '');
   const date = (req.query.date as string ?? '').trim();
-  if (!/^[A-Z]{2,3}\d{1,4}[A-Z]?$/.test(iata)) {
+  if (!/^([A-Z0-9]{2}|[A-Z]{3})\d{1,4}[A-Z]?$/.test(iata)) {
     return res.status(400).json({ error: 'Invalid flight IATA format' });
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {

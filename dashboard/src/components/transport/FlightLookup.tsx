@@ -79,7 +79,9 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
 
   useEffect(() => {
     const normalised = normaliseIata(flightNumber);
-    if (normalised.length < 4 || !/^[A-Z]{2,3}\d{1,4}[A-Z]?$/.test(normalised)) {
+    // IATA airline codes are 2 alphanumeric chars (e.g. W9 Wizz Air, U2 easyJet, BA British Airways).
+    // ICAO codes are 3 letters (e.g. BAW). Followed by 1-4 digit flight number and optional suffix letter.
+    if (normalised.length < 3 || !/^([A-Z0-9]{2}|[A-Z]{3})\d{1,4}[A-Z]?$/.test(normalised)) {
       setDebouncedIata('');
       return;
     }
@@ -90,7 +92,7 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['flight-lookup', debouncedIata],
     queryFn: () => flightsApi.lookup(debouncedIata),
-    enabled: debouncedIata.length >= 4,
+    enabled: debouncedIata.length >= 3,
     staleTime: 60 * 60 * 1000,
     retry: false,
   });
