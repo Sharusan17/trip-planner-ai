@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plane, Loader2, Check, Clock, Building2, CalendarClock } from 'lucide-react';
+import { Plane, Loader2, Check, Clock, CalendarClock } from 'lucide-react';
 import { flightsApi, type FlightInstance } from '@/api/flights';
 
 export interface FlightAutoFill {
@@ -235,12 +235,26 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
               )}
             </div>
 
-            {/* Row 2: route (left) + times (right) */}
+            {/* Row 2: route (left, each airport with terminal stacked underneath) + times (right) */}
             <div className="flex items-center justify-between gap-3">
-              <div className="text-base font-bold text-ink">
-                {g.sample.departure_iata}
-                <span className="text-ink-faint mx-1.5">→</span>
-                {g.sample.arrival_iata}
+              <div className="flex items-start gap-2">
+                <div className="flex flex-col">
+                  <span className="text-base font-bold text-ink leading-tight">{g.sample.departure_iata}</span>
+                  {g.sample.departure_terminal && (
+                    <span className="text-[10px] text-ink-faint leading-tight mt-0.5">
+                      Terminal {g.sample.departure_terminal}
+                    </span>
+                  )}
+                </div>
+                <span className="text-ink-faint text-base leading-tight">→</span>
+                <div className="flex flex-col">
+                  <span className="text-base font-bold text-ink leading-tight">{g.sample.arrival_iata}</span>
+                  {g.sample.arrival_terminal && (
+                    <span className="text-[10px] text-ink-faint leading-tight mt-0.5">
+                      Terminal {g.sample.arrival_terminal}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-semibold text-ink">
@@ -259,18 +273,6 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
                 )}
               </div>
             </div>
-
-            {/* Row 3: terminals (small, only if either known) */}
-            {(g.sample.departure_terminal || g.sample.arrival_terminal) && (
-              <div className="flex items-center gap-1.5 text-xs text-ink-faint mt-1.5">
-                <Building2 size={11} strokeWidth={2} className="shrink-0" />
-                <span>
-                  Terminal: {g.sample.departure_terminal ?? '—'}
-                  <span className="mx-1">→</span>
-                  Terminal: {g.sample.arrival_terminal ?? '—'}
-                </span>
-              </div>
-            )}
 
             {/* Row 4: extra details (aircraft, multi-day schedule) */}
             {(g.sample.aircraft_type || g.days.length > 1) && (
