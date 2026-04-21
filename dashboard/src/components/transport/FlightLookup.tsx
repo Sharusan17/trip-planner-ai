@@ -145,7 +145,9 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
     );
   }
 
-  const headline = `Current ${debouncedIata} schedule${bookingDateLabel ? ` — use as template for ${bookingDateLabel}` : ''}`;
+  const headline = bookingDateLabel
+    ? `${debouncedIata} on ${bookingDateLabel}`
+    : debouncedIata;
 
   return (
     <div className="mt-3 space-y-2">
@@ -190,7 +192,7 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
               </div>
             )}
             <div className="mt-2 flex items-center gap-1 text-xs text-navy font-medium">
-              <Search size={12} strokeWidth={2} /> Use this schedule
+              <Search size={12} strokeWidth={2} /> Use this flight
             </div>
           </button>
         );
