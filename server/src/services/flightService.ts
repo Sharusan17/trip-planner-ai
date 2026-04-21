@@ -1,4 +1,8 @@
 import pool from '../db/pool';
+import { createLogger } from '../utils/logger';
+import { lookupAirline, lookupAirport } from './iataLookupService';
+
+const log = createLogger('flight');
 
 /** Canonical instance shape returned to the dashboard. */
 export interface FlightInstance {
@@ -160,31 +164,81 @@ function parseFlightAPIResponse(body: unknown, iata: string, dateIso: string): P
   return { instance, status };
 }
 
+/**
+ * Fill in airline + airport names using the FlightAPI.io /iata endpoint.
+ * Mutates the instance in place; safe to call with partial data.
+ */
+async function enrichInstance(instance: FlightInstance, airlinePrefix: string): Promise<void> {
+  const tasks: Promise<void>[] = [];
+
+  if (!instance.airline && airlinePrefix) {
+    tasks.push(
+      lookupAirline(airlinePrefix).then((info) => {
+        if (info?.name) instance.airline = info.name;
+      }),
+    );
+  }
+
+  if (!instance.departure_airport && instance.departure_iata) {
+    tasks.push(
+      lookupAirport(instance.departure_iata).then((info) => {
+        if (info?.name) instance.departure_airport = info.name;
+      }),
+    );
+  }
+
+  if (!instance.arrival_airport && instance.arrival_iata) {
+    tasks.push(
+      lookupAirport(instance.arrival_iata).then((info) => {
+        if (info?.name) instance.arrival_airport = info.name;
+      }),
+    );
+  }
+
+  if (tasks.length) {
+    await Promise.allSettled(tasks);
+  }
+}
+
 async function fetchFromFlightAPI(iata: string, dateIso: string, apiKey: string): Promise<ParsedFlight> {
   const split = splitFlightCode(iata);
   if (!split) {
-    console.warn(`[flightService] ${iata}: could not split into airline/number`);
+    log.warn(`${iata}: could not split into airline/number`);
     return { instance: null, status: null };
   }
+  // Redact the api key from the logged URL
+  const loggedUrl = `${FLIGHTAPI_BASE}/[REDACTED]?num=${split.num}&name=${split.name}&date=${toYYYYMMDD(dateIso)}`;
+  log.debug(`${iata} (${dateIso}): calling FlightAPI.io`, { url: loggedUrl });
+
   const url = `${FLIGHTAPI_BASE}/${apiKey}?num=${encodeURIComponent(split.num)}&name=${encodeURIComponent(split.name)}&date=${toYYYYMMDD(dateIso)}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
+  const start = Date.now();
   try {
     const res = await fetch(url, { signal: ctrl.signal });
+    const dur = Date.now() - start;
     if (!res.ok) {
-      console.warn(`[flightService] ${iata} (${dateIso}): HTTP ${res.status} from FlightAPI.io`);
+      const bodyText = await res.text().catch(() => '');
+      log.warn(`${iata} (${dateIso}): HTTP ${res.status} from FlightAPI.io in ${dur}ms`, { bodyPreview: bodyText.slice(0, 300) });
       return { instance: null, status: null };
     }
     const body = await res.json();
     const parsed = parseFlightAPIResponse(body, iata, dateIso);
     if (parsed.instance) {
-      console.log(`[flightService] ${iata} (${dateIso}): OK`);
+      await enrichInstance(parsed.instance, split.name);
+      log.info(`${iata} (${dateIso}): lookup OK in ${dur}ms`, {
+        airline: parsed.instance.airline || '(unknown)',
+        route: `${parsed.instance.departure_iata} → ${parsed.instance.arrival_iata}`,
+        airports: `${parsed.instance.departure_airport} → ${parsed.instance.arrival_airport}`,
+        times: `${parsed.instance.departure_time_local} → ${parsed.instance.arrival_time_local}`,
+        status: parsed.status?.flight_status,
+      });
     } else {
-      console.log(`[flightService] ${iata} (${dateIso}): no usable data in response`);
+      log.info(`${iata} (${dateIso}): no usable data in response in ${dur}ms`, { body: Array.isArray(body) ? `array[${body.length}]` : body });
     }
     return parsed;
   } catch (err) {
-    console.warn(`[flightService] ${iata} (${dateIso}): fetch failed`, (err as Error).message);
+    log.warn(`${iata} (${dateIso}): fetch failed in ${Date.now() - start}ms`, { message: (err as Error).message });
     return { instance: null, status: null };
   } finally {
     clearTimeout(timer);
@@ -198,10 +252,14 @@ async function fetchFromFlightAPI(iata: string, dateIso: string, apiKey: string)
  */
 export async function lookupFlight(rawIata: string, targetDate?: string): Promise<FlightInstance[]> {
   const apiKey = process.env.FLIGHTAPI_KEY;
-  if (!apiKey) throw new Error('FLIGHTAPI_KEY not configured');
+  if (!apiKey) {
+    log.warn('lookup called but FLIGHTAPI_KEY not configured');
+    throw new Error('FLIGHTAPI_KEY not configured');
+  }
 
   const iata = normaliseFlightIata(rawIata);
   const dateIso = targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate) ? targetDate : today();
+  log.debug(`lookup ${iata} for ${dateIso}`, { rawInput: rawIata });
 
   // Cache hit? Return stored instance (or empty array for negative cache)
   const cacheRes = await pool.query<CacheRow>(
@@ -213,9 +271,11 @@ export async function lookupFlight(rawIata: string, targetDate?: string): Promis
   );
   if (cacheRes.rows.length > 0) {
     const row = cacheRes.rows[0];
+    log.info(`${iata} (${dateIso}): cache HIT`, { negative: !row.data });
     return row.data ? [row.data] : [];
   }
 
+  log.debug(`${iata} (${dateIso}): cache MISS, fetching`);
   // Cache miss → one FlightAPI.io call
   const { instance } = await fetchFromFlightAPI(iata, dateIso, apiKey);
 

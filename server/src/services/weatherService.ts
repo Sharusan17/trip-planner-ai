@@ -1,3 +1,6 @@
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('weather');
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1';
 
 export async function fetchWeather(lat: number, lng: number) {
@@ -5,12 +8,16 @@ export async function fetchWeather(lat: number, lng: number) {
 
   const marineUrl = `${OPEN_METEO_BASE}/marine?latitude=${lat}&longitude=${lng}&daily=wave_height_max,wave_period_max&hourly=sea_surface_temperature&timezone=auto&forecast_days=1`;
 
+  log.debug(`fetch ${lat},${lng}`);
+  const start = Date.now();
   const [forecastRes, marineRes] = await Promise.all([
     fetch(forecastUrl),
     fetch(marineUrl).catch(() => null),
   ]);
+  const dur = Date.now() - start;
 
   if (!forecastRes.ok) {
+    log.error(`forecast upstream failed`, { status: forecastRes.status, lat, lng, dur });
     throw new Error('Failed to fetch weather data');
   }
 
@@ -18,7 +25,10 @@ export async function fetchWeather(lat: number, lng: number) {
   let marine = null;
   if (marineRes && marineRes.ok) {
     marine = await marineRes.json();
+  } else if (marineRes) {
+    log.debug('marine endpoint returned non-OK; skipping beach data', { status: marineRes.status });
   }
+  log.info(`fetched ${lat.toFixed(3)},${lng.toFixed(3)} in ${dur}ms`, { marine: !!marine });
 
   // Build daily forecast
   const daily = forecast.daily.time.map((date: string, i: number) => ({

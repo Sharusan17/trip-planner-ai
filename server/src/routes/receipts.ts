@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { uploadReceipt } from '../middleware/upload';
+import { createLogger } from '../utils/logger';
 
+const log = createLogger('tabscanner');
 const router = Router();
 
 const TABSCANNER_PROCESS = 'https://api.tabscanner.com/api/2/process';
@@ -13,11 +15,14 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
   try {
     const apiKey = process.env.TABSCANNER_API_KEY;
     if (!apiKey) {
+      log.warn('TABSCANNER_API_KEY not configured — receipt scan unavailable');
       return res.status(500).json({ error: 'TABSCANNER_API_KEY is not configured' });
     }
     if (!req.file) {
+      log.warn('scan called with no file');
       return res.status(400).json({ error: 'No receipt file provided' });
     }
+    log.info(`scanning receipt`, { bytes: req.file.size, mime: req.file.mimetype, name: req.file.originalname });
 
     // ── Step 1: Upload ────────────────────────────────────────────────────────
     const uploadForm = new FormData();
@@ -31,9 +36,10 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
     });
 
     const uploadRaw = await uploadRes.text();
-    console.log('[Tabscanner] upload status:', uploadRes.status, '| body:', uploadRaw);
+    log.info(`upload status=${uploadRes.status}`, { bodyPreview: uploadRaw.slice(0, 500) });
 
     if (!uploadRes.ok) {
+      log.warn('upload failed', { status: uploadRes.status });
       return res.status(502).json({ error: 'Tabscanner upload failed', details: uploadRaw });
     }
 
@@ -50,7 +56,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
 
     // If the result is already included in the upload response
     if (uploadData?.result && isSuccess(uploadData?.status)) {
-      console.log('[Tabscanner] result in upload response');
+      log.info('result in upload response (no polling needed)');
       return res.json(formatResult(uploadData.result));
     }
 
@@ -64,7 +70,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
       });
 
       const pollRaw = await pollRes.text();
-      console.log(`[Tabscanner] poll #${attempt + 1} status:`, pollRes.status, '| body:', pollRaw.slice(0, 500));
+      log.debug(`poll #${attempt + 1} status=${pollRes.status}`, { bodyPreview: pollRaw.slice(0, 500) });
 
       if (!pollRes.ok) continue;
 
@@ -73,13 +79,13 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
 
       // Return as soon as a result object is present — don't rely solely on status string
       if (pollData?.result) {
-        console.log('[Tabscanner] got result, status:', pollData?.status);
+        log.info(`got result after ${attempt + 1} poll(s)`, { status: pollData?.status });
         return res.json(formatResult(pollData.result));
       }
 
       // Explicit failure
       if (pollData?.status === 'fail' || pollData?.status === 'error') {
-        console.log('[Tabscanner] explicit failure:', pollData);
+        log.warn('explicit failure from Tabscanner', { details: pollData });
         return res.status(422).json({ error: 'Tabscanner could not read the receipt', details: pollData });
       }
 
@@ -88,7 +94,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
 
     return res.status(504).json({ error: 'Tabscanner timed out after 30s — try a clearer photo' });
   } catch (err) {
-    console.error('[Tabscanner] unexpected error:', err);
+    log.error('unexpected scan error', { message: (err as Error).message, stack: (err as Error).stack });
     res.status(500).json({ error: (err as Error).message });
   }
 });
@@ -136,7 +142,7 @@ function formatResult(raw: TabscannerResult) {
   const currency    = (raw.currency ?? 'GBP').toUpperCase();
 
   const rawItems = raw.lineItems ?? [];
-  console.log('[Tabscanner] raw lineItems:', JSON.stringify(rawItems));
+  log.debug('raw lineItems', { count: rawItems.length, sample: rawItems.slice(0, 3) });
 
   // Resolve per-item total: prefer lineTotal, fall back to qty × price
   const withAmounts = rawItems.map((li) => {
@@ -163,7 +169,7 @@ function formatResult(raw: TabscannerResult) {
     return { desc, qty, amount };
   });
 
-  console.log('[Tabscanner] cleaned items:', JSON.stringify(withAmounts));
+  log.debug('cleaned items', { count: withAmounts.length, items: withAmounts });
 
   const validItems = withAmounts.filter((li) => li.amount > 0);
   const itemsSum   = validItems.reduce((s, li) => s + li.amount, 0);

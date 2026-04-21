@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
 import tripsRouter from './routes/trips';
 import travellersRouter from './routes/travellers';
 import itineraryRouter from './routes/itinerary';
@@ -20,6 +21,20 @@ import hotelSearchRouter from './routes/hotelSearch';
 import flightSearchRouter from './routes/flightSearch';
 import { loadAirports } from './services/airportCache';
 import { cleanupStaleCache } from './services/flightService';
+import { createLogger } from './utils/logger';
+
+const log = createLogger('app');
+
+log.info('Server initialising', {
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  logLevel: (process.env.LOG_LEVEL ?? 'info').toLowerCase(),
+  dashboardUrl: process.env.DASHBOARD_URL ?? '(unset — CORS wide-open)',
+  integrations: {
+    flightApi: process.env.FLIGHTAPI_KEY ? 'configured' : 'NOT SET',
+    liteApi: process.env.LITEAPI_API_KEY ? 'configured' : 'NOT SET',
+    tabscanner: process.env.TABSCANNER_API_KEY ? 'configured' : 'NOT SET',
+  },
+});
 
 const app = express();
 
@@ -28,6 +43,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use(requestLogger);
 
 app.use('/api/v1/trips', tripsRouter);
 app.use('/api/v1', travellersRouter);
