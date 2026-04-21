@@ -6,6 +6,7 @@ import { transportApi } from '../api/transport';
 import { travellersApi } from '../api/travellers';
 import type { TransportBooking, Vehicle } from '@trip-planner-ai/shared';
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
+import FlightLiveStatus from '../components/transport/FlightLiveStatus';
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
@@ -144,11 +145,22 @@ export default function TransportPage() {
                           <span className="text-2xl">{TRANSPORT_ICONS[b.transport_type]}</span>
                           <div>
                             <p className="font-semibold text-ink">
-                              {b.from_location} → {b.to_location}
+                              {b.from_location}{b.departure_terminal ? ` T${b.departure_terminal}` : ''}
+                              {' → '}
+                              {b.to_location}{b.arrival_terminal ? ` T${b.arrival_terminal}` : ''}
                             </p>
-                            <p className="text-sm text-ink/60">{formatDateTime(b.departure_time)}
+                            <p className="text-sm text-ink/60">
+                              {b.airline && <span className="mr-1">{b.airline} ·</span>}
+                              {formatDateTime(b.departure_time)}
                               {b.arrival_time && ` → ${formatDateTime(b.arrival_time)}`}
+                              {b.aircraft_type && ` · ${b.aircraft_type}`}
                             </p>
+                            {b.transport_type === 'flight' && b.reference_number && (
+                              <FlightLiveStatus
+                                flightIata={b.reference_number.toUpperCase().replace(/\s+/g, '')}
+                                departureISO={b.departure_time}
+                              />
+                            )}
                           </div>
                         </div>
                         {b.reference_number && (
