@@ -185,12 +185,14 @@ export default function TransportBookingFormPage() {
           </div>
         </div>
 
-        {/* Reference */}
+        {/* Flight number / booking reference */}
         <div>
-          <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Reference / Booking No.</label>
+          <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+            {form.transport_type === 'flight' ? 'Flight number' : 'Booking reference'}
+          </label>
           <input className="vintage-input w-full font-mono" value={form.reference_number}
             onChange={(e) => setForm({ ...form, reference_number: e.target.value })}
-            placeholder="e.g. TP1234" />
+            placeholder={form.transport_type === 'flight' ? 'e.g. BA456' : 'e.g. TP1234'} />
           {form.transport_type === 'flight' && (
             <FlightLookup
               flightNumber={form.reference_number}

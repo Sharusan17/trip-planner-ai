@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plane, Loader2, Check, Clock, Building2 } from 'lucide-react';
+import { Plane, Loader2, Check, Clock, Building2, CalendarClock } from 'lucide-react';
 import { flightsApi, type FlightInstance } from '@/api/flights';
 
 export interface FlightAutoFill {
@@ -100,10 +100,15 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
     setSelectedSignature('');
   }, [debouncedIata, bookingDate]);
 
+  // Only run the lookup once a booking date is set — the API needs it to return
+  // the right daily schedule, and it prevents wasted calls if the user is still
+  // filling in the form.
+  const hasBookingDate = /^\d{4}-\d{2}-\d{2}$/.test(bookingDate);
+
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['flight-lookup', debouncedIata, bookingDate],
     queryFn: () => flightsApi.lookup(debouncedIata, bookingDate || undefined),
-    enabled: debouncedIata.length >= 3,
+    enabled: debouncedIata.length >= 3 && hasBookingDate,
     staleTime: 60 * 60 * 1000,
     retry: false,
   });
@@ -122,6 +127,19 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
   }, [bookingDate]);
 
   if (!debouncedIata) return null;
+
+  // Prompt for date before hitting the API — most graceful failure mode.
+  if (!hasBookingDate) {
+    return (
+      <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/40 bg-gold/5 px-3 py-2 text-xs text-ink">
+        <CalendarClock size={14} className="text-gold shrink-0 mt-0.5" strokeWidth={2} />
+        <span>
+          <span className="font-semibold">Set a departure date first.</span>{' '}
+          Flight schedules depend on the day — add the departure date above to look up {debouncedIata}.
+        </span>
+      </div>
+    );
+  }
 
   if (isLoading || isFetching) {
     return (

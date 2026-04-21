@@ -219,7 +219,7 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
 
         <input
           className="vintage-input w-full"
-          placeholder="Booking ref / PNR (optional)"
+          placeholder={draft.transport_type === 'flight' ? 'Flight number (e.g. BA456)' : 'Booking reference (optional)'}
           value={draft.reference_number}
           onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
         />
