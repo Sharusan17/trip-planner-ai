@@ -350,6 +350,22 @@ const migrations = [
   `ALTER TABLE trip_photos ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100);`,
   `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_data BYTEA;`,
   `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_mime VARCHAR(100);`,
+
+  // 017: flight lookup cache + transport booking flight detail columns
+  `CREATE TABLE IF NOT EXISTS flight_lookup_cache (
+    flight_iata TEXT NOT NULL,
+    flight_date DATE NOT NULL,
+    data JSONB,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (flight_iata, flight_date)
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_flight_cache_fetched ON flight_lookup_cache(fetched_at);`,
+
+  `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS airline TEXT;`,
+  `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS departure_terminal TEXT;`,
+  `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS arrival_terminal TEXT;`,
+  `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS aircraft_type TEXT;`,
 ];
 
 export async function runMigrations() {
