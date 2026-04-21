@@ -45,6 +45,7 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
     const {
       transport_type, from_location, to_location, departure_time, arrival_time,
       reference_number, price, currency, notes, traveller_ids,
+      airline, departure_terminal, arrival_terminal, aircraft_type,
     } = req.body;
 
     const tripResult = await client.query(`SELECT home_currency FROM trips WHERE id = $1`, [tripId]);
@@ -66,11 +67,13 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
     const bookingResult = await client.query(
       `INSERT INTO transport_bookings
          (trip_id, transport_type, from_location, to_location, departure_time, arrival_time,
-          reference_number, price, currency, price_home, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+          reference_number, price, currency, price_home, notes,
+          airline, departure_terminal, arrival_terminal, aircraft_type)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [tripId, transport_type, from_location, to_location, departure_time,
        arrival_time || null, reference_number || null,
-       price || null, currency || null, priceHome, notes || null]
+       price || null, currency || null, priceHome, notes || null,
+       airline || null, departure_terminal || null, arrival_terminal || null, aircraft_type || null]
     );
     const booking = bookingResult.rows[0];
 
@@ -124,6 +127,7 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
     const {
       transport_type, from_location, to_location, departure_time, arrival_time,
       reference_number, price, currency, notes, traveller_ids,
+      airline, departure_terminal, arrival_terminal, aircraft_type,
     } = req.body;
 
     const existing = await client.query(`SELECT * FROM transport_bookings WHERE id = $1`, [req.params.id]);
@@ -158,11 +162,17 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
          reference_number = COALESCE($6, reference_number),
          price = $7, currency = $8, price_home = $9,
          notes = COALESCE($10, notes),
+         airline = COALESCE($11, airline),
+         departure_terminal = COALESCE($12, departure_terminal),
+         arrival_terminal = COALESCE($13, arrival_terminal),
+         aircraft_type = COALESCE($14, aircraft_type),
          updated_at = NOW()
-       WHERE id = $11 RETURNING *`,
+       WHERE id = $15 RETURNING *`,
       [transport_type ?? null, from_location ?? null, to_location ?? null,
        departure_time ?? null, arrival_time ?? null, reference_number ?? null,
-       newPrice, newCurrency, priceHome, notes ?? null, req.params.id]
+       newPrice, newCurrency, priceHome, notes ?? null,
+       airline ?? null, departure_terminal ?? null, arrival_terminal ?? null, aircraft_type ?? null,
+       req.params.id]
     );
     const booking = updResult.rows[0];
 
