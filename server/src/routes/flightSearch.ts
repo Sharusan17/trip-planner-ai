@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { searchAirports } from '../services/airportCache';
+import { lookupFlight, getLiveStatus } from '../services/flightService';
 
 const router = Router();
 
@@ -23,6 +24,56 @@ router.get('/airports/search', (req: Request, res: Response) => {
   });
 
   res.json(suggestions);
+});
+
+/**
+ * GET /api/v1/flights/lookup?iata=BA456
+ *
+ * Returns last 7 days of instances (cache-read-through to Aviationstack).
+ */
+router.get('/flights/lookup', async (req: Request, res: Response) => {
+  const raw = (req.query.iata as string ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!/^[A-Z]{2,3}\d{1,4}[A-Z]?$/.test(raw)) {
+    return res.status(400).json({ error: 'Invalid flight IATA format' });
+  }
+  try {
+    const instances = await lookupFlight(raw);
+    res.json(instances);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('not configured')) {
+      return res.status(503).json({ error: 'Flight lookup not configured' });
+    }
+    res.status(502).json({ error: 'Flight lookup failed' });
+  }
+});
+
+/**
+ * GET /api/v1/flights/status?iata=BA456&date=2026-04-21
+ *
+ * Returns live status/gate/delay for a single flight on a single date.
+ * 5-min in-memory cache.
+ */
+router.get('/flights/status', async (req: Request, res: Response) => {
+  const iata = (req.query.iata as string ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  const date = (req.query.date as string ?? '').trim();
+  if (!/^[A-Z]{2,3}\d{1,4}[A-Z]?$/.test(iata)) {
+    return res.status(400).json({ error: 'Invalid flight IATA format' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Invalid date format (expected YYYY-MM-DD)' });
+  }
+  try {
+    const status = await getLiveStatus(iata, date);
+    if (!status) return res.status(404).json({ error: 'No status available' });
+    res.json(status);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg.includes('not configured')) {
+      return res.status(503).json({ error: 'Flight lookup not configured' });
+    }
+    res.status(502).json({ error: 'Flight status failed' });
+  }
 });
 
 export default router;
