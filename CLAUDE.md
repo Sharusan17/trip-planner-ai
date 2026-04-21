@@ -77,6 +77,7 @@ Two separate services — `server` and `dashboard`:
 - `DASHBOARD_URL=https://your-dashboard.up.railway.app` — for CORS
 - `LITEAPI_API_KEY` — optional, enables hotel search autocomplete
 - `TABSCANNER_API_KEY` — optional, enables receipt OCR scanning
+- `AVIATIONSTACK_API_KEY` — optional, enables flight number lookup + live status (100 req/month free tier)
 
 **dashboard service env vars:**
 - `VITE_API_URL=https://your-server.up.railway.app` — points dashboard at the server API
@@ -155,7 +156,7 @@ All mounted at `/api/v1` (except `trips` at `/api/v1/trips`, weather/currency at
 | `photos.ts` | Photo upload/retrieve/delete (BYTEA in DB) |
 | `receipts.ts` | `POST /receipts/scan` — Tabscanner OCR |
 | `hotelSearch.ts` | `GET /hotels/search` — LiteAPI hotel autocomplete |
-| `flightSearch.ts` | `GET /airports/search` — static bundled airports |
+| `flightSearch.ts` | `GET /airports/search` — static bundled airports; `GET /flights/lookup` — Aviationstack flight number lookup; `GET /flights/status` — live flight status (within 24h) |
 
 ### Server Services
 | File | Purpose |
@@ -163,6 +164,7 @@ All mounted at `/api/v1` (except `trips` at `/api/v1/trips`, weather/currency at
 | `currencyService.ts` | Fetch FX rates with 1-hour DB cache |
 | `weatherService.ts` | Fetch Open-Meteo forecast + marine data |
 | `airportCache.ts` | Load static airports.json into memory, filter by IATA/name/city |
+| `flightService.ts` | Aviationstack flight lookup + live status; reads/writes `flight_lookup_cache` (24h TTL), 5-min in-memory status cache |
 
 ---
 
@@ -219,7 +221,7 @@ Dashboard · Travellers · Itinerary · Map · Finance · Logistics · Community
 All migrations inline in `server/src/db/migrate.ts`. Current tables (22):
 
 - **Core:** `trips`, `travellers`, `itinerary_days`, `activities`, `locations`
-- **Caches:** `currency_cache`
+- **Caches:** `currency_cache`, `flight_lookup_cache`
 - **Finance:** `expenses`, `expense_splits`, `expense_budgets`, `settlements`, `deposits`
 - **Logistics:** `transport_bookings`, `transport_travellers`, `vehicles`, `vehicle_seat_assignments`, `accommodation_bookings`, `accommodation_travellers`
 - **Community:** `announcements`, `polls`, `poll_options`, `poll_votes`, `trip_photos`
