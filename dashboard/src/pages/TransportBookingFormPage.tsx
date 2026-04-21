@@ -8,6 +8,7 @@ import type { TransportType, CreateTransportInput } from '@trip-planner-ai/share
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft } from 'lucide-react';
 import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
+import FlightLookup, { type FlightAutoFill } from '@/components/transport/FlightLookup';
 
 const TRANSPORT_TYPES: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
 
@@ -22,12 +23,17 @@ interface FormData {
   currency: string;
   notes: string;
   traveller_ids: string[];
+  airline: string;
+  departure_terminal: string;
+  arrival_terminal: string;
+  aircraft_type: string;
 }
 
 const emptyForm: FormData = {
   transport_type: 'flight', from_location: '', to_location: '',
   departure_time: '', arrival_time: '', reference_number: '',
   price: '', currency: 'EUR', notes: '', traveller_ids: [],
+  airline: '', departure_terminal: '', arrival_terminal: '', aircraft_type: '',
 };
 
 export default function TransportBookingFormPage() {
@@ -66,6 +72,10 @@ export default function TransportBookingFormPage() {
       currency: b.currency ?? 'EUR',
       notes: b.notes ?? '',
       traveller_ids: b.traveller_ids,
+      airline: b.airline ?? '',
+      departure_terminal: b.departure_terminal ?? '',
+      arrival_terminal: b.arrival_terminal ?? '',
+      aircraft_type: b.aircraft_type ?? '',
     });
   }, [isEdit, id, bookings]);
 
@@ -92,6 +102,10 @@ export default function TransportBookingFormPage() {
       price: form.price ? parseFloat(form.price) : undefined,
       currency: form.currency || undefined,
       notes: form.notes || undefined,
+      airline: form.airline || undefined,
+      departure_terminal: form.departure_terminal || undefined,
+      arrival_terminal: form.arrival_terminal || undefined,
+      aircraft_type: form.aircraft_type || undefined,
       traveller_ids: form.traveller_ids,
     };
     if (isEdit && id) updateMutation.mutate({ id, data });
@@ -177,7 +191,59 @@ export default function TransportBookingFormPage() {
           <input className="vintage-input w-full font-mono" value={form.reference_number}
             onChange={(e) => setForm({ ...form, reference_number: e.target.value })}
             placeholder="e.g. TP1234" />
+          {form.transport_type === 'flight' && (
+            <FlightLookup
+              flightNumber={form.reference_number}
+              bookingDate={form.departure_time.slice(0, 10)}
+              onAutoFill={(data: FlightAutoFill) => {
+                const datePart = form.departure_time.slice(0, 10);
+                const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : form.departure_time;
+                const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : form.arrival_time;
+                setForm({
+                  ...form,
+                  from_location: data.from_location,
+                  to_location: data.to_location,
+                  airline: data.airline,
+                  departure_terminal: data.departure_terminal ?? '',
+                  arrival_terminal: data.arrival_terminal ?? '',
+                  aircraft_type: data.aircraft_type ?? '',
+                  departure_time: depDT,
+                  arrival_time: arrDT,
+                });
+              }}
+            />
+          )}
         </div>
+
+        {/* Flight-only fields: airline, aircraft, terminals */}
+        {form.transport_type === 'flight' && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Airline</label>
+              <input className="vintage-input w-full" value={form.airline}
+                onChange={(e) => setForm({ ...form, airline: e.target.value })}
+                placeholder="e.g. British Airways" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Aircraft</label>
+              <input className="vintage-input w-full" value={form.aircraft_type}
+                onChange={(e) => setForm({ ...form, aircraft_type: e.target.value })}
+                placeholder="e.g. A320" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Dep terminal</label>
+              <input className="vintage-input w-full" value={form.departure_terminal}
+                onChange={(e) => setForm({ ...form, departure_terminal: e.target.value })}
+                placeholder="e.g. 5" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Arr terminal</label>
+              <input className="vintage-input w-full" value={form.arrival_terminal}
+                onChange={(e) => setForm({ ...form, arrival_terminal: e.target.value })}
+                placeholder="e.g. 1" />
+            </div>
+          </div>
+        )}
 
         {/* Price + Currency */}
         <div className="grid grid-cols-2 gap-3">
