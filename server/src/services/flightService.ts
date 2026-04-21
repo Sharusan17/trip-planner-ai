@@ -108,14 +108,26 @@ async function fetchRealtime(iata: string, apiKey: string, dateToStamp: string):
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
     const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) return null;
-    const body = await res.json() as { data?: Record<string, unknown>[] };
+    if (!res.ok) {
+      console.warn(`[flightService] ${iata}: HTTP ${res.status} from Aviationstack`);
+      return null;
+    }
+    const body = await res.json() as { data?: Record<string, unknown>[]; error?: unknown; pagination?: { total?: number } };
+    if (body.error) {
+      console.warn(`[flightService] ${iata}: API error`, body.error);
+      return null;
+    }
     const first = body.data?.[0];
-    if (!first) return null;
+    if (!first) {
+      console.log(`[flightService] ${iata}: no results (pagination.total=${body.pagination?.total ?? 0})`);
+      return null;
+    }
+    console.log(`[flightService] ${iata}: OK, matched=${body.pagination?.total ?? 1}`);
     // Aviationstack returns its own flight_date; prefer that, fall back to dateToStamp.
     const actualDate = (first.flight_date as string) ?? dateToStamp;
     return mapToInstance(first, iata, actualDate);
-  } catch {
+  } catch (err) {
+    console.warn(`[flightService] ${iata}: fetch failed`, (err as Error).message);
     return null;
   } finally {
     clearTimeout(timer);
