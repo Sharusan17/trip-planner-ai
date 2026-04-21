@@ -19,6 +19,7 @@ import receiptsRouter from './routes/receipts';
 import hotelSearchRouter from './routes/hotelSearch';
 import flightSearchRouter from './routes/flightSearch';
 import { loadAirports } from './services/airportCache';
+import { cleanupStaleCache } from './services/flightService';
 
 const app = express();
 
@@ -48,6 +49,9 @@ app.use('/api/v1', flightSearchRouter);
 
 // Pre-load airport cache in background (doesn't block startup)
 loadAirports();
+
+// Clean expired flight lookup cache rows (> 48h old)
+cleanupStaleCache();
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
