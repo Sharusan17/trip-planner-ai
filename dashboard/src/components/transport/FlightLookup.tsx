@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plane, Loader2, Check, Clock, CalendarClock } from 'lucide-react';
+import { Plane, Loader2, Check, Clock, CalendarClock, Pencil } from 'lucide-react';
 import { flightsApi, type FlightInstance } from '@/api/flights';
 
 export interface FlightAutoFill {
@@ -18,6 +18,8 @@ interface Props {
   flightNumber: string;
   bookingDate: string; // YYYY-MM-DD (may be empty)
   onAutoFill: (data: FlightAutoFill) => void;
+  /** Optional escape hatch: renders a "Can't find it? Enter details manually" link. */
+  onManualEntry?: () => void;
 }
 
 interface ScheduleGroup {
@@ -78,7 +80,7 @@ function groupBySchedule(instances: FlightInstance[]): ScheduleGroup[] {
   return Array.from(groups.values());
 }
 
-export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: Props) {
+export default function FlightLookup({ flightNumber, bookingDate, onAutoFill, onManualEntry }: Props) {
   const [debouncedIata, setDebouncedIata] = useState('');
   const [selectedSignature, setSelectedSignature] = useState<string>('');
 
@@ -131,12 +133,24 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
   // Prompt for date before hitting the API — most graceful failure mode.
   if (!hasBookingDate) {
     return (
-      <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/40 bg-gold/5 px-3 py-2 text-xs text-ink">
-        <CalendarClock size={14} className="text-gold shrink-0 mt-0.5" strokeWidth={2} />
-        <span>
-          <span className="font-semibold">Set a departure date first.</span>{' '}
-          Flight schedules depend on the day — add the departure date above to look up {debouncedIata}.
-        </span>
+      <div className="mt-2 space-y-2">
+        <div className="flex items-start gap-2 rounded-lg border border-gold/40 bg-gold/5 px-3 py-2 text-xs text-ink">
+          <CalendarClock size={14} className="text-gold shrink-0 mt-0.5" strokeWidth={2} />
+          <span>
+            <span className="font-semibold">Set a departure date first.</span>{' '}
+            Flight schedules depend on the day — add the departure date above to look up {debouncedIata}.
+          </span>
+        </div>
+        {onManualEntry && (
+          <button
+            type="button"
+            onClick={onManualEntry}
+            className="inline-flex items-center gap-1.5 text-xs text-ink-faint hover:text-navy hover:underline"
+          >
+            <Pencil size={11} strokeWidth={2.5} />
+            Or enter flight details manually
+          </button>
+        )}
       </div>
     );
   }
@@ -168,9 +182,21 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
 
   if (!groups.length) {
     return (
-      <p className="text-xs text-ink-faint mt-2">
-        {debouncedIata} isn't currently tracked. Enter details manually.
-      </p>
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-ink-faint">
+          {debouncedIata} isn't currently tracked.
+        </p>
+        {onManualEntry && (
+          <button
+            type="button"
+            onClick={onManualEntry}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy hover:underline"
+          >
+            <Pencil size={12} strokeWidth={2.5} />
+            Enter flight details manually
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -288,6 +314,16 @@ export default function FlightLookup({ flightNumber, bookingDate, onAutoFill }: 
           </button>
         );
       })}
+      {onManualEntry && (
+        <button
+          type="button"
+          onClick={onManualEntry}
+          className="inline-flex items-center gap-1.5 text-xs text-ink-faint hover:text-navy hover:underline"
+        >
+          <Pencil size={11} strokeWidth={2.5} />
+          None of these? Enter details manually
+        </button>
+      )}
     </div>
   );
 }
