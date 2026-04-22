@@ -268,32 +268,36 @@ export default function TransportBookingFormPage() {
             placeholder={form.transport_type === 'flight' ? 'e.g. BA456' : 'e.g. TP1234'} />
         </div>
 
-        {/* Flight-only fields: airline, aircraft, terminals */}
+        {/* Flight-only fields: airline (auto-filled), terminals (auto-filled), aircraft (manual) */}
         {form.transport_type === 'flight' && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Airline</label>
               <input className="vintage-input w-full" value={form.airline}
                 onChange={(e) => setForm({ ...form, airline: e.target.value })}
                 placeholder="e.g. British Airways" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Dep terminal</label>
+                <input className="vintage-input w-full" value={form.departure_terminal}
+                  onChange={(e) => setForm({ ...form, departure_terminal: e.target.value })}
+                  placeholder="e.g. 5" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Arr terminal</label>
+                <input className="vintage-input w-full" value={form.arrival_terminal}
+                  onChange={(e) => setForm({ ...form, arrival_terminal: e.target.value })}
+                  placeholder="e.g. 1" />
+              </div>
+            </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Aircraft</label>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+                Aircraft <span className="normal-case font-normal">(optional)</span>
+              </label>
               <input className="vintage-input w-full" value={form.aircraft_type}
                 onChange={(e) => setForm({ ...form, aircraft_type: e.target.value })}
-                placeholder="e.g. A320" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Dep terminal</label>
-              <input className="vintage-input w-full" value={form.departure_terminal}
-                onChange={(e) => setForm({ ...form, departure_terminal: e.target.value })}
-                placeholder="e.g. 5" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Arr terminal</label>
-              <input className="vintage-input w-full" value={form.arrival_terminal}
-                onChange={(e) => setForm({ ...form, arrival_terminal: e.target.value })}
-                placeholder="e.g. 1" />
+                placeholder="e.g. A320 — fill in if known" />
             </div>
           </div>
         )}

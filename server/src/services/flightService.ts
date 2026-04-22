@@ -174,7 +174,9 @@ async function enrichInstance(instance: FlightInstance, airlinePrefix: string): 
   if (!instance.airline && airlinePrefix) {
     tasks.push(
       lookupAirline(airlinePrefix).then((info) => {
-        if (info?.name) instance.airline = info.name;
+        // Use the full name when available; fall back to the IATA/ICAO prefix
+        // so the airline field is never empty after a successful lookup.
+        instance.airline = info?.name ?? airlinePrefix.toUpperCase();
       }),
     );
   }
