@@ -3,7 +3,25 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('weather');
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1';
 
+// 30-minute server-side cache — shared across all users on the same trip.
+// Stops Open-Meteo 429s when multiple browser tabs hit the server simultaneously.
+const CACHE_TTL_MS = 30 * 60 * 1000;
+interface CacheEntry { at: number; value: Awaited<ReturnType<typeof _fetchWeather>> }
+const cache = new Map<string, CacheEntry>();
+
 export async function fetchWeather(lat: number, lng: number) {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
+    log.debug(`${key}: cache HIT`);
+    return hit.value;
+  }
+  const value = await _fetchWeather(lat, lng);
+  cache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+async function _fetchWeather(lat: number, lng: number) {
   const forecastUrl = `${OPEN_METEO_BASE}/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_direction_10m_dominant&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m&timezone=auto&forecast_days=7`;
 
   const marineUrl = `${OPEN_METEO_BASE}/marine?latitude=${lat}&longitude=${lng}&daily=wave_height_max,wave_period_max&hourly=sea_surface_temperature&timezone=auto&forecast_days=1`;
