@@ -1,6 +1,7 @@
 import { useTrip } from '@/context/TripContext';
 import { useMemo } from 'react';
 import { MapPin, Calendar, Clock, Plane, Sun, Home } from 'lucide-react';
+import { parseLocalDate, fmtDate } from '@/utils/date';
 
 type CountdownState = 'before' | 'departure' | 'during' | 'arrival' | 'past';
 
@@ -20,11 +21,8 @@ export default function TripHeader() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const start = new Date(currentTrip.start_date);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(currentTrip.end_date);
-    end.setHours(0, 0, 0, 0);
+    const start = parseLocalDate(currentTrip.start_date);
+    const end   = parseLocalDate(currentTrip.end_date);
 
     const daysToStart = Math.round((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     const daysToEnd   = Math.round((end.getTime()   - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -47,12 +45,8 @@ export default function TripHeader() {
 
   if (!currentTrip) return null;
 
-  const startDate = new Date(currentTrip.start_date).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-  const endDate = new Date(currentTrip.end_date).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
+  const startDate = fmtDate(currentTrip.start_date);
+  const endDate   = fmtDate(currentTrip.end_date);
 
   return (
     <header className="bg-white border border-parchment-dark rounded-2xl px-5 py-4 mb-6 shadow-[var(--shadow-card)]">

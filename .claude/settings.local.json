@@ -25,7 +25,19 @@
       "WebFetch(domain:api.liteapi.travel)",
       "WebFetch(domain:liteapi.travel)",
       "WebSearch",
-      "Bash(curl -s \"http://localhost:3001/api/v1/airports/search?q=LHR\")"
+      "Bash(curl -s \"http://localhost:3001/api/v1/airports/search?q=LHR\")",
+      "Bash(curl -s --max-time 15 \"https://raw.githubusercontent.com/mwgg/Airports/master/airports.json\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const a = require\\('./server/src/data/airports.json'\\); console.log\\('total:', a.length\\); console.log\\('sample:', a[0]\\); console.log\\('LHR:', a.find\\(x => x.iata === 'LHR'\\)\\);\")",
+      "Bash(PORT=3099 npx ts-node src/index.ts)",
+      "Bash(curl -s \"http://localhost:3099/api/v1/airports/search?q=LHR\")",
+      "Bash(node -e \"process.chdir\\('server'\\); const { searchAirports, loadAirports } = require\\('./dist/services/airportCache'\\); loadAirports\\(\\); console.log\\('LHR:', JSON.stringify\\(searchAirports\\('LHR'\\).slice\\(0, 3\\), null, 2\\)\\);\")",
+      "Bash(node -e \"const {searchAirports, loadAirports} = require\\('./dist/services/airportCache'\\); loadAirports\\(\\); console.log\\('LHR:', JSON.stringify\\(searchAirports\\('LHR'\\).slice\\(0,3\\), null, 2\\)\\);\")",
+      "Bash(node -e \"const {searchAirports, loadAirports} = require\\('./dist/services/airportCache'\\); loadAirports\\(\\); console.log\\('london:', JSON.stringify\\(searchAirports\\('london'\\).slice\\(0,5\\), null, 2\\)\\);\")",
+      "Bash(node -e \"const {searchAirports, loadAirports} = require\\('./server/dist/services/airportCache'\\); loadAirports\\(\\); console.log\\('london:', JSON.stringify\\(searchAirports\\('london'\\).slice\\(0,5\\), null, 2\\)\\);\")",
+      "Bash(npx -w dashboard tsc --noEmit -p tsconfig.app.json)",
+      "Bash(grep -oE \"https://[^'\\\\\"`\\)]*\")",
+      "Bash(npm uninstall *)"
     ]
   }
 }

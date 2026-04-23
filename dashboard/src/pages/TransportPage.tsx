@@ -7,6 +7,7 @@ import { travellersApi } from '../api/travellers';
 import type { TransportBooking, Vehicle } from '@trip-planner-ai/shared';
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import FlightLiveStatus from '../components/transport/FlightLiveStatus';
+import { PlaneTakeoff, PlaneLanding, Clock, Link2 } from 'lucide-react';
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
@@ -19,6 +20,31 @@ function formatDateTime(dt: string) {
 }
 
 type AssignTarget = { vehicleId: string; slotIndex: number } | null;
+
+/**
+ * Group bookings into journey pairs (outbound + return) or singletons.
+ * Pairs are identified by linked_booking_id; each pair is only shown once.
+ */
+function groupJourneys(bookings: TransportBooking[]): Array<{ main: TransportBooking; linked: TransportBooking | null }> {
+  const seen = new Set<string>();
+  const groups: Array<{ main: TransportBooking; linked: TransportBooking | null }> = [];
+  const byId = new Map(bookings.map((b) => [b.id, b]));
+
+  for (const b of bookings) {
+    if (seen.has(b.id)) continue;
+    seen.add(b.id);
+    if (b.linked_booking_id && !seen.has(b.linked_booking_id)) {
+      const linked = byId.get(b.linked_booking_id) ?? null;
+      if (linked) {
+        seen.add(linked.id);
+        groups.push({ main: b, linked });
+        continue;
+      }
+    }
+    groups.push({ main: b, linked: null });
+  }
+  return groups;
+}
 
 export default function TransportPage() {
   const { currentTrip, isOrganiser } = useTrip();
@@ -133,40 +159,89 @@ export default function TransportPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {bookings.map((b) => {
+              {groupJourneys(bookings).map(({ main: b, linked }) => {
                 const travellerAvatars = b.traveller_ids
                   .map((id) => travellers.find((t) => t.id === id))
                   .filter(Boolean);
                 return (
-                  <div key={b.id} className="vintage-card p-4">
-                    <div className="flex items-start justify-between gap-4">
+                  <div key={b.id} className={`vintage-card overflow-hidden ${linked ? 'border-2 border-navy/20' : ''}`}>
+                    {linked && (
+                      <div className="flex items-center gap-1.5 px-4 py-2 bg-navy/5 border-b border-navy/10">
+                        <Link2 size={12} className="text-navy" />
+                        <span className="text-xs font-semibold text-navy font-body">Outbound + Return</span>
+                      </div>
+                    )}
+                    <div className="p-4 flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-2xl">{TRANSPORT_ICONS[b.transport_type]}</span>
-                          <div>
-                            <p className="font-semibold text-ink">
-                              {b.from_location}{b.departure_terminal ? ` T${b.departure_terminal}` : ''}
-                              {' → '}
-                              {b.to_location}{b.arrival_terminal ? ` T${b.arrival_terminal}` : ''}
-                            </p>
-                            <p className="text-sm text-ink/60">
-                              {b.airline && <span className="mr-1">{b.airline} ·</span>}
-                              {formatDateTime(b.departure_time)}
-                              {b.arrival_time && ` → ${formatDateTime(b.arrival_time)}`}
-                              {b.aircraft_type && ` · ${b.aircraft_type}`}
-                            </p>
-                            {b.transport_type === 'flight' && b.reference_number && (
-                              <FlightLiveStatus
-                                flightIata={b.reference_number.toUpperCase().replace(/\s+/g, '')}
-                                departureISO={b.departure_time}
-                              />
-                            )}
+                        {/* Header row: icon + airline/type + ref */}
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-xl leading-none">{TRANSPORT_ICONS[b.transport_type]}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {b.airline && (
+                                <span className="font-semibold text-ink text-sm">{b.airline}</span>
+                              )}
+                              {b.reference_number && (
+                                <span className="font-mono text-xs bg-parchment border border-parchment-dark px-2 py-0.5 rounded text-ink-light">
+                                  {b.reference_number}
+                                </span>
+                              )}
+                              {b.aircraft_type && (
+                                <span className="text-xs text-ink-faint">{b.aircraft_type}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        {b.reference_number && (
-                          <p className="text-sm text-ink/60">
-                            Ref: <span className="font-mono">{b.reference_number}</span>
-                          </p>
+
+                        {/* Route: dep → arr with labelled rows */}
+                        <div className="flex items-stretch gap-3 mb-2">
+                          {/* Dep column */}
+                          <div className="flex flex-col items-center gap-1 pt-0.5">
+                            <PlaneTakeoff size={14} className="text-navy flex-shrink-0" />
+                            <div className="w-px flex-1 bg-parchment-dark min-h-[20px]" />
+                            <PlaneLanding size={14} className="text-gold flex-shrink-0" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-2">
+                            {/* Departure */}
+                            <div>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="font-semibold text-sm text-ink">
+                                  {b.from_location}
+                                  {b.departure_terminal && (
+                                    <span className="font-normal text-ink-faint text-xs ml-1">· Terminal {b.departure_terminal}</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-ink-faint mt-0.5">
+                                <Clock size={10} />
+                                {formatDateTime(b.departure_time)}
+                              </div>
+                            </div>
+                            {/* Arrival */}
+                            <div>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="font-semibold text-sm text-ink">
+                                  {b.to_location}
+                                  {b.arrival_terminal && (
+                                    <span className="font-normal text-ink-faint text-xs ml-1">· Terminal {b.arrival_terminal}</span>
+                                  )}
+                                </span>
+                              </div>
+                              {b.arrival_time && (
+                                <div className="flex items-center gap-1 text-xs text-ink-faint mt-0.5">
+                                  <Clock size={10} />
+                                  {formatDateTime(b.arrival_time)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {b.transport_type === 'flight' && b.reference_number && (
+                          <FlightLiveStatus
+                            flightIata={b.reference_number.toUpperCase().replace(/\s+/g, '')}
+                            departureISO={b.departure_time}
+                          />
                         )}
                         {b.price && b.currency && (
                           <p className="text-sm font-semibold text-navy mt-1">
@@ -206,6 +281,69 @@ export default function TransportPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Linked return leg */}
+                    {linked && (() => {
+                      const lt = linked;
+                      return (
+                        <div className="border-t border-navy/10 px-4 py-3 bg-parchment/40 flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-base leading-none">{TRANSPORT_ICONS[lt.transport_type]}</span>
+                              {lt.airline && <span className="font-semibold text-ink text-sm">{lt.airline}</span>}
+                              {lt.reference_number && (
+                                <span className="font-mono text-xs bg-white border border-parchment-dark px-2 py-0.5 rounded text-ink-light">
+                                  {lt.reference_number}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-stretch gap-3">
+                              <div className="flex flex-col items-center gap-1 pt-0.5">
+                                <PlaneTakeoff size={13} className="text-navy flex-shrink-0" />
+                                <div className="w-px flex-1 bg-parchment-dark min-h-[16px]" />
+                                <PlaneLanding size={13} className="text-gold flex-shrink-0" />
+                              </div>
+                              <div className="flex-1 min-w-0 space-y-2">
+                                <div>
+                                  <span className="font-semibold text-sm text-ink">
+                                    {lt.from_location}
+                                    {lt.departure_terminal && <span className="font-normal text-ink-faint text-xs ml-1">· T{lt.departure_terminal}</span>}
+                                  </span>
+                                  <div className="flex items-center gap-1 text-xs text-ink-faint mt-0.5">
+                                    <Clock size={10} />{formatDateTime(lt.departure_time)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <span className="font-semibold text-sm text-ink">
+                                    {lt.to_location}
+                                    {lt.arrival_terminal && <span className="font-normal text-ink-faint text-xs ml-1">· T{lt.arrival_terminal}</span>}
+                                  </span>
+                                  {lt.arrival_time && (
+                                    <div className="flex items-center gap-1 text-xs text-ink-faint mt-0.5">
+                                      <Clock size={10} />{formatDateTime(lt.arrival_time)}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {lt.price && lt.currency && (
+                              <p className="text-sm font-semibold text-navy mt-1.5">
+                                {formatCurrency(lt.price, lt.currency)}
+                              </p>
+                            )}
+                          </div>
+                          {isOrganiser && (
+                            <div className="flex flex-col gap-2 shrink-0">
+                              <button onClick={() => navigate(`/logistics/transport/${lt.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
+                              <button
+                                onClick={() => { if (confirm('Delete this booking?')) deleteBookingMutation.mutate(lt.id); }}
+                                className="btn-danger text-xs py-1 px-3"
+                              >Delete</button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

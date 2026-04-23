@@ -26,6 +26,7 @@ export interface TransportBooking {
   departure_terminal: string | null;
   arrival_terminal: string | null;
   aircraft_type: string | null;
+  linked_booking_id: string | null;
   traveller_ids: string[];
   created_at: string;
   updated_at: string;
@@ -45,6 +46,7 @@ export interface CreateTransportInput {
   departure_terminal?: string;
   arrival_terminal?: string;
   aircraft_type?: string;
+  linked_booking_id?: string;
   traveller_ids: string[];
 }
 

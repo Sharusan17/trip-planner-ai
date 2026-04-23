@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '../context/TripContext';
 import { depositsApi } from '../api/deposits';
 import type { Deposit, DepositStatus, CreateDepositInput } from '@trip-planner-ai/shared';
+import { parseLocalDate } from '@/utils/date';
 
 const STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -227,7 +228,7 @@ export default function DepositsPage() {
                 </p>
                 {d.due_date && (
                   <p className="text-sm text-ink/60 mt-1">
-                    Due: {new Date(d.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    Due: {parseLocalDate(d.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
                 )}
                 {d.notes && <p className="text-sm text-ink/50 mt-1 italic">{d.notes}</p>}

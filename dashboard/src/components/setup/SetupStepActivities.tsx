@@ -6,6 +6,7 @@ import type { CreateActivityInput, ActivityType } from '@trip-planner-ai/shared'
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
 import PlaceAutocomplete from './PlaceAutocomplete';
+import { parseLocalDate } from '@/utils/date';
 
 const TIPS: Record<string, string> = {
   family:      "Mark activities as kid-friendly — they'll be highlighted on the itinerary.",
@@ -39,12 +40,12 @@ interface Props {
 
 function datesBetween(start: string, end: string): string[] {
   const out: string[] = [];
-  const s = new Date(start);
-  const e = new Date(end);
+  const s = parseLocalDate(start);
+  const e = parseLocalDate(end);
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return out;
   const cur = new Date(s);
   while (cur <= e) {
-    out.push(cur.toISOString().slice(0, 10));
+    out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`);
     cur.setDate(cur.getDate() + 1);
   }
   return out;
@@ -128,8 +129,7 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
 
   const fmtDayLabel = (date: string, num: number) => {
     try {
-      const d = new Date(date);
-      return `Day ${num} · ${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`;
+      return `Day ${num} · ${parseLocalDate(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`;
     } catch { return `Day ${num}`; }
   };
 

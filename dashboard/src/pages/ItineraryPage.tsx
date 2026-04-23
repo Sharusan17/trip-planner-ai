@@ -5,6 +5,7 @@ import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
 import { Plus, Trash2, Pencil, MapPin, CalendarDays, Check } from 'lucide-react';
+import { parseLocalDate } from '@/utils/date';
 
 const ACTIVITY_COLOURS: Record<ActivityType, { bg: string; text: string; border: string }> = {
   flight:        { bg: 'bg-blue-50',   text: 'text-blue-600',   border: '#3B82F6' },
@@ -36,8 +37,8 @@ export default function ItineraryPage() {
   // Auto-create all days from trip start_date → end_date
   useEffect(() => {
     if (!currentTrip || hasInitDays.current || isLoading) return;
-    const start = new Date(currentTrip.start_date);
-    const end = new Date(currentTrip.end_date);
+    const start = parseLocalDate(currentTrip.start_date);
+    const end = parseLocalDate(currentTrip.end_date);
     const expectedDates: string[] = [];
     const cur = new Date(start);
     while (cur <= end) {
@@ -116,7 +117,7 @@ export default function ItineraryPage() {
                     Day {day.day_number}
                   </div>
                   <div className={`text-sm font-semibold font-display mt-0.5 ${isActive ? 'text-white' : 'text-ink'}`}>
-                    {new Date(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    {parseLocalDate(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </div>
                 </button>
               );
@@ -161,7 +162,7 @@ export default function ItineraryPage() {
                       </div>
                     )}
                     <p className="text-sm text-ink-faint mt-0.5">
-                      {new Date(activeDay.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      {parseLocalDate(activeDay.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
                       {' · '}{activeDay.activities.length} activit{activeDay.activities.length === 1 ? 'y' : 'ies'}
                     </p>
                   </div>

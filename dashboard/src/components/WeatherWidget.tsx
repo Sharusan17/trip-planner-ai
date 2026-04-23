@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { weatherApi } from '@/api/weather';
 import { Cloud, Droplets, Wind, Sun } from 'lucide-react';
+import { parseLocalDate } from '@/utils/date';
 
 const WEATHER_ICONS: Record<number, string> = {
   0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
@@ -29,10 +30,8 @@ export default function WeatherWidget() {
 
   if (!currentTrip) return null;
 
-  const tripStart = new Date(currentTrip.start_date);
-  const tripEnd = new Date(currentTrip.end_date);
-  tripStart.setHours(0, 0, 0, 0);
-  tripEnd.setHours(23, 59, 59, 999);
+  const tripStart = parseLocalDate(currentTrip.start_date);
+  const tripEnd   = parseLocalDate(currentTrip.end_date);
 
   // All 7 forecast days; mark which ones fall within the trip window
   const forecastDays = weather?.daily ?? [];
@@ -77,9 +76,9 @@ export default function WeatherWidget() {
           style={{ gridTemplateColumns: `repeat(${forecastDays.length}, 1fr)` }}
         >
           {forecastDays.map((day) => {
-            const date = new Date(day.date);
-            date.setHours(0, 0, 0, 0);
-            const isToday   = date.getTime() === (() => { const t = new Date(); t.setHours(0,0,0,0); return t.getTime(); })();
+            const date = parseLocalDate(day.date);
+            const todayMidnight = (() => { const t = new Date(); t.setHours(0,0,0,0); return t; })();
+            const isToday   = date.getTime() === todayMidnight.getTime();
             const isTripDay = date >= tripStart && date <= tripEnd;
 
             return (

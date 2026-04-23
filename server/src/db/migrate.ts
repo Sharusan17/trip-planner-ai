@@ -366,6 +366,27 @@ const migrations = [
   `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS departure_terminal TEXT;`,
   `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS arrival_terminal TEXT;`,
   `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS aircraft_type TEXT;`,
+  // linked_booking_id: outbound ↔ return journey pairing
+  `ALTER TABLE transport_bookings ADD COLUMN IF NOT EXISTS linked_booking_id UUID REFERENCES transport_bookings(id) ON DELETE SET NULL;`,
+
+  // 018: accommodation check-in / check-out times + room assignments
+  `ALTER TABLE accommodation_bookings ADD COLUMN IF NOT EXISTS check_in_time TIME;`,
+  `ALTER TABLE accommodation_bookings ADD COLUMN IF NOT EXISTS check_out_time TIME;`,
+
+  `CREATE TABLE IF NOT EXISTS accommodation_rooms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    accommodation_id UUID NOT NULL REFERENCES accommodation_bookings(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(12,2),
+    currency CHAR(3),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE TABLE IF NOT EXISTS accommodation_room_travellers (
+    room_id UUID NOT NULL REFERENCES accommodation_rooms(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    PRIMARY KEY (room_id, traveller_id)
+  );`,
 ];
 
 export async function runMigrations() {

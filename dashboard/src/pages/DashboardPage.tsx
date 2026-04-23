@@ -9,6 +9,7 @@ import { settlementsApi } from '@/api/settlements';
 import { announcementsApi } from '@/api/announcements';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import type { ActivityType } from '@trip-planner-ai/shared';
+import { parseLocalDate } from '@/utils/date';
 
 const ACTIVITY_COLOURS: Record<string, { bg: string; text: string }> = {
   flight:        { bg: 'bg-blue-50',   text: 'text-blue-600'   },
@@ -186,7 +187,7 @@ export default function DashboardPage() {
             {planDay && (
               <p className="text-xs text-ink-faint mt-0.5">
                 {planDay.title || `Day ${planDay.day_number}`} ·{' '}
-                {new Date(planDay.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                {parseLocalDate(planDay.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
               </p>
             )}
           </div>

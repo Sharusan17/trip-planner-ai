@@ -1,8 +1,61 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { getRate } from '../services/currencyService';
+import { createLogger } from '../utils/logger';
+import type { PoolClient } from 'pg';
+
+const log = createLogger('transport');
 
 const router = Router();
+
+/**
+ * Normalise a location string to an IATA code or lowercase city fragment for matching.
+ * Extracts "(LHR)" from "London Heathrow (LHR)", otherwise lowercases and strips punctuation.
+ */
+function normaliseLocation(loc: string): string {
+  const m = loc.match(/\(([A-Z]{3})\)/);
+  if (m) return m[1].toUpperCase();
+  return loc.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+}
+
+/**
+ * After inserting/updating a booking, try to find a complementary journey to auto-link.
+ * A "return" match is: same trip, same transport_type, from=this.to, to=this.from,
+ * departure AFTER this booking's departure, not yet linked.
+ */
+async function tryAutoLink(client: PoolClient,
+  bookingId: string, tripId: string, transportType: string,
+  fromLoc: string, toLoc: string, depTime: string,
+): Promise<string | null> {
+  const fromNorm = normaliseLocation(fromLoc);
+  const toNorm = normaliseLocation(toLoc);
+  const result = await client.query(
+    `SELECT id FROM transport_bookings
+     WHERE trip_id = $1
+       AND transport_type = $2
+       AND id <> $3
+       AND linked_booking_id IS NULL
+       AND departure_time > $4
+     ORDER BY departure_time ASC
+     LIMIT 20`,
+    [tripId, transportType, bookingId, depTime]
+  );
+  for (const row of result.rows) {
+    const candidate = await client.query(`SELECT from_location, to_location FROM transport_bookings WHERE id = $1`, [row.id]);
+    if (candidate.rows.length === 0) continue;
+    const cFrom = normaliseLocation(candidate.rows[0].from_location);
+    const cTo = normaliseLocation(candidate.rows[0].to_location);
+    // Return trip: candidate goes back the other way
+    if (cFrom === toNorm && cTo === fromNorm) {
+      // Link both ways
+      await client.query(`UPDATE transport_bookings SET linked_booking_id = $1 WHERE id = $2`, [row.id, bookingId]);
+      await client.query(`UPDATE transport_bookings SET linked_booking_id = $1 WHERE id = $2`, [bookingId, row.id]);
+      log.info('auto-linked journeys', { outbound: bookingId, return: row.id });
+      return row.id;
+    }
+  }
+  return null;
+}
 
 async function attachTravellers(bookings: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
   if (bookings.length === 0) return bookings;
@@ -87,12 +140,19 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       }
     }
 
+    // Auto-link: look for a complementary return journey
+    await tryAutoLink(client, String(booking.id), String(tripId), String(transport_type), String(from_location), String(to_location), String(departure_time));
+
     await client.query('COMMIT');
 
+    // Re-fetch to get potentially updated linked_booking_id
+    const finalRes = await pool.query(`SELECT * FROM transport_bookings WHERE id = $1`, [booking.id]);
+    const final = finalRes.rows[0];
+
     res.status(201).json({
-      ...booking,
-      price: booking.price ? parseFloat(booking.price) : null,
-      price_home: booking.price_home ? parseFloat(booking.price_home) : null,
+      ...final,
+      price: final.price ? parseFloat(final.price) : null,
+      price_home: final.price_home ? parseFloat(final.price_home) : null,
       traveller_ids: traveller_ids || [],
     });
   } catch (err) {
@@ -128,6 +188,7 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
       transport_type, from_location, to_location, departure_time, arrival_time,
       reference_number, price, currency, notes, traveller_ids,
       airline, departure_terminal, arrival_terminal, aircraft_type,
+      linked_booking_id,
     } = req.body;
 
     const existing = await client.query(`SELECT * FROM transport_bookings WHERE id = $1`, [req.params.id]);
@@ -166,13 +227,14 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
          departure_terminal = COALESCE($12, departure_terminal),
          arrival_terminal = COALESCE($13, arrival_terminal),
          aircraft_type = COALESCE($14, aircraft_type),
+         linked_booking_id = COALESCE($15, linked_booking_id),
          updated_at = NOW()
-       WHERE id = $15 RETURNING *`,
+       WHERE id = $16 RETURNING *`,
       [transport_type ?? null, from_location ?? null, to_location ?? null,
        departure_time ?? null, arrival_time ?? null, reference_number ?? null,
        newPrice, newCurrency, priceHome, notes ?? null,
        airline ?? null, departure_terminal ?? null, arrival_terminal ?? null, aircraft_type ?? null,
-       req.params.id]
+       linked_booking_id ?? null, req.params.id]
     );
     const booking = updResult.rows[0];
 

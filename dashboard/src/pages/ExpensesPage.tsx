@@ -12,6 +12,7 @@ import type {
   Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
+import { parseLocalDate } from '@/utils/date';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -566,7 +567,7 @@ export default function ExpensesPage() {
                     </p>
                     {d.due_date && (
                       <p className="text-sm text-ink-faint mt-1">
-                        Due: {new Date(d.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        Due: {parseLocalDate(d.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     )}
                     {d.notes && <p className="text-sm text-ink-faint mt-1 italic">{d.notes}</p>}

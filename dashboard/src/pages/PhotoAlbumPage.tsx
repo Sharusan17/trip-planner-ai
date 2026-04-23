@@ -7,6 +7,7 @@ import { itineraryApi } from '@/api/itinerary';
 import { API_BASE } from '@/api/client';
 import type { TripPhoto } from '@trip-planner-ai/shared';
 import { Camera, Trash2, X, Image, CalendarDays } from 'lucide-react';
+import { parseLocalDate } from '@/utils/date';
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -65,7 +66,7 @@ export default function PhotoAlbumPage() {
   const sortedDays = days.filter((d) => byDay.has(d.id)).sort((a, b) => a.day_number - b.day_number);
   for (const day of sortedDays) {
     grouped.push({
-      label: `Day ${day.day_number}${day.title ? ` — ${day.title}` : ''} · ${new Date(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+      label: `Day ${day.day_number}${day.title ? ` — ${day.title}` : ''} · ${parseLocalDate(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
       photos: byDay.get(day.id)!,
     });
   }
