@@ -34,10 +34,8 @@ export default function WeatherWidget() {
   tripStart.setHours(0, 0, 0, 0);
   tripEnd.setHours(23, 59, 59, 999);
 
-  const tripDays = weather?.daily.filter((d) => {
-    const date = new Date(d.date);
-    return date >= tripStart && date <= tripEnd;
-  }) ?? [];
+  // All 7 forecast days; mark which ones fall within the trip window
+  const forecastDays = weather?.daily ?? [];
 
   return (
     <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
@@ -48,9 +46,9 @@ export default function WeatherWidget() {
             Weather — {currentTrip.destination}
           </h3>
         </div>
-        {tripDays.length > 0 && (
+        {forecastDays.length > 0 && (
           <span className="text-xs text-ink-faint font-body">
-            {tripDays.length} day{tripDays.length !== 1 ? 's' : ''}
+            {forecastDays.length}-day forecast
           </span>
         )}
       </div>
@@ -68,62 +66,69 @@ export default function WeatherWidget() {
         </div>
       )}
 
-      {!isLoading && currentTrip.latitude && tripDays.length === 0 && (
+      {!isLoading && currentTrip.latitude && forecastDays.length === 0 && (
         <div className="p-6 text-sm text-ink-faint text-center">
-          No forecast available for the trip dates yet.
+          No forecast available yet.
         </div>
       )}
 
-      {tripDays.length > 0 && (
-        <div className="overflow-x-auto">
-          <div className="flex min-w-max divide-x divide-parchment-dark">
-            {tripDays.map((day, i) => {
-              const date = new Date(day.date);
-              const isToday = new Date().toDateString() === date.toDateString();
-              return (
-                <div
-                  key={day.date}
-                  className={`flex flex-col items-center px-4 py-4 min-w-[80px] ${
-                    isToday ? 'bg-blue-50/60' : i % 2 === 0 ? 'bg-white' : 'bg-parchment/30'
-                  }`}
-                >
-                  <span className={`text-xs font-semibold font-body uppercase tracking-wide mb-0.5 ${isToday ? 'text-navy' : 'text-ink-faint'}`}>
-                    {isToday ? 'Today' : date.toLocaleDateString('en-GB', { weekday: 'short' })}
-                  </span>
-                  <span className="text-[10px] text-ink-faint font-body mb-2">
-                    {date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                  </span>
+      {forecastDays.length > 0 && (
+        <div className="grid divide-x divide-parchment-dark"
+          style={{ gridTemplateColumns: `repeat(${forecastDays.length}, 1fr)` }}
+        >
+          {forecastDays.map((day) => {
+            const date = new Date(day.date);
+            date.setHours(0, 0, 0, 0);
+            const isToday   = date.getTime() === (() => { const t = new Date(); t.setHours(0,0,0,0); return t.getTime(); })();
+            const isTripDay = date >= tripStart && date <= tripEnd;
 
-                  <span className="text-2xl mb-2 leading-none">{getIcon(day.weather_code)}</span>
+            return (
+              <div
+                key={day.date}
+                className={`flex flex-col items-center px-1 py-4 ${
+                  isToday   ? 'bg-navy/5' :
+                  isTripDay ? 'bg-amber-50/40' :
+                              'bg-white'
+                }`}
+              >
+                <span className={`text-[11px] font-semibold font-body uppercase tracking-wide mb-0.5 ${
+                  isToday ? 'text-navy' : isTripDay ? 'text-amber-700' : 'text-ink-faint'
+                }`}>
+                  {isToday ? 'Today' : date.toLocaleDateString('en-GB', { weekday: 'short' })}
+                </span>
+                <span className="text-[10px] text-ink-faint font-body mb-2">
+                  {date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </span>
 
-                  <span className="font-display text-sm font-bold text-ink">
-                    {Math.round(day.temperature_max)}°
-                  </span>
-                  <span className="text-xs text-ink-faint">
-                    {Math.round(day.temperature_min)}°
-                  </span>
+                <span className="text-2xl mb-2 leading-none">{getIcon(day.weather_code)}</span>
 
-                  {day.precipitation_probability > 0 && (
-                    <div className="flex items-center gap-0.5 mt-1.5">
-                      <Droplets size={10} className="text-blue-400" />
-                      <span className="text-[10px] text-blue-500 font-body">
-                        {day.precipitation_probability}%
-                      </span>
-                    </div>
-                  )}
+                <span className="font-display text-sm font-bold text-ink">
+                  {Math.round(day.temperature_max)}°
+                </span>
+                <span className="text-xs text-ink-faint">
+                  {Math.round(day.temperature_min)}°
+                </span>
 
-                  {day.wind_speed_max > 20 && (
-                    <div className="flex items-center gap-0.5 mt-0.5">
-                      <Wind size={10} className="text-ink-faint" />
-                      <span className="text-[10px] text-ink-faint font-body">
-                        {Math.round(day.wind_speed_max)}km/h
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                {day.precipitation_probability > 0 && (
+                  <div className="flex items-center gap-0.5 mt-1.5">
+                    <Droplets size={10} className="text-blue-400" />
+                    <span className="text-[10px] text-blue-500 font-body">
+                      {day.precipitation_probability}%
+                    </span>
+                  </div>
+                )}
+
+                {day.wind_speed_max > 20 && (
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    <Wind size={10} className="text-ink-faint" />
+                    <span className="text-[10px] text-ink-faint font-body">
+                      {Math.round(day.wind_speed_max)}km/h
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
