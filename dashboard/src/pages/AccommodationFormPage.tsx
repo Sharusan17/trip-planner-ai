@@ -152,6 +152,15 @@ export default function AccommodationFormPage() {
     }));
   }
 
+  function assignedInOtherRooms(excludeKey: string): Set<string> {
+    const set = new Set<string>();
+    for (const r of form.rooms) {
+      if (r.key === excludeKey) continue;
+      for (const tid of r.traveller_ids) set.add(tid);
+    }
+    return set;
+  }
+
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   if (!currentTrip) return null;
@@ -346,31 +355,38 @@ export default function AccommodationFormPage() {
                   />
                 </div>
 
-                {/* Room travellers */}
-                {travellers.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Who's in this room?</p>
-                    <div className="flex flex-wrap gap-2">
-                      {travellers.map((t) => {
-                        const sel = room.traveller_ids.includes(t.id);
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => toggleRoomTraveller(room.key, t.id)}
-                            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold transition-all border ${
-                              sel ? 'border-navy bg-navy/10 text-navy' : 'border-parchment-dark bg-white text-ink-faint'
-                            }`}
-                          >
-                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0"
-                              style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
-                            {t.name}
-                          </button>
-                        );
-                      })}
+                {/* Room travellers — exclude anyone already in another room */}
+                {travellers.length > 0 && (() => {
+                  const taken = assignedInOtherRooms(room.key);
+                  return (
+                    <div>
+                      <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Who's in this room?</p>
+                      <div className="flex flex-wrap gap-2">
+                        {travellers.map((t) => {
+                          const sel = room.traveller_ids.includes(t.id);
+                          const disabled = !sel && taken.has(t.id);
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => !disabled && toggleRoomTraveller(room.key, t.id)}
+                              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold transition-all border ${
+                                sel ? 'border-navy bg-navy/10 text-navy' :
+                                disabled ? 'border-parchment-dark bg-parchment text-ink-faint opacity-40 cursor-not-allowed' :
+                                'border-parchment-dark bg-white text-ink-faint'
+                              }`}
+                            >
+                              <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white font-bold flex-shrink-0"
+                                style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
+                              {t.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             ))}
           </div>

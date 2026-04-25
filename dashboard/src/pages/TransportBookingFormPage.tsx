@@ -6,7 +6,7 @@ import { transportApi } from '@/api/transport';
 import { travellersApi } from '@/api/travellers';
 import type { TransportType, CreateTransportInput } from '@trip-planner-ai/shared';
 import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft, Plane } from 'lucide-react';
+import { ArrowLeft, Plane, RotateCcw, ChevronDown } from 'lucide-react';
 import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
 import FlightLookup, { type FlightAutoFill } from '@/components/transport/FlightLookup';
 
@@ -36,6 +36,22 @@ const emptyForm: FormData = {
   airline: '', departure_terminal: '', arrival_terminal: '', aircraft_type: '',
 };
 
+const HAS_RETURN: TransportType[] = ['flight', 'train', 'bus', 'ferry', 'other'];
+
+interface ReturnDraft {
+  from_location: string;
+  to_location: string;
+  departure_time: string;
+  arrival_time: string;
+  reference_number: string;
+  price: string;
+  showArrival: boolean;
+}
+const emptyReturn: ReturnDraft = {
+  from_location: '', to_location: '', departure_time: '',
+  arrival_time: '', reference_number: '', price: '', showArrival: false,
+};
+
 export default function TransportBookingFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
@@ -47,6 +63,9 @@ export default function TransportBookingFormPage() {
   // For brand-new flight bookings: show just the search fields first.
   // Editing an existing booking → jump straight to the full form.
   const [showDetails, setShowDetails] = useState(isEdit);
+  // Return journey
+  const [hasReturn, setHasReturn] = useState(false);
+  const [returnDraft, setReturnDraft] = useState<ReturnDraft>(emptyReturn);
 
   const { data: bookings = [] } = useQuery({
     queryKey: ['transport', currentTrip?.id],
@@ -112,6 +131,18 @@ export default function TransportBookingFormPage() {
       aircraft_type: form.aircraft_type || undefined,
       traveller_ids: form.traveller_ids,
     };
+    // Attach return leg
+    if (!isEdit && hasReturn && returnDraft.from_location && returnDraft.to_location && returnDraft.departure_time) {
+      data.linked_journey = {
+        from_location: returnDraft.from_location,
+        to_location: returnDraft.to_location,
+        departure_time: returnDraft.departure_time,
+        arrival_time: returnDraft.arrival_time || undefined,
+        reference_number: returnDraft.reference_number || undefined,
+        price: returnDraft.price ? parseFloat(returnDraft.price) : undefined,
+        currency: form.currency || undefined,
+      };
+    }
     if (isEdit && id) updateMutation.mutate({ id, data });
     else createMutation.mutate(data);
   }
@@ -199,6 +230,12 @@ export default function TransportBookingFormPage() {
                   departure_time: depDT,
                   arrival_time: arrDT,
                 });
+                // Pre-fill return leg with swapped airports
+                setReturnDraft((r) => ({
+                  ...r,
+                  from_location: r.from_location || data.to_location,
+                  to_location: r.to_location || data.from_location,
+                }));
                 setShowDetails(true);
               }}
               onManualEntry={() => setShowDetails(true)}
@@ -348,10 +385,101 @@ export default function TransportBookingFormPage() {
             onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
 
+        {/* Return journey — new bookings only, non-car */}
+        {!isEdit && HAS_RETURN.includes(form.transport_type) && (
+          <div className="border-t border-parchment-dark pt-4 space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="accent-navy"
+                checked={hasReturn}
+                onChange={(e) => {
+                  setHasReturn(e.target.checked);
+                  if (e.target.checked) {
+                    setReturnDraft((r) => ({
+                      ...r,
+                      from_location: r.from_location || form.to_location,
+                      to_location: r.to_location || form.from_location,
+                    }));
+                  }
+                }}
+              />
+              <span className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                <RotateCcw size={14} className="text-navy" />
+                Include return journey
+              </span>
+            </label>
+
+            {hasReturn && (
+              <div className="pl-5 border-l-2 border-navy/20 space-y-3">
+                <p className="text-xs font-semibold text-ink-faint uppercase tracking-wider">Return leg</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">From</label>
+                    <PlaceAutocomplete
+                      searchType={form.transport_type === 'flight' ? 'airport' : 'location'}
+                      placeholder="From"
+                      value={returnDraft.from_location}
+                      onChange={(val) => setReturnDraft({ ...returnDraft, from_location: val })}
+                      onSelect={(s) => setReturnDraft((r) => ({ ...r, from_location: s.name }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">To</label>
+                    <PlaceAutocomplete
+                      searchType={form.transport_type === 'flight' ? 'airport' : 'location'}
+                      placeholder="To"
+                      value={returnDraft.to_location}
+                      onChange={(val) => setReturnDraft({ ...returnDraft, to_location: val })}
+                      onSelect={(s) => setReturnDraft((r) => ({ ...r, to_location: s.name }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return departure</label>
+                  <input type="datetime-local" className="vintage-input w-full"
+                    value={returnDraft.departure_time}
+                    onChange={(e) => setReturnDraft({ ...returnDraft, departure_time: e.target.value })} />
+                </div>
+                {returnDraft.showArrival ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return arrival <span className="normal-case font-normal">(optional)</span></label>
+                    <input type="datetime-local" className="vintage-input w-full"
+                      value={returnDraft.arrival_time}
+                      onChange={(e) => setReturnDraft({ ...returnDraft, arrival_time: e.target.value })} />
+                  </div>
+                ) : (
+                  <button type="button"
+                    onClick={() => setReturnDraft({ ...returnDraft, showArrival: true })}
+                    className="text-xs text-navy hover:underline flex items-center gap-1">
+                    <ChevronDown size={12} /> Add return arrival time
+                  </button>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+                    {form.transport_type === 'flight' ? 'Return flight number' : 'Return booking ref'} <span className="normal-case font-normal">(optional)</span>
+                  </label>
+                  <input className="vintage-input w-full font-mono"
+                    placeholder={form.transport_type === 'flight' ? 'e.g. BA457' : 'Booking ref'}
+                    value={returnDraft.reference_number}
+                    onChange={(e) => setReturnDraft({ ...returnDraft, reference_number: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return price <span className="normal-case font-normal">(optional)</span></label>
+                  <input type="number" step="0.01" min="0" className="vintage-input w-full"
+                    placeholder="0.00"
+                    value={returnDraft.price}
+                    onChange={(e) => setReturnDraft({ ...returnDraft, price: e.target.value })} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3 pt-2">
           <button type="button" onClick={() => navigate('/logistics')} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" className="btn-primary flex-1 disabled:opacity-50" disabled={isPending}>
-            {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Booking'}
+            {isPending ? 'Saving…' : isEdit ? 'Save Changes' : hasReturn ? 'Add outbound + return' : 'Add Booking'}
           </button>
         </div>
           </>

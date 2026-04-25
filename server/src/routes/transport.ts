@@ -99,21 +99,26 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       transport_type, from_location, to_location, departure_time, arrival_time,
       reference_number, price, currency, notes, traveller_ids,
       airline, departure_terminal, arrival_terminal, aircraft_type,
+      linked_journey, // optional return leg
     } = req.body;
 
     const tripResult = await client.query(`SELECT home_currency FROM trips WHERE id = $1`, [tripId]);
     const homeCurrency: string = tripResult.rows[0]?.home_currency ?? 'GBP';
-    let priceHome: number | null = null;
-    if (price && currency) {
+
+    async function calcPriceHome(p: string | number | undefined, cur: string | undefined): Promise<number | null> {
+      if (!p || !cur) return null;
+      const pNum = typeof p === 'number' ? p : parseFloat(p);
+      if (isNaN(pNum)) return null;
       try {
-        if (currency !== homeCurrency) {
-          const { rate } = await getRate(currency, homeCurrency);
-          priceHome = Math.round(parseFloat(price) * rate * 100) / 100;
-        } else {
-          priceHome = parseFloat(price);
+        if (cur !== homeCurrency) {
+          const { rate } = await getRate(cur, homeCurrency);
+          return Math.round(pNum * rate * 100) / 100;
         }
-      } catch { priceHome = null; }
+        return pNum;
+      } catch { return null; }
     }
+
+    const priceHome = await calcPriceHome(price, currency);
 
     await client.query('BEGIN');
 
@@ -140,12 +145,41 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       }
     }
 
-    // Auto-link: look for a complementary return journey
-    await tryAutoLink(client, String(booking.id), String(tripId), String(transport_type), String(from_location), String(to_location), String(departure_time));
+    // If a return leg is provided, create it and link both
+    let returnBooking: Record<string, unknown> | null = null;
+    if (linked_journey?.from_location && linked_journey?.to_location && linked_journey?.departure_time) {
+      const lj = linked_journey;
+      const returnPriceHome = await calcPriceHome(lj.price, lj.currency ?? currency);
+      const retResult = await client.query(
+        `INSERT INTO transport_bookings
+           (trip_id, transport_type, from_location, to_location, departure_time, arrival_time,
+            reference_number, price, currency, price_home, notes,
+            airline, linked_booking_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [tripId, transport_type, lj.from_location, lj.to_location, lj.departure_time,
+         lj.arrival_time || null, lj.reference_number || null,
+         lj.price || null, lj.currency ?? currency ?? null, returnPriceHome, notes || null,
+         airline || null, booking.id]
+      );
+      returnBooking = retResult.rows[0];
+      const retId = returnBooking!.id as string;
+
+      if (traveller_ids?.length > 0) {
+        for (const tid of traveller_ids) {
+          await client.query(
+            `INSERT INTO transport_travellers (transport_id, traveller_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+            [retId, tid]
+          );
+        }
+      }
+
+      // Link main booking back to return
+      await client.query(`UPDATE transport_bookings SET linked_booking_id = $1 WHERE id = $2`, [retId, booking.id]);
+      log.info('created linked journey pair', { outbound: booking.id, return: retId });
+    }
 
     await client.query('COMMIT');
 
-    // Re-fetch to get potentially updated linked_booking_id
     const finalRes = await pool.query(`SELECT * FROM transport_bookings WHERE id = $1`, [booking.id]);
     const final = finalRes.rows[0];
 
@@ -153,6 +187,7 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       ...final,
       price: final.price ? parseFloat(final.price) : null,
       price_home: final.price_home ? parseFloat(final.price_home) : null,
+      linked_booking_id: returnBooking ? returnBooking.id : null,
       traveller_ids: traveller_ids || [],
     });
   } catch (err) {

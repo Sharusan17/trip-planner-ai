@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Plus, ChevronDown, ArrowLeft, Plane } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ArrowLeft, Plane, RotateCcw } from 'lucide-react';
 import { transportApi } from '@/api/transport';
 import { travellersApi } from '@/api/travellers';
 import type { CreateTransportInput, TransportType } from '@trip-planner-ai/shared';
@@ -18,8 +18,7 @@ const TIPS: Record<string, string> = {
   solo:        "Add your return journey too — solo travellers sometimes forget the way back!",
 };
 
-interface Draft {
-  transport_type: TransportType;
+interface LegDraft {
   from_location: string;
   to_location: string;
   departure_time: string;
@@ -41,6 +40,15 @@ interface Props {
 }
 
 const TYPE_OPTIONS: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
+const HAS_RETURN: TransportType[] = ['flight', 'train', 'bus', 'ferry', 'other'];
+
+function blankLeg(currency: string): LegDraft {
+  return {
+    from_location: '', to_location: '', departure_time: '', arrival_time: '',
+    reference_number: '', price: '', currency,
+    showArrival: false, airline: '', departure_terminal: '', arrival_terminal: '', aircraft_type: '',
+  };
+}
 
 export default function SetupStepTransport({ tripId, homeCurrency, holidayType }: Props) {
   const qc = useQueryClient();
@@ -53,35 +61,27 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     queryFn: () => travellersApi.list(tripId),
   });
 
-  const blankDraft = (): Draft => ({
-    transport_type: 'flight',
-    from_location: '',
-    to_location: '',
-    departure_time: '',
-    arrival_time: '',
-    reference_number: '',
-    price: '',
-    currency: homeCurrency,
-    showArrival: false,
-    airline: '',
-    departure_terminal: '',
-    arrival_terminal: '',
-    aircraft_type: '',
-  });
-
-  const [draft, setDraft] = useState<Draft>(blankDraft());
+  const [transportType, setTransportType] = useState<TransportType>('flight');
+  const [outbound, setOutbound] = useState<LegDraft>(blankLeg(homeCurrency));
+  const [hasReturn, setHasReturn] = useState(false);
+  const [returnLeg, setReturnLeg] = useState<LegDraft>(blankLeg(homeCurrency));
   const [rowError, setRowError] = useState<string | null>(null);
-  // For flights we start in "search" mode — only flight number + date are shown.
-  // Revealed to full form once user picks a result OR clicks "enter manually".
+  // Flights: start in search mode
   const [showDetails, setShowDetails] = useState(false);
+
+  const resetForm = () => {
+    setOutbound(blankLeg(homeCurrency));
+    setReturnLeg(blankLeg(homeCurrency));
+    setHasReturn(false);
+    setShowDetails(false);
+    setRowError(null);
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: CreateTransportInput) => transportApi.create(tripId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transport', tripId] });
-      setDraft(blankDraft());
-      setShowDetails(false);
-      setRowError(null);
+      resetForm();
     },
     onError: (err: Error) => setRowError(err.message || 'Failed to add booking'),
   });
@@ -92,31 +92,51 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
   });
 
   const saveDraft = () => {
-    if (!draft.from_location.trim() || !draft.to_location.trim() || !draft.departure_time) return;
-    const priceNum = parseFloat(draft.price);
-    createMutation.mutate({
-      transport_type: draft.transport_type,
-      from_location: draft.from_location.trim(),
-      to_location: draft.to_location.trim(),
-      departure_time: draft.departure_time,
-      arrival_time: draft.arrival_time || undefined,
-      reference_number: draft.reference_number.trim() || undefined,
+    if (!outbound.from_location.trim() || !outbound.to_location.trim() || !outbound.departure_time) return;
+    const priceNum = parseFloat(outbound.price);
+
+    const payload: CreateTransportInput = {
+      transport_type: transportType,
+      from_location: outbound.from_location.trim(),
+      to_location: outbound.to_location.trim(),
+      departure_time: outbound.departure_time,
+      arrival_time: outbound.arrival_time || undefined,
+      reference_number: outbound.reference_number.trim() || undefined,
       price: isNaN(priceNum) ? undefined : priceNum,
-      currency: draft.price ? draft.currency : undefined,
-      airline: draft.airline.trim() || undefined,
-      departure_terminal: draft.departure_terminal.trim() || undefined,
-      arrival_terminal: draft.arrival_terminal.trim() || undefined,
-      aircraft_type: draft.aircraft_type.trim() || undefined,
+      currency: outbound.price ? outbound.currency : undefined,
+      airline: outbound.airline.trim() || undefined,
+      departure_terminal: outbound.departure_terminal.trim() || undefined,
+      arrival_terminal: outbound.arrival_terminal.trim() || undefined,
+      aircraft_type: outbound.aircraft_type.trim() || undefined,
       traveller_ids: travellers.map((t) => t.id),
-    });
+    };
+
+    // Attach return leg if filled in
+    if (hasReturn && returnLeg.from_location.trim() && returnLeg.to_location.trim() && returnLeg.departure_time) {
+      const rPrice = parseFloat(returnLeg.price);
+      payload.linked_journey = {
+        from_location: returnLeg.from_location.trim(),
+        to_location: returnLeg.to_location.trim(),
+        departure_time: returnLeg.departure_time,
+        arrival_time: returnLeg.arrival_time || undefined,
+        reference_number: returnLeg.reference_number.trim() || undefined,
+        price: isNaN(rPrice) ? undefined : rPrice,
+        currency: returnLeg.price ? returnLeg.currency : undefined,
+      };
+    }
+
+    createMutation.mutate(payload);
   };
 
+  const canSave = outbound.from_location.trim() && outbound.to_location.trim() && outbound.departure_time &&
+    (!hasReturn || (returnLeg.from_location.trim() && returnLeg.to_location.trim() && returnLeg.departure_time));
+
   const fmtDT = (iso: string) => {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    } catch { return iso; }
+    try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+    catch { return iso; }
   };
+
+  const isFlightSearch = transportType === 'flight' && !showDetails;
 
   return (
     <div className="space-y-3">
@@ -126,14 +146,16 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
       {bookings.length > 0 && (
         <div className="space-y-2">
           {bookings.map((b) => (
-            <div
-              key={b.id}
-              className="flex items-center gap-3 p-3 rounded-xl border border-parchment-dark bg-white"
-            >
+            <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl border border-parchment-dark bg-white">
               <span className="text-xl flex-shrink-0">{TRANSPORT_ICONS[b.transport_type]}</span>
               <div className="flex-1 min-w-0">
                 <div className="font-display text-sm font-semibold text-ink truncate">
                   {b.from_location} &rarr; {b.to_location}
+                  {b.linked_booking_id && (
+                    <span className="ml-1.5 text-[10px] font-body font-normal text-navy bg-navy/10 border border-navy/20 rounded-full px-1.5 py-0.5">
+                      + return
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-ink-faint">
                   {fmtDT(b.departure_time)}
@@ -144,11 +166,8 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm(`Remove ${b.from_location} → ${b.to_location}?`)) deleteMutation.mutate(b.id);
-                }}
+                onClick={() => { if (confirm(`Remove ${b.from_location} → ${b.to_location}?`)) deleteMutation.mutate(b.id); }}
                 className="text-terracotta hover:opacity-70 p-1.5 flex-shrink-0"
-                aria-label="Remove booking"
               >
                 <Trash2 size={16} strokeWidth={2} />
               </button>
@@ -157,58 +176,58 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
         </div>
       )}
 
-      {/* Draft row */}
+      {/* Draft form */}
       <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
-        {/* Type selector — always visible */}
+        {/* Transport type */}
         <select
           className="vintage-input text-sm w-full"
-          value={draft.transport_type}
+          value={transportType}
           onChange={(e) => {
             const t = e.target.value as TransportType;
-            setDraft({ ...draft, transport_type: t });
-            // Flights start in search stage; everything else jumps straight to details.
+            setTransportType(t);
             setShowDetails(t !== 'flight');
+            setHasReturn(false);
           }}
         >
           {TYPE_OPTIONS.map((t) => (
-            <option key={t} value={t}>
-              {TRANSPORT_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}
-            </option>
+            <option key={t} value={t}>{TRANSPORT_ICONS[t]} {t.charAt(0).toUpperCase() + t.slice(1)}</option>
           ))}
         </select>
 
-        {draft.transport_type === 'flight' && !showDetails ? (
-          /* ── Stage 1: flight search ─────────────────────────────────────── */
+        {/* ── Outbound leg ── */}
+        <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider pt-1">
+          {HAS_RETURN.includes(transportType) ? 'Outbound' : 'Journey'}
+        </p>
+
+        {isFlightSearch ? (
           <>
-            <div className="flex items-center gap-2 text-xs font-semibold text-ink-faint uppercase tracking-wider pt-1">
-              <Plane size={12} strokeWidth={2} />
-              Look up your flight
+            <div className="flex items-center gap-2 text-xs font-semibold text-ink-faint uppercase tracking-wider">
+              <Plane size={12} strokeWidth={2} /> Look up your flight
             </div>
             <input
               className="vintage-input w-full font-mono"
               placeholder="Flight number (e.g. BA456)"
-              autoFocus
-              value={draft.reference_number}
-              onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
+              value={outbound.reference_number}
+              onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
             />
             <div>
               <label className="block text-xs text-ink-faint mb-1">Departure date</label>
               <input
                 type="datetime-local"
                 className="vintage-input w-full"
-                value={draft.departure_time}
-                onChange={(e) => setDraft({ ...draft, departure_time: e.target.value })}
+                value={outbound.departure_time}
+                onChange={(e) => setOutbound({ ...outbound, departure_time: e.target.value })}
               />
             </div>
             <FlightLookup
-              flightNumber={draft.reference_number}
-              bookingDate={draft.departure_time.slice(0, 10)}
+              flightNumber={outbound.reference_number}
+              bookingDate={outbound.departure_time.slice(0, 10)}
               onAutoFill={(data: FlightAutoFill) => {
-                const datePart = draft.departure_time.slice(0, 10);
-                const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : draft.departure_time;
-                const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : draft.arrival_time;
-                setDraft({
-                  ...draft,
+                const datePart = outbound.departure_time.slice(0, 10);
+                const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : outbound.departure_time;
+                const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : outbound.arrival_time;
+                setOutbound({
+                  ...outbound,
                   from_location: data.from_location,
                   to_location: data.to_location,
                   airline: data.airline,
@@ -217,17 +236,22 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                   aircraft_type: data.aircraft_type ?? '',
                   departure_time: depDT,
                   arrival_time: arrDT,
-                  showArrival: arrDT ? true : draft.showArrival,
+                  showArrival: !!arrDT,
                 });
+                // Pre-fill return leg with swapped airports
+                setReturnLeg((r) => ({
+                  ...r,
+                  from_location: data.to_location,
+                  to_location: data.from_location,
+                }));
                 setShowDetails(true);
               }}
               onManualEntry={() => setShowDetails(true)}
             />
           </>
         ) : (
-          /* ── Stage 2: full form ─────────────────────────────────────────── */
           <>
-            {draft.transport_type === 'flight' && (
+            {transportType === 'flight' && (
               <button
                 type="button"
                 onClick={() => setShowDetails(false)}
@@ -236,95 +260,194 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                 <ArrowLeft size={12} strokeWidth={2.5} /> Search for a different flight
               </button>
             )}
-
             <div className="flex gap-2">
               <PlaceAutocomplete
-                searchType={draft.transport_type === 'flight' ? 'airport' : 'location'}
-                placeholder={draft.transport_type === 'flight' ? 'From (e.g. LHR, London)' : 'From'}
-                value={draft.from_location}
-                onChange={(val) => setDraft({ ...draft, from_location: val })}
-                onSelect={(s) => setDraft((d) => ({ ...d, from_location: s.name }))}
+                searchType={transportType === 'flight' ? 'airport' : 'location'}
+                placeholder={transportType === 'flight' ? 'From airport' : 'From'}
+                value={outbound.from_location}
+                onChange={(val) => setOutbound({ ...outbound, from_location: val })}
+                onSelect={(s) => {
+                  setOutbound((d) => ({ ...d, from_location: s.name }));
+                  setReturnLeg((r) => ({ ...r, to_location: s.name }));
+                }}
                 className="flex-1 min-w-0"
               />
               <PlaceAutocomplete
-                searchType={draft.transport_type === 'flight' ? 'airport' : 'location'}
-                placeholder={draft.transport_type === 'flight' ? 'To (e.g. FAO, Faro)' : 'To'}
-                value={draft.to_location}
-                onChange={(val) => setDraft({ ...draft, to_location: val })}
-                onSelect={(s) => setDraft((d) => ({ ...d, to_location: s.name }))}
+                searchType={transportType === 'flight' ? 'airport' : 'location'}
+                placeholder={transportType === 'flight' ? 'To airport' : 'To'}
+                value={outbound.to_location}
+                onChange={(val) => setOutbound({ ...outbound, to_location: val })}
+                onSelect={(s) => {
+                  setOutbound((d) => ({ ...d, to_location: s.name }));
+                  setReturnLeg((r) => ({ ...r, from_location: s.name }));
+                }}
                 className="flex-1 min-w-0"
               />
             </div>
-
             <div>
               <label className="block text-xs text-ink-faint mb-1">Departure date &amp; time</label>
               <input
                 type="datetime-local"
                 className="vintage-input w-full"
-                value={draft.departure_time}
-                onChange={(e) => setDraft({ ...draft, departure_time: e.target.value })}
+                value={outbound.departure_time}
+                onChange={(e) => setOutbound({ ...outbound, departure_time: e.target.value })}
               />
             </div>
-
-            {/* Arrival time toggle */}
-            {draft.showArrival ? (
+            {outbound.showArrival ? (
               <div>
                 <label className="block text-xs text-ink-faint mb-1">Arrival date &amp; time (optional)</label>
                 <input
                   type="datetime-local"
                   className="vintage-input w-full"
-                  value={draft.arrival_time}
-                  onChange={(e) => setDraft({ ...draft, arrival_time: e.target.value })}
+                  value={outbound.arrival_time}
+                  onChange={(e) => setOutbound({ ...outbound, arrival_time: e.target.value })}
                 />
               </div>
             ) : (
               <button
                 type="button"
-                onClick={() => setDraft({ ...draft, showArrival: true })}
+                onClick={() => setOutbound({ ...outbound, showArrival: true })}
                 className="text-xs text-navy hover:underline flex items-center gap-1"
               >
                 <ChevronDown size={12} /> Add arrival time
               </button>
             )}
-
             <input
-              className="vintage-input w-full"
-              placeholder={draft.transport_type === 'flight' ? 'Flight number (e.g. BA456)' : 'Booking reference (optional)'}
-              value={draft.reference_number}
-              onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
+              className="vintage-input w-full font-mono"
+              placeholder={transportType === 'flight' ? 'Flight number (e.g. BA456)' : 'Booking reference (optional)'}
+              value={outbound.reference_number}
+              onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
             />
-
             <div className="grid grid-cols-3 gap-2">
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="number" step="0.01" min="0"
                 placeholder="Price"
                 className="vintage-input col-span-2"
-                value={draft.price}
-                onChange={(e) => setDraft({ ...draft, price: e.target.value })}
+                value={outbound.price}
+                onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
               />
-              <select
-                className="vintage-input"
-                value={draft.currency}
-                onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
-              >
+              <select className="vintage-input" value={outbound.currency}
+                onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
                 <option value="GBP">GBP</option>
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
               </select>
             </div>
-            <button
-              type="button"
-              onClick={saveDraft}
-              disabled={
-                !draft.from_location.trim() || !draft.to_location.trim() || !draft.departure_time || createMutation.isPending
-              }
-              className="btn-primary w-full flex items-center justify-center gap-1.5 disabled:opacity-50"
-            >
-              <Plus size={14} strokeWidth={2.5} /> Add booking
-            </button>
           </>
+        )}
+
+        {/* ── Return leg toggle (non-car, non-search-stage) ── */}
+        {HAS_RETURN.includes(transportType) && !isFlightSearch && (
+          <div className="pt-1 border-t border-parchment-dark mt-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="accent-navy"
+                checked={hasReturn}
+                onChange={(e) => {
+                  setHasReturn(e.target.checked);
+                  if (e.target.checked) {
+                    // Pre-swap airports from outbound
+                    setReturnLeg((r) => ({
+                      ...r,
+                      from_location: r.from_location || outbound.to_location,
+                      to_location: r.to_location || outbound.from_location,
+                      currency: outbound.currency,
+                    }));
+                  }
+                }}
+              />
+              <span className="text-xs font-semibold text-ink flex items-center gap-1">
+                <RotateCcw size={12} className="text-navy" />
+                Include return journey
+              </span>
+            </label>
+
+            {hasReturn && (
+              <div className="mt-2 space-y-2 pl-4 border-l-2 border-navy/20">
+                <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Return</p>
+                <div className="flex gap-2">
+                  <PlaceAutocomplete
+                    searchType={transportType === 'flight' ? 'airport' : 'location'}
+                    placeholder={transportType === 'flight' ? 'From airport' : 'From'}
+                    value={returnLeg.from_location}
+                    onChange={(val) => setReturnLeg({ ...returnLeg, from_location: val })}
+                    onSelect={(s) => setReturnLeg((r) => ({ ...r, from_location: s.name }))}
+                    className="flex-1 min-w-0"
+                  />
+                  <PlaceAutocomplete
+                    searchType={transportType === 'flight' ? 'airport' : 'location'}
+                    placeholder={transportType === 'flight' ? 'To airport' : 'To'}
+                    value={returnLeg.to_location}
+                    onChange={(val) => setReturnLeg({ ...returnLeg, to_location: val })}
+                    onSelect={(s) => setReturnLeg((r) => ({ ...r, to_location: s.name }))}
+                    className="flex-1 min-w-0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-faint mb-1">Return departure</label>
+                  <input
+                    type="datetime-local"
+                    className="vintage-input w-full"
+                    value={returnLeg.departure_time}
+                    onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
+                  />
+                </div>
+                {returnLeg.showArrival ? (
+                  <div>
+                    <label className="block text-xs text-ink-faint mb-1">Return arrival (optional)</label>
+                    <input
+                      type="datetime-local"
+                      className="vintage-input w-full"
+                      value={returnLeg.arrival_time}
+                      onChange={(e) => setReturnLeg({ ...returnLeg, arrival_time: e.target.value })}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setReturnLeg({ ...returnLeg, showArrival: true })}
+                    className="text-xs text-navy hover:underline flex items-center gap-1"
+                  >
+                    <ChevronDown size={12} /> Add return arrival time
+                  </button>
+                )}
+                <input
+                  className="vintage-input w-full font-mono"
+                  placeholder={transportType === 'flight' ? 'Return flight number (optional)' : 'Return booking ref (optional)'}
+                  value={returnLeg.reference_number}
+                  onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="number" step="0.01" min="0"
+                    placeholder="Return price"
+                    className="vintage-input col-span-2"
+                    value={returnLeg.price}
+                    onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
+                  />
+                  <select className="vintage-input" value={returnLeg.currency}
+                    onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
+                    <option value="GBP">GBP</option>
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isFlightSearch && (
+          <button
+            type="button"
+            onClick={saveDraft}
+            disabled={!canSave || createMutation.isPending}
+            className="btn-primary w-full flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            {hasReturn ? 'Add outbound + return' : 'Add booking'}
+          </button>
         )}
       </div>
 
