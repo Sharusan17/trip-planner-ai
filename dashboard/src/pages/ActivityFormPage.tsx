@@ -33,6 +33,7 @@ export default function ActivityFormPage() {
   const [actTime, setActTime] = useState('');
   const [actType, setActType] = useState<ActivityType>('custom');
   const [actDesc, setActDesc] = useState('');
+  const [actNotes, setActNotes] = useState('');
   const [actLocation, setActLocation] = useState('');
   const [actLat, setActLat] = useState('');
   const [actLng, setActLng] = useState('');
@@ -58,6 +59,7 @@ export default function ActivityFormPage() {
         setActTime(activity.time || '');
         setActType(activity.type);
         setActDesc(activity.description);
+        setActNotes(activity.notes || '');
         setActLocation(activity.location_tag || '');
         setLocationSearch(activity.location_tag || '');
         setActLat(activity.latitude?.toString() || '');
@@ -109,6 +111,7 @@ export default function ActivityFormPage() {
       time: actTime || undefined,
       type: actType,
       description: actDesc,
+      notes: actNotes || undefined,
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
@@ -121,6 +124,7 @@ export default function ActivityFormPage() {
       time: actTime || undefined,
       type: actType,
       description: actDesc,
+      notes: actNotes || undefined,
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
@@ -233,6 +237,18 @@ export default function ActivityFormPage() {
               {actLat}, {actLng}
             </p>
           )}
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Notes <span className="normal-case font-normal">(optional)</span></label>
+          <textarea
+            className="vintage-input w-full"
+            rows={3}
+            placeholder="Any extra details — opening hours, booking ref, what to bring…"
+            value={actNotes}
+            onChange={(e) => setActNotes(e.target.value)}
+          />
         </div>
 
         <div className="flex gap-3 pt-2">

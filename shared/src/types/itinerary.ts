@@ -37,6 +37,7 @@ export interface Activity {
   time: string | null;
   type: ActivityType;
   description: string;
+  notes: string | null;
   location_tag: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -56,6 +57,7 @@ export interface CreateActivityInput {
   time?: string;
   type: ActivityType;
   description: string;
+  notes?: string;
   location_tag?: string;
   latitude?: number;
   longitude?: number;

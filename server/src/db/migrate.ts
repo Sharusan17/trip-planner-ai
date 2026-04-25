@@ -387,6 +387,9 @@ const migrations = [
     traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
     PRIMARY KEY (room_id, traveller_id)
   );`,
+
+  // 019: notes on activities
+  `ALTER TABLE activities ADD COLUMN IF NOT EXISTS notes TEXT;`,
 ];
 
 export async function runMigrations() {

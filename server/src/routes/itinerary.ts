@@ -91,7 +91,7 @@ router.delete('/days/:dayId', async (req: Request, res: Response) => {
 // POST /api/v1/days/:dayId/activities
 router.post('/days/:dayId/activities', async (req: Request, res: Response) => {
   try {
-    const { time, type, description, location_tag, latitude, longitude, kid_friendly } = req.body;
+    const { time, type, description, notes, location_tag, latitude, longitude, kid_friendly } = req.body;
 
     const maxOrder = await pool.query(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 as next_order FROM activities WHERE day_id = $1',
@@ -99,11 +99,11 @@ router.post('/days/:dayId/activities', async (req: Request, res: Response) => {
     );
 
     const result = await pool.query(
-      `INSERT INTO activities (day_id, time, type, description, location_tag, latitude, longitude, kid_friendly, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO activities (day_id, time, type, description, notes, location_tag, latitude, longitude, kid_friendly, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         req.params.dayId, time || null, type || 'custom', description,
-        location_tag || null, latitude || null, longitude || null,
+        notes || null, location_tag || null, latitude || null, longitude || null,
         kid_friendly ?? true, maxOrder.rows[0].next_order
       ]
     );
@@ -116,13 +116,14 @@ router.post('/days/:dayId/activities', async (req: Request, res: Response) => {
 // PUT /api/v1/activities/:id
 router.put('/activities/:id', async (req: Request, res: Response) => {
   try {
-    const { time, type, description, location_tag, latitude, longitude, kid_friendly } = req.body;
+    const { time, type, description, notes, location_tag, latitude, longitude, kid_friendly } = req.body;
     const result = await pool.query(
       `UPDATE activities SET time = COALESCE($1, time), type = COALESCE($2, type),
-       description = COALESCE($3, description), location_tag = COALESCE($4, location_tag),
-       latitude = COALESCE($5, latitude), longitude = COALESCE($6, longitude),
-       kid_friendly = COALESCE($7, kid_friendly) WHERE id = $8 RETURNING *`,
-      [time, type, description, location_tag, latitude, longitude, kid_friendly, req.params.id]
+       description = COALESCE($3, description), notes = $4,
+       location_tag = COALESCE($5, location_tag),
+       latitude = COALESCE($6, latitude), longitude = COALESCE($7, longitude),
+       kid_friendly = COALESCE($8, kid_friendly) WHERE id = $9 RETURNING *`,
+      [time, type, description, notes || null, location_tag, latitude, longitude, kid_friendly, req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Activity not found' });

@@ -218,6 +218,9 @@ export default function ItineraryPage() {
                                       {a.location_tag}
                                     </span>
                                   )}
+                                  {a.notes && (
+                                    <p className="text-xs text-ink-faint mt-1 italic leading-snug line-clamp-2">{a.notes}</p>
+                                  )}
                                 </div>
                                 {isOrganiser && (
                                   <div className="flex gap-1 flex-shrink-0">

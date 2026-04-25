@@ -14,8 +14,36 @@ const WEATHER_ICONS: Record<number, string> = {
   95: '⛈️', 96: '⛈️', 99: '⛈️',
 };
 
+interface WeatherTag { label: string; className: string }
+const WEATHER_TAGS: Record<number, WeatherTag> = {
+  0:  { label: 'Sunny',    className: 'bg-amber-100 text-amber-700' },
+  1:  { label: 'Sunny',    className: 'bg-amber-100 text-amber-700' },
+  2:  { label: 'Cloudy',   className: 'bg-slate-100 text-slate-600' },
+  3:  { label: 'Overcast', className: 'bg-slate-100 text-slate-600' },
+  45: { label: 'Foggy',    className: 'bg-slate-100 text-slate-500' },
+  48: { label: 'Foggy',    className: 'bg-slate-100 text-slate-500' },
+  51: { label: 'Drizzle',  className: 'bg-blue-100 text-blue-600' },
+  53: { label: 'Drizzle',  className: 'bg-blue-100 text-blue-600' },
+  55: { label: 'Drizzle',  className: 'bg-blue-100 text-blue-600' },
+  61: { label: 'Rainy',    className: 'bg-blue-100 text-blue-700' },
+  63: { label: 'Rainy',    className: 'bg-blue-100 text-blue-700' },
+  65: { label: 'Rainy',    className: 'bg-blue-200 text-blue-800' },
+  71: { label: 'Snowy',    className: 'bg-sky-100 text-sky-600' },
+  73: { label: 'Snowy',    className: 'bg-sky-100 text-sky-600' },
+  75: { label: 'Snowy',    className: 'bg-sky-100 text-sky-600' },
+  80: { label: 'Showers',  className: 'bg-blue-100 text-blue-700' },
+  81: { label: 'Showers',  className: 'bg-blue-100 text-blue-700' },
+  82: { label: 'Showers',  className: 'bg-blue-200 text-blue-800' },
+  95: { label: 'Storm',    className: 'bg-red-100 text-red-700' },
+  96: { label: 'Storm',    className: 'bg-red-100 text-red-700' },
+  99: { label: 'Storm',    className: 'bg-red-100 text-red-700' },
+};
+
 function getIcon(code: number) {
   return WEATHER_ICONS[code] ?? '🌤️';
+}
+function getTag(code: number): WeatherTag {
+  return WEATHER_TAGS[code] ?? { label: 'Mixed', className: 'bg-slate-100 text-slate-500' };
 }
 
 export default function WeatherWidget() {
@@ -107,6 +135,16 @@ export default function WeatherWidget() {
                 <span className="text-xs text-ink-faint">
                   {Math.round(day.temperature_min)}°
                 </span>
+
+                {/* Condition tag */}
+                {(() => {
+                  const tag = getTag(day.weather_code);
+                  return (
+                    <span className={`mt-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold font-body leading-none ${tag.className}`}>
+                      {tag.label}
+                    </span>
+                  );
+                })()}
 
                 {day.precipitation_probability > 0 && (
                   <div className="flex items-center gap-0.5 mt-1.5">
