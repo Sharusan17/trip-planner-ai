@@ -22,9 +22,6 @@ interface Props {
 export default function SetupStepHolidayType({ value, onChange }: Props) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-ink-faint">
-        Who are you travelling with? We&rsquo;ll tailor prompts and tips to match your trip.
-      </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {HOLIDAY_TYPES.map((type) => {
           const selected = value === type.value;

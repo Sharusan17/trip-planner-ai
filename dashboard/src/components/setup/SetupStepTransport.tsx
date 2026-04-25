@@ -366,6 +366,46 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
             {hasReturn && (
               <div className="mt-2 space-y-2 pl-4 border-l-2 border-navy/20">
                 <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Return</p>
+
+                {/* ── Flight: look up return flight number first ── */}
+                {transportType === 'flight' && (
+                  <>
+                    <input
+                      className="vintage-input w-full font-mono"
+                      placeholder="Return flight number (e.g. TP1235)"
+                      value={returnLeg.reference_number}
+                      onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
+                    />
+                    <div>
+                      <label className="block text-xs text-ink-faint mb-1">Return departure date &amp; time</label>
+                      <input
+                        type="datetime-local"
+                        className="vintage-input w-full"
+                        value={returnLeg.departure_time}
+                        onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
+                      />
+                    </div>
+                    <FlightLookup
+                      flightNumber={returnLeg.reference_number}
+                      bookingDate={returnLeg.departure_time.slice(0, 10)}
+                      onAutoFill={(data: FlightAutoFill) => {
+                        const datePart = returnLeg.departure_time.slice(0, 10);
+                        const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : returnLeg.departure_time;
+                        const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : '';
+                        setReturnLeg((r) => ({
+                          ...r,
+                          from_location: data.from_location,
+                          to_location: data.to_location,
+                          departure_time: depDT,
+                          arrival_time: arrDT,
+                          showArrival: !!arrDT,
+                        }));
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* ── From / To airports ── */}
                 <div className="flex gap-2">
                   <PlaceAutocomplete
                     searchType={transportType === 'flight' ? 'airport' : 'location'}
@@ -384,15 +424,29 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                     className="flex-1 min-w-0"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-ink-faint mb-1">Return departure</label>
-                  <input
-                    type="datetime-local"
-                    className="vintage-input w-full"
-                    value={returnLeg.departure_time}
-                    onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
-                  />
-                </div>
+
+                {/* ── Non-flight: departure + booking ref ── */}
+                {transportType !== 'flight' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-ink-faint mb-1">Return departure</label>
+                      <input
+                        type="datetime-local"
+                        className="vintage-input w-full"
+                        value={returnLeg.departure_time}
+                        onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
+                      />
+                    </div>
+                    <input
+                      className="vintage-input w-full font-mono"
+                      placeholder="Return booking ref (optional)"
+                      value={returnLeg.reference_number}
+                      onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
+                    />
+                  </>
+                )}
+
+                {/* ── Arrival time (optional) ── */}
                 {returnLeg.showArrival ? (
                   <div>
                     <label className="block text-xs text-ink-faint mb-1">Return arrival (optional)</label>
@@ -412,12 +466,8 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                     <ChevronDown size={12} /> Add return arrival time
                   </button>
                 )}
-                <input
-                  className="vintage-input w-full font-mono"
-                  placeholder={transportType === 'flight' ? 'Return flight number (optional)' : 'Return booking ref (optional)'}
-                  value={returnLeg.reference_number}
-                  onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
-                />
+
+                {/* ── Price ── */}
                 <div className="grid grid-cols-3 gap-2">
                   <input
                     type="number" step="0.01" min="0"

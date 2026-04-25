@@ -413,6 +413,48 @@ export default function TransportBookingFormPage() {
             {hasReturn && (
               <div className="pl-5 border-l-2 border-navy/20 space-y-3">
                 <p className="text-xs font-semibold text-ink-faint uppercase tracking-wider">Return leg</p>
+
+                {/* ── Flight: look up return flight number first ── */}
+                {form.transport_type === 'flight' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+                        Return flight number <span className="normal-case font-normal">(optional)</span>
+                      </label>
+                      <input
+                        className="vintage-input w-full font-mono"
+                        placeholder="e.g. BA457"
+                        value={returnDraft.reference_number}
+                        onChange={(e) => setReturnDraft({ ...returnDraft, reference_number: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return departure</label>
+                      <input type="datetime-local" className="vintage-input w-full"
+                        value={returnDraft.departure_time}
+                        onChange={(e) => setReturnDraft({ ...returnDraft, departure_time: e.target.value })} />
+                    </div>
+                    <FlightLookup
+                      flightNumber={returnDraft.reference_number}
+                      bookingDate={returnDraft.departure_time.slice(0, 10)}
+                      onAutoFill={(data: FlightAutoFill) => {
+                        const datePart = returnDraft.departure_time.slice(0, 10);
+                        const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : returnDraft.departure_time;
+                        const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : '';
+                        setReturnDraft((r) => ({
+                          ...r,
+                          from_location: data.from_location,
+                          to_location: data.to_location,
+                          departure_time: depDT,
+                          arrival_time: arrDT,
+                          showArrival: !!arrDT,
+                        }));
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* ── From / To ── */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">From</label>
@@ -435,12 +477,29 @@ export default function TransportBookingFormPage() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return departure</label>
-                  <input type="datetime-local" className="vintage-input w-full"
-                    value={returnDraft.departure_time}
-                    onChange={(e) => setReturnDraft({ ...returnDraft, departure_time: e.target.value })} />
-                </div>
+
+                {/* ── Non-flight: departure + booking ref ── */}
+                {form.transport_type !== 'flight' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return departure</label>
+                      <input type="datetime-local" className="vintage-input w-full"
+                        value={returnDraft.departure_time}
+                        onChange={(e) => setReturnDraft({ ...returnDraft, departure_time: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+                        Return booking ref <span className="normal-case font-normal">(optional)</span>
+                      </label>
+                      <input className="vintage-input w-full font-mono"
+                        placeholder="Booking ref"
+                        value={returnDraft.reference_number}
+                        onChange={(e) => setReturnDraft({ ...returnDraft, reference_number: e.target.value })} />
+                    </div>
+                  </>
+                )}
+
+                {/* ── Arrival time (optional) ── */}
                 {returnDraft.showArrival ? (
                   <div>
                     <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return arrival <span className="normal-case font-normal">(optional)</span></label>
@@ -455,15 +514,8 @@ export default function TransportBookingFormPage() {
                     <ChevronDown size={12} /> Add return arrival time
                   </button>
                 )}
-                <div>
-                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
-                    {form.transport_type === 'flight' ? 'Return flight number' : 'Return booking ref'} <span className="normal-case font-normal">(optional)</span>
-                  </label>
-                  <input className="vintage-input w-full font-mono"
-                    placeholder={form.transport_type === 'flight' ? 'e.g. BA457' : 'Booking ref'}
-                    value={returnDraft.reference_number}
-                    onChange={(e) => setReturnDraft({ ...returnDraft, reference_number: e.target.value })} />
-                </div>
+
+                {/* ── Return price ── */}
                 <div>
                   <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return price <span className="normal-case font-normal">(optional)</span></label>
                   <input type="number" step="0.01" min="0" className="vintage-input w-full"
