@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, ChevronDown, ArrowLeft, Plane, RotateCcw } from 'lucide-react';
 import { transportApi } from '@/api/transport';
@@ -40,6 +40,7 @@ interface Props {
 }
 
 const TYPE_OPTIONS: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
+// Types that support a return journey (everything except car)
 const HAS_RETURN: TransportType[] = ['flight', 'train', 'bus', 'ferry', 'other'];
 
 function blankLeg(currency: string): LegDraft {
@@ -63,10 +64,11 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
 
   const [transportType, setTransportType] = useState<TransportType>('flight');
   const [outbound, setOutbound] = useState<LegDraft>(blankLeg(homeCurrency));
-  const [hasReturn, setHasReturn] = useState(false);
   const [returnLeg, setReturnLeg] = useState<LegDraft>(blankLeg(homeCurrency));
+  // Non-flight return toggle
+  const [hasReturn, setHasReturn] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
-  // Flights: start in search mode
+  // Flights: start in search mode (just flight number + date), switch to full form after lookup
   const [showDetails, setShowDetails] = useState(false);
 
   const resetForm = () => {
@@ -91,6 +93,18 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transport', tripId] }),
   });
 
+  // For linked pairs, only show the outbound (earlier departure_time) in the list.
+  const displayBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      if (!b.linked_booking_id) return true;
+      const partner = bookings.find((x) => x.id === b.linked_booking_id);
+      if (!partner) return true;
+      return b.departure_time <= partner.departure_time;
+    });
+  }, [bookings]);
+
+  const returnFilled = returnLeg.from_location.trim() && returnLeg.to_location.trim() && returnLeg.departure_time;
+
   const saveDraft = () => {
     if (!outbound.from_location.trim() || !outbound.to_location.trim() || !outbound.departure_time) return;
     const priceNum = parseFloat(outbound.price);
@@ -111,8 +125,9 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
       traveller_ids: travellers.map((t) => t.id),
     };
 
-    // Attach return leg if filled in
-    if (hasReturn && returnLeg.from_location.trim() && returnLeg.to_location.trim() && returnLeg.departure_time) {
+    // For flights: include return if filled. For non-flights: include if checkbox + filled.
+    const includeReturn = transportType === 'flight' ? !!returnFilled : (hasReturn && !!returnFilled);
+    if (includeReturn) {
       const rPrice = parseFloat(returnLeg.price);
       payload.linked_journey = {
         from_location: returnLeg.from_location.trim(),
@@ -128,8 +143,13 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     createMutation.mutate(payload);
   };
 
-  const canSave = outbound.from_location.trim() && outbound.to_location.trim() && outbound.departure_time &&
-    (!hasReturn || (returnLeg.from_location.trim() && returnLeg.to_location.trim() && returnLeg.departure_time));
+  const canSave = !!(
+    outbound.from_location.trim() &&
+    outbound.to_location.trim() &&
+    outbound.departure_time &&
+    // Non-flight return checkbox: return must be filled if ticked
+    (transportType === 'flight' || !hasReturn || returnFilled)
+  );
 
   const fmtDT = (iso: string) => {
     try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
@@ -138,14 +158,55 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
 
   const isFlightSearch = transportType === 'flight' && !showDetails;
 
+  // Auto-fill helper for outbound
+  const applyOutboundAutoFill = (data: FlightAutoFill) => {
+    const datePart = outbound.departure_time.slice(0, 10);
+    const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : outbound.departure_time;
+    const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : outbound.arrival_time;
+    setOutbound((o) => ({
+      ...o,
+      from_location: data.from_location,
+      to_location: data.to_location,
+      airline: data.airline,
+      departure_terminal: data.departure_terminal ?? '',
+      arrival_terminal: data.arrival_terminal ?? '',
+      aircraft_type: data.aircraft_type ?? '',
+      departure_time: depDT,
+      arrival_time: arrDT,
+      showArrival: !!arrDT,
+    }));
+    // Pre-fill return with swapped airports
+    setReturnLeg((r) => ({
+      ...r,
+      from_location: r.from_location || data.to_location,
+      to_location: r.to_location || data.from_location,
+    }));
+    setShowDetails(true);
+  };
+
+  // Auto-fill helper for return leg
+  const applyReturnAutoFill = (data: FlightAutoFill) => {
+    const datePart = returnLeg.departure_time.slice(0, 10);
+    const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : returnLeg.departure_time;
+    const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : '';
+    setReturnLeg((r) => ({
+      ...r,
+      from_location: data.from_location,
+      to_location: data.to_location,
+      departure_time: depDT,
+      arrival_time: arrDT,
+      showArrival: !!arrDT,
+    }));
+  };
+
   return (
     <div className="space-y-3">
       <SetupTip tip={TIPS[holidayType]} />
 
-      {/* Existing bookings */}
-      {bookings.length > 0 && (
+      {/* Existing bookings (outbound only for linked pairs) */}
+      {displayBookings.length > 0 && (
         <div className="space-y-2">
-          {bookings.map((b) => (
+          {displayBookings.map((b) => (
             <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl border border-parchment-dark bg-white">
               <span className="text-xl flex-shrink-0">{TRANSPORT_ICONS[b.transport_type]}</span>
               <div className="flex-1 min-w-0">
@@ -177,7 +238,7 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
       )}
 
       {/* Draft form */}
-      <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
+      <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-3">
         {/* Transport type */}
         <select
           className="vintage-input text-sm w-full"
@@ -194,13 +255,10 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
           ))}
         </select>
 
-        {/* ── Outbound leg ── */}
-        <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider pt-1">
-          {HAS_RETURN.includes(transportType) ? 'Outbound' : 'Journey'}
-        </p>
-
-        {isFlightSearch ? (
+        {/* ─── FLIGHT: Stage 1 — look up outbound first ─── */}
+        {isFlightSearch && (
           <>
+            <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Outbound</p>
             <div className="flex items-center gap-2 text-xs font-semibold text-ink-faint uppercase tracking-wider">
               <Plane size={12} strokeWidth={2} /> Look up your flight
             </div>
@@ -222,64 +280,203 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
             <FlightLookup
               flightNumber={outbound.reference_number}
               bookingDate={outbound.departure_time.slice(0, 10)}
-              onAutoFill={(data: FlightAutoFill) => {
-                const datePart = outbound.departure_time.slice(0, 10);
-                const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : outbound.departure_time;
-                const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : outbound.arrival_time;
-                setOutbound({
-                  ...outbound,
-                  from_location: data.from_location,
-                  to_location: data.to_location,
-                  airline: data.airline,
-                  departure_terminal: data.departure_terminal ?? '',
-                  arrival_terminal: data.arrival_terminal ?? '',
-                  aircraft_type: data.aircraft_type ?? '',
-                  departure_time: depDT,
-                  arrival_time: arrDT,
-                  showArrival: !!arrDT,
-                });
-                // Pre-fill return leg with swapped airports
-                setReturnLeg((r) => ({
-                  ...r,
-                  from_location: data.to_location,
-                  to_location: data.from_location,
-                }));
-                setShowDetails(true);
-              }}
+              onAutoFill={applyOutboundAutoFill}
               onManualEntry={() => setShowDetails(true)}
             />
           </>
-        ) : (
+        )}
+
+        {/* ─── FLIGHT: Stage 2 — outbound + return sections ─── */}
+        {transportType === 'flight' && showDetails && (
           <>
-            {transportType === 'flight' && (
-              <button
-                type="button"
-                onClick={() => setShowDetails(false)}
-                className="text-xs text-navy hover:underline inline-flex items-center gap-1 pt-0.5"
-              >
-                <ArrowLeft size={12} strokeWidth={2.5} /> Search for a different flight
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowDetails(false)}
+              className="text-xs text-navy hover:underline inline-flex items-center gap-1 pt-0.5"
+            >
+              <ArrowLeft size={12} strokeWidth={2.5} /> Search for a different outbound flight
+            </button>
+
+            {/* OUTBOUND section */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Outbound</p>
+              <div className="flex gap-2">
+                <PlaceAutocomplete
+                  searchType="airport"
+                  placeholder="From airport"
+                  value={outbound.from_location}
+                  onChange={(val) => setOutbound({ ...outbound, from_location: val })}
+                  onSelect={(s) => {
+                    setOutbound((d) => ({ ...d, from_location: s.name }));
+                    setReturnLeg((r) => ({ ...r, to_location: r.to_location || s.name }));
+                  }}
+                  className="flex-1 min-w-0"
+                />
+                <PlaceAutocomplete
+                  searchType="airport"
+                  placeholder="To airport"
+                  value={outbound.to_location}
+                  onChange={(val) => setOutbound({ ...outbound, to_location: val })}
+                  onSelect={(s) => {
+                    setOutbound((d) => ({ ...d, to_location: s.name }));
+                    setReturnLeg((r) => ({ ...r, from_location: r.from_location || s.name }));
+                  }}
+                  className="flex-1 min-w-0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-ink-faint mb-1">Departure date &amp; time</label>
+                <input
+                  type="datetime-local" className="vintage-input w-full"
+                  value={outbound.departure_time}
+                  onChange={(e) => setOutbound({ ...outbound, departure_time: e.target.value })}
+                />
+              </div>
+              {outbound.showArrival ? (
+                <div>
+                  <label className="block text-xs text-ink-faint mb-1">Arrival date &amp; time</label>
+                  <input
+                    type="datetime-local" className="vintage-input w-full"
+                    value={outbound.arrival_time}
+                    onChange={(e) => setOutbound({ ...outbound, arrival_time: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <button type="button" onClick={() => setOutbound({ ...outbound, showArrival: true })}
+                  className="text-xs text-navy hover:underline flex items-center gap-1">
+                  <ChevronDown size={12} /> Add arrival time
+                </button>
+              )}
+              <input
+                className="vintage-input w-full font-mono"
+                placeholder="Flight number (e.g. BA456)"
+                value={outbound.reference_number}
+                onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number" step="0.01" min="0" placeholder="Price"
+                  className="vintage-input col-span-2"
+                  value={outbound.price}
+                  onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
+                />
+                <select className="vintage-input" value={outbound.currency}
+                  onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
+                  <option value="GBP">GBP</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            </div>
+
+            {/* RETURN section — always visible for flights, no checkbox */}
+            <div className="pt-2 border-t border-parchment-dark space-y-2">
+              <div className="flex items-center gap-1.5">
+                <RotateCcw size={12} className="text-navy" />
+                <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">
+                  Return <span className="normal-case font-normal text-ink-faint">(optional)</span>
+                </p>
+              </div>
+
+              {/* Return flight lookup */}
+              <input
+                className="vintage-input w-full font-mono"
+                placeholder="Return flight number (e.g. TP1235)"
+                value={returnLeg.reference_number}
+                onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
+              />
+              <div>
+                <label className="block text-xs text-ink-faint mb-1">Return departure date &amp; time</label>
+                <input
+                  type="datetime-local" className="vintage-input w-full"
+                  value={returnLeg.departure_time}
+                  onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
+                />
+              </div>
+              <FlightLookup
+                flightNumber={returnLeg.reference_number}
+                bookingDate={returnLeg.departure_time.slice(0, 10)}
+                onAutoFill={applyReturnAutoFill}
+              />
+
+              {/* Return from/to — pre-filled by lookup, still editable */}
+              <div className="flex gap-2">
+                <PlaceAutocomplete
+                  searchType="airport"
+                  placeholder="From airport"
+                  value={returnLeg.from_location}
+                  onChange={(val) => setReturnLeg({ ...returnLeg, from_location: val })}
+                  onSelect={(s) => setReturnLeg((r) => ({ ...r, from_location: s.name }))}
+                  className="flex-1 min-w-0"
+                />
+                <PlaceAutocomplete
+                  searchType="airport"
+                  placeholder="To airport"
+                  value={returnLeg.to_location}
+                  onChange={(val) => setReturnLeg({ ...returnLeg, to_location: val })}
+                  onSelect={(s) => setReturnLeg((r) => ({ ...r, to_location: s.name }))}
+                  className="flex-1 min-w-0"
+                />
+              </div>
+              {returnLeg.showArrival ? (
+                <div>
+                  <label className="block text-xs text-ink-faint mb-1">Return arrival date &amp; time</label>
+                  <input
+                    type="datetime-local" className="vintage-input w-full"
+                    value={returnLeg.arrival_time}
+                    onChange={(e) => setReturnLeg({ ...returnLeg, arrival_time: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <button type="button" onClick={() => setReturnLeg({ ...returnLeg, showArrival: true })}
+                  className="text-xs text-navy hover:underline flex items-center gap-1">
+                  <ChevronDown size={12} /> Add return arrival time
+                </button>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number" step="0.01" min="0" placeholder="Return price"
+                  className="vintage-input col-span-2"
+                  value={returnLeg.price}
+                  onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
+                />
+                <select className="vintage-input" value={returnLeg.currency}
+                  onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
+                  <option value="GBP">GBP</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ─── NON-FLIGHT: single form + optional return checkbox ─── */}
+        {transportType !== 'flight' && (
+          <>
+            <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">
+              {HAS_RETURN.includes(transportType) ? 'Outbound' : 'Journey'}
+            </p>
             <div className="flex gap-2">
               <PlaceAutocomplete
-                searchType={transportType === 'flight' ? 'airport' : 'location'}
-                placeholder={transportType === 'flight' ? 'From airport' : 'From'}
+                searchType="location"
+                placeholder="From"
                 value={outbound.from_location}
                 onChange={(val) => setOutbound({ ...outbound, from_location: val })}
                 onSelect={(s) => {
                   setOutbound((d) => ({ ...d, from_location: s.name }));
-                  setReturnLeg((r) => ({ ...r, to_location: s.name }));
+                  setReturnLeg((r) => ({ ...r, to_location: r.to_location || s.name }));
                 }}
                 className="flex-1 min-w-0"
               />
               <PlaceAutocomplete
-                searchType={transportType === 'flight' ? 'airport' : 'location'}
-                placeholder={transportType === 'flight' ? 'To airport' : 'To'}
+                searchType="location"
+                placeholder="To"
                 value={outbound.to_location}
                 onChange={(val) => setOutbound({ ...outbound, to_location: val })}
                 onSelect={(s) => {
                   setOutbound((d) => ({ ...d, to_location: s.name }));
-                  setReturnLeg((r) => ({ ...r, from_location: s.name }));
+                  setReturnLeg((r) => ({ ...r, from_location: r.from_location || s.name }));
                 }}
                 className="flex-1 min-w-0"
               />
@@ -287,8 +484,7 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
             <div>
               <label className="block text-xs text-ink-faint mb-1">Departure date &amp; time</label>
               <input
-                type="datetime-local"
-                className="vintage-input w-full"
+                type="datetime-local" className="vintage-input w-full"
                 value={outbound.departure_time}
                 onChange={(e) => setOutbound({ ...outbound, departure_time: e.target.value })}
               />
@@ -297,31 +493,26 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
               <div>
                 <label className="block text-xs text-ink-faint mb-1">Arrival date &amp; time (optional)</label>
                 <input
-                  type="datetime-local"
-                  className="vintage-input w-full"
+                  type="datetime-local" className="vintage-input w-full"
                   value={outbound.arrival_time}
                   onChange={(e) => setOutbound({ ...outbound, arrival_time: e.target.value })}
                 />
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setOutbound({ ...outbound, showArrival: true })}
-                className="text-xs text-navy hover:underline flex items-center gap-1"
-              >
+              <button type="button" onClick={() => setOutbound({ ...outbound, showArrival: true })}
+                className="text-xs text-navy hover:underline flex items-center gap-1">
                 <ChevronDown size={12} /> Add arrival time
               </button>
             )}
             <input
               className="vintage-input w-full font-mono"
-              placeholder={transportType === 'flight' ? 'Flight number (e.g. BA456)' : 'Booking reference (optional)'}
+              placeholder="Booking reference (optional)"
               value={outbound.reference_number}
               onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
             />
             <div className="grid grid-cols-3 gap-2">
               <input
-                type="number" step="0.01" min="0"
-                placeholder="Price"
+                type="number" step="0.01" min="0" placeholder="Price"
                 className="vintage-input col-span-2"
                 value={outbound.price}
                 onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
@@ -333,161 +524,105 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                 <option value="USD">USD</option>
               </select>
             </div>
-          </>
-        )}
 
-        {/* ── Return leg toggle (non-car, non-search-stage) ── */}
-        {HAS_RETURN.includes(transportType) && !isFlightSearch && (
-          <div className="pt-1 border-t border-parchment-dark mt-1">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="accent-navy"
-                checked={hasReturn}
-                onChange={(e) => {
-                  setHasReturn(e.target.checked);
-                  if (e.target.checked) {
-                    // Pre-swap airports from outbound
-                    setReturnLeg((r) => ({
-                      ...r,
-                      from_location: r.from_location || outbound.to_location,
-                      to_location: r.to_location || outbound.from_location,
-                      currency: outbound.currency,
-                    }));
-                  }
-                }}
-              />
-              <span className="text-xs font-semibold text-ink flex items-center gap-1">
-                <RotateCcw size={12} className="text-navy" />
-                Include return journey
-              </span>
-            </label>
-
-            {hasReturn && (
-              <div className="mt-2 space-y-2 pl-4 border-l-2 border-navy/20">
-                <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Return</p>
-
-                {/* ── Flight: look up return flight number first ── */}
-                {transportType === 'flight' && (
-                  <>
-                    <input
-                      className="vintage-input w-full font-mono"
-                      placeholder="Return flight number (e.g. TP1235)"
-                      value={returnLeg.reference_number}
-                      onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
-                    />
-                    <div>
-                      <label className="block text-xs text-ink-faint mb-1">Return departure date &amp; time</label>
-                      <input
-                        type="datetime-local"
-                        className="vintage-input w-full"
-                        value={returnLeg.departure_time}
-                        onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
-                      />
-                    </div>
-                    <FlightLookup
-                      flightNumber={returnLeg.reference_number}
-                      bookingDate={returnLeg.departure_time.slice(0, 10)}
-                      onAutoFill={(data: FlightAutoFill) => {
-                        const datePart = returnLeg.departure_time.slice(0, 10);
-                        const depDT = datePart && data.departure_time_hhmm ? `${datePart}T${data.departure_time_hhmm}` : returnLeg.departure_time;
-                        const arrDT = datePart && data.arrival_time_hhmm ? `${datePart}T${data.arrival_time_hhmm}` : '';
+            {/* Non-flight return toggle */}
+            {HAS_RETURN.includes(transportType) && (
+              <div className="pt-1 border-t border-parchment-dark">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="accent-navy"
+                    checked={hasReturn}
+                    onChange={(e) => {
+                      setHasReturn(e.target.checked);
+                      if (e.target.checked) {
                         setReturnLeg((r) => ({
                           ...r,
-                          from_location: data.from_location,
-                          to_location: data.to_location,
-                          departure_time: depDT,
-                          arrival_time: arrDT,
-                          showArrival: !!arrDT,
+                          from_location: r.from_location || outbound.to_location,
+                          to_location: r.to_location || outbound.from_location,
+                          currency: outbound.currency,
                         }));
-                      }}
-                    />
-                  </>
-                )}
-
-                {/* ── From / To airports ── */}
-                <div className="flex gap-2">
-                  <PlaceAutocomplete
-                    searchType={transportType === 'flight' ? 'airport' : 'location'}
-                    placeholder={transportType === 'flight' ? 'From airport' : 'From'}
-                    value={returnLeg.from_location}
-                    onChange={(val) => setReturnLeg({ ...returnLeg, from_location: val })}
-                    onSelect={(s) => setReturnLeg((r) => ({ ...r, from_location: s.name }))}
-                    className="flex-1 min-w-0"
+                      }
+                    }}
                   />
-                  <PlaceAutocomplete
-                    searchType={transportType === 'flight' ? 'airport' : 'location'}
-                    placeholder={transportType === 'flight' ? 'To airport' : 'To'}
-                    value={returnLeg.to_location}
-                    onChange={(val) => setReturnLeg({ ...returnLeg, to_location: val })}
-                    onSelect={(s) => setReturnLeg((r) => ({ ...r, to_location: s.name }))}
-                    className="flex-1 min-w-0"
-                  />
-                </div>
+                  <span className="text-xs font-semibold text-ink flex items-center gap-1">
+                    <RotateCcw size={12} className="text-navy" />
+                    Include return journey
+                  </span>
+                </label>
 
-                {/* ── Non-flight: departure + booking ref ── */}
-                {transportType !== 'flight' && (
-                  <>
+                {hasReturn && (
+                  <div className="mt-2 space-y-2 pl-4 border-l-2 border-navy/20">
+                    <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Return</p>
+                    <div className="flex gap-2">
+                      <PlaceAutocomplete
+                        searchType="location"
+                        placeholder="From"
+                        value={returnLeg.from_location}
+                        onChange={(val) => setReturnLeg({ ...returnLeg, from_location: val })}
+                        onSelect={(s) => setReturnLeg((r) => ({ ...r, from_location: s.name }))}
+                        className="flex-1 min-w-0"
+                      />
+                      <PlaceAutocomplete
+                        searchType="location"
+                        placeholder="To"
+                        value={returnLeg.to_location}
+                        onChange={(val) => setReturnLeg({ ...returnLeg, to_location: val })}
+                        onSelect={(s) => setReturnLeg((r) => ({ ...r, to_location: s.name }))}
+                        className="flex-1 min-w-0"
+                      />
+                    </div>
                     <div>
                       <label className="block text-xs text-ink-faint mb-1">Return departure</label>
                       <input
-                        type="datetime-local"
-                        className="vintage-input w-full"
+                        type="datetime-local" className="vintage-input w-full"
                         value={returnLeg.departure_time}
                         onChange={(e) => setReturnLeg({ ...returnLeg, departure_time: e.target.value })}
                       />
                     </div>
+                    {returnLeg.showArrival ? (
+                      <div>
+                        <label className="block text-xs text-ink-faint mb-1">Return arrival (optional)</label>
+                        <input
+                          type="datetime-local" className="vintage-input w-full"
+                          value={returnLeg.arrival_time}
+                          onChange={(e) => setReturnLeg({ ...returnLeg, arrival_time: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setReturnLeg({ ...returnLeg, showArrival: true })}
+                        className="text-xs text-navy hover:underline flex items-center gap-1">
+                        <ChevronDown size={12} /> Add return arrival time
+                      </button>
+                    )}
                     <input
                       className="vintage-input w-full font-mono"
                       placeholder="Return booking ref (optional)"
                       value={returnLeg.reference_number}
                       onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
                     />
-                  </>
-                )}
-
-                {/* ── Arrival time (optional) ── */}
-                {returnLeg.showArrival ? (
-                  <div>
-                    <label className="block text-xs text-ink-faint mb-1">Return arrival (optional)</label>
-                    <input
-                      type="datetime-local"
-                      className="vintage-input w-full"
-                      value={returnLeg.arrival_time}
-                      onChange={(e) => setReturnLeg({ ...returnLeg, arrival_time: e.target.value })}
-                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="number" step="0.01" min="0" placeholder="Return price"
+                        className="vintage-input col-span-2"
+                        value={returnLeg.price}
+                        onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
+                      />
+                      <select className="vintage-input" value={returnLeg.currency}
+                        onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
+                        <option value="GBP">GBP</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setReturnLeg({ ...returnLeg, showArrival: true })}
-                    className="text-xs text-navy hover:underline flex items-center gap-1"
-                  >
-                    <ChevronDown size={12} /> Add return arrival time
-                  </button>
                 )}
-
-                {/* ── Price ── */}
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    type="number" step="0.01" min="0"
-                    placeholder="Return price"
-                    className="vintage-input col-span-2"
-                    value={returnLeg.price}
-                    onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
-                  />
-                  <select className="vintage-input" value={returnLeg.currency}
-                    onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
-                    <option value="GBP">GBP</option>
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </div>
               </div>
             )}
-          </div>
+          </>
         )}
 
+        {/* Save button — hidden during flight search stage 1 */}
         {!isFlightSearch && (
           <button
             type="button"
@@ -496,7 +631,7 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
             className="btn-primary w-full flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
             <Plus size={14} strokeWidth={2.5} />
-            {hasReturn ? 'Add outbound + return' : 'Add booking'}
+            {returnFilled ? 'Add outbound + return' : 'Add booking'}
           </button>
         )}
       </div>
@@ -504,6 +639,11 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
       {rowError && <p className="text-xs text-terracotta">{rowError}</p>}
       <p className="text-xs text-ink-faint">
         {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'} added
+        {bookings.length > 0 && (
+          <span className="ml-2 text-navy cursor-pointer hover:underline" onClick={resetForm}>
+            + add another
+          </span>
+        )}
       </p>
     </div>
   );

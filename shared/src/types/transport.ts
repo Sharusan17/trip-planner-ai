@@ -2,11 +2,11 @@ export type TransportType = 'flight' | 'train' | 'bus' | 'car' | 'ferry' | 'othe
 
 export const TRANSPORT_ICONS: Record<TransportType, string> = {
   flight: '✈️',
-  train: '🚂',
+  train: '🚆',
   bus: '🚌',
   car: '🚗',
   ferry: '⛴️',
-  other: '🚀',
+  other: '🎫',
 };
 
 export interface TransportBooking {
