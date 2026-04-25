@@ -3,22 +3,36 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('weather');
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1';
 
-// 30-minute server-side cache — shared across all users on the same trip.
-// Stops Open-Meteo 429s when multiple browser tabs hit the server simultaneously.
-const CACHE_TTL_MS = 30 * 60 * 1000;
+// 2-hour server-side cache. Weather doesn't change meaningfully faster than this,
+// and Open-Meteo free tier rate-limits hard on busy servers.
+const CACHE_TTL_MS  = 2 * 60 * 60 * 1000;   // 2 h — fresh window
+const STALE_MAX_MS  = 6 * 60 * 60 * 1000;   // 6 h — serve stale on upstream error
+
 interface CacheEntry { at: number; value: Awaited<ReturnType<typeof _fetchWeather>> }
 const cache = new Map<string, CacheEntry>();
 
 export async function fetchWeather(lat: number, lng: number) {
   const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
   const hit = cache.get(key);
+
+  // Fresh cache — return immediately, no upstream call.
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
-    log.debug(`${key}: cache HIT`);
+    log.debug(`${key}: cache HIT (age ${Math.round((Date.now() - hit.at) / 60_000)}m)`);
     return hit.value;
   }
-  const value = await _fetchWeather(lat, lng);
-  cache.set(key, { at: Date.now(), value });
-  return value;
+
+  try {
+    const value = await _fetchWeather(lat, lng);
+    cache.set(key, { at: Date.now(), value });
+    return value;
+  } catch (err) {
+    // On any upstream failure (429, 5xx, network) serve stale data if it's not too old.
+    if (hit && Date.now() - hit.at < STALE_MAX_MS) {
+      log.warn(`${key}: upstream error — serving stale cache (age ${Math.round((Date.now() - hit.at) / 60_000)}m)`, { err: (err as Error).message });
+      return hit.value;
+    }
+    throw err;
+  }
 }
 
 async function _fetchWeather(lat: number, lng: number) {

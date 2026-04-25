@@ -14,6 +14,8 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     const data = await fetchWeather(lat, lng);
+    // Tell browsers/CDN to cache for 1 h; serve stale up to 1 h more while revalidating.
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=3600');
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

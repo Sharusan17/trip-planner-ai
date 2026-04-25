@@ -53,7 +53,11 @@ export default function WeatherWidget() {
     queryKey: ['weather', currentTrip?.latitude, currentTrip?.longitude],
     queryFn: () => weatherApi.get(currentTrip!.latitude, currentTrip!.longitude),
     enabled: !!currentTrip?.latitude,
-    staleTime: 30 * 60 * 1000,
+    staleTime:           2 * 60 * 60 * 1000,  // 2 h — matches server cache TTL
+    gcTime:              4 * 60 * 60 * 1000,  // keep in memory 4 h after last use
+    refetchOnWindowFocus: false,               // don't re-hit on tab switch
+    refetchOnReconnect:   false,               // don't re-hit on network reconnect
+    retry: false,                              // don't retry on 429 — server handles stale
   });
 
   if (!currentTrip) return null;
