@@ -66,6 +66,10 @@ export default function TransportBookingFormPage() {
   // Return journey
   const [hasReturn, setHasReturn] = useState(false);
   const [returnDraft, setReturnDraft] = useState<ReturnDraft>(emptyReturn);
+  // Flight pair pricing mode
+  const [pricingMode, setPricingMode] = useState<'total' | 'per-leg'>('total');
+  const [totalPrice, setTotalPrice] = useState('');
+  const [totalCurrency, setTotalCurrency] = useState('EUR');
 
   const { data: bookings = [] } = useQuery({
     queryKey: ['transport', currentTrip?.id],
@@ -115,6 +119,16 @@ export default function TransportBookingFormPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const isFlightReturn = !isEdit && hasReturn && form.transport_type === 'flight';
+
+    // Determine outbound price
+    let outPrice = form.price ? parseFloat(form.price) : undefined;
+    let outCurrency = form.currency || undefined;
+    if (isFlightReturn && pricingMode === 'total') {
+      outPrice = totalPrice ? parseFloat(totalPrice) : undefined;
+      outCurrency = totalCurrency || undefined;
+    }
+
     const data: CreateTransportInput = {
       transport_type: form.transport_type,
       from_location: form.from_location,
@@ -122,8 +136,8 @@ export default function TransportBookingFormPage() {
       departure_time: form.departure_time,
       arrival_time: form.arrival_time || undefined,
       reference_number: form.reference_number || undefined,
-      price: form.price ? parseFloat(form.price) : undefined,
-      currency: form.currency || undefined,
+      price: outPrice,
+      currency: outCurrency,
       notes: form.notes || undefined,
       airline: form.airline || undefined,
       departure_terminal: form.departure_terminal || undefined,
@@ -133,14 +147,16 @@ export default function TransportBookingFormPage() {
     };
     // Attach return leg
     if (!isEdit && hasReturn && returnDraft.from_location && returnDraft.to_location && returnDraft.departure_time) {
+      const rPrice = isFlightReturn && pricingMode === 'per-leg' && returnDraft.price
+        ? parseFloat(returnDraft.price) : undefined;
       data.linked_journey = {
         from_location: returnDraft.from_location,
         to_location: returnDraft.to_location,
         departure_time: returnDraft.departure_time,
         arrival_time: returnDraft.arrival_time || undefined,
         reference_number: returnDraft.reference_number || undefined,
-        price: returnDraft.price ? parseFloat(returnDraft.price) : undefined,
-        currency: form.currency || undefined,
+        price: rPrice,
+        currency: isFlightReturn && pricingMode === 'per-leg' ? (form.currency || undefined) : undefined,
       };
     }
     if (isEdit && id) updateMutation.mutate({ id, data });
@@ -339,20 +355,22 @@ export default function TransportBookingFormPage() {
           </div>
         )}
 
-        {/* Price + Currency */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Price</label>
-            <input type="number" step="0.01" min="0" className="vintage-input w-full" value={form.price}
-              onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="0.00" />
+        {/* Price + Currency — hidden for flight+return (handled by unified pricing below) */}
+        {!(form.transport_type === 'flight' && hasReturn && !isEdit) && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Price</label>
+              <input type="number" step="0.01" min="0" className="vintage-input w-full" value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="0.00" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Currency</label>
+              <input className="vintage-input w-full uppercase" value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+                placeholder="EUR" maxLength={3} />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Currency</label>
-            <input className="vintage-input w-full uppercase" value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
-              placeholder="EUR" maxLength={3} />
-          </div>
-        </div>
+        )}
 
         {/* Travellers */}
         {travellers.length > 0 && (
@@ -515,14 +533,96 @@ export default function TransportBookingFormPage() {
                   </button>
                 )}
 
-                {/* ── Return price ── */}
-                <div>
-                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Return price <span className="normal-case font-normal">(optional)</span></label>
-                  <input type="number" step="0.01" min="0" className="vintage-input w-full"
-                    placeholder="0.00"
-                    value={returnDraft.price}
-                    onChange={(e) => setReturnDraft({ ...returnDraft, price: e.target.value })} />
+              </div>
+            )}
+
+            {/* ── Unified pricing for flight + return ── */}
+            {form.transport_type === 'flight' && hasReturn && (
+              <div className="border border-parchment-dark rounded-xl p-3 space-y-2 bg-parchment/30">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-ink-faint uppercase tracking-wider">Price</label>
+                  <div className="flex rounded-lg border border-parchment-dark overflow-hidden text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pricingMode === 'per-leg') {
+                          const sum = (parseFloat(form.price) || 0) + (parseFloat(returnDraft.price) || 0);
+                          if (sum > 0) setTotalPrice(sum.toFixed(2));
+                          setTotalCurrency(form.currency || 'EUR');
+                        }
+                        setPricingMode('total');
+                      }}
+                      className={`px-3 py-1.5 transition-colors ${pricingMode === 'total' ? 'bg-navy text-white' : 'bg-white text-ink-faint hover:bg-parchment/60'}`}
+                    >
+                      Total
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pricingMode === 'total') {
+                          const half = parseFloat(totalPrice) / 2;
+                          if (!isNaN(half) && half > 0) {
+                            setForm((f) => ({ ...f, price: half.toFixed(2) }));
+                            setReturnDraft((r) => ({ ...r, price: half.toFixed(2) }));
+                          }
+                        }
+                        setPricingMode('per-leg');
+                      }}
+                      className={`px-3 py-1.5 border-l border-parchment-dark transition-colors ${pricingMode === 'per-leg' ? 'bg-navy text-white' : 'bg-white text-ink-faint hover:bg-parchment/60'}`}
+                    >
+                      Per leg
+                    </button>
+                  </div>
                 </div>
+
+                {pricingMode === 'total' ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input type="number" step="0.01" min="0" placeholder="Total for both legs"
+                        className="vintage-input col-span-2"
+                        value={totalPrice}
+                        onChange={(e) => setTotalPrice(e.target.value)} />
+                      <select className="vintage-input" value={totalCurrency}
+                        onChange={(e) => setTotalCurrency(e.target.value)}>
+                        <option value="GBP">GBP</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+                    <p className="text-[10px] text-ink-faint">Covers both outbound &amp; return. Switch to "Per leg" to split.</p>
+                  </>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm w-6 flex-shrink-0">🛫</span>
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="vintage-input flex-1 text-sm"
+                        value={form.price}
+                        onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                      <select className="vintage-input text-sm" style={{ width: 'auto' }}
+                        value={form.currency}
+                        onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                        <option value="GBP">GBP</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm w-6 flex-shrink-0">🛬</span>
+                      <input type="number" step="0.01" min="0" placeholder="0.00"
+                        className="vintage-input flex-1 text-sm"
+                        value={returnDraft.price}
+                        onChange={(e) => setReturnDraft({ ...returnDraft, price: e.target.value })} />
+                      <select className="vintage-input text-sm" style={{ width: 'auto' }}
+                        value={form.currency}
+                        onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                        <option value="GBP">GBP</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

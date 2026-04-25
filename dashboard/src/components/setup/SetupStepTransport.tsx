@@ -70,6 +70,10 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
   const [rowError, setRowError] = useState<string | null>(null);
   // Flights: start in search mode (just flight number + date), switch to full form after lookup
   const [showDetails, setShowDetails] = useState(false);
+  // Flight pricing: total (one price for the pair) or per-leg
+  const [pricingMode, setPricingMode] = useState<'total' | 'per-leg'>('total');
+  const [totalPrice, setTotalPrice] = useState('');
+  const [totalCurrency, setTotalCurrency] = useState(homeCurrency);
 
   const resetForm = () => {
     setOutbound(blankLeg(homeCurrency));
@@ -77,6 +81,9 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     setHasReturn(false);
     setShowDetails(false);
     setRowError(null);
+    setPricingMode('total');
+    setTotalPrice('');
+    setTotalCurrency(homeCurrency);
   };
 
   const createMutation = useMutation({
@@ -111,7 +118,20 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
 
   const saveDraft = () => {
     if (!outbound.from_location.trim() || !outbound.to_location.trim() || !outbound.departure_time) return;
-    const priceNum = parseFloat(outbound.price);
+
+    // Determine outbound price based on mode
+    const isFlightPair = transportType === 'flight' && showDetails;
+    let outPrice: number | undefined;
+    let outCurrency: string | undefined;
+    if (isFlightPair && pricingMode === 'total') {
+      const tp = parseFloat(totalPrice);
+      outPrice = isNaN(tp) ? undefined : tp;
+      outCurrency = totalPrice ? totalCurrency : undefined;
+    } else {
+      const p = parseFloat(outbound.price);
+      outPrice = isNaN(p) ? undefined : p;
+      outCurrency = outbound.price ? outbound.currency : undefined;
+    }
 
     const payload: CreateTransportInput = {
       transport_type: transportType,
@@ -120,8 +140,8 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
       departure_time: outbound.departure_time,
       arrival_time: outbound.arrival_time || undefined,
       reference_number: outbound.reference_number.trim() || undefined,
-      price: isNaN(priceNum) ? undefined : priceNum,
-      currency: outbound.price ? outbound.currency : undefined,
+      price: outPrice,
+      currency: outCurrency,
       airline: outbound.airline.trim() || undefined,
       departure_terminal: outbound.departure_terminal.trim() || undefined,
       arrival_terminal: outbound.arrival_terminal.trim() || undefined,
@@ -132,7 +152,8 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     // For flights: include return if filled. For non-flights: include if checkbox + filled.
     const includeReturn = transportType === 'flight' ? !!returnFilled : (hasReturn && !!returnFilled);
     if (includeReturn) {
-      const rPrice = parseFloat(returnLeg.price);
+      // Per-leg mode: return gets its own price. Total mode: return price is null (covered by outbound).
+      const rPrice = pricingMode === 'per-leg' ? parseFloat(returnLeg.price) : NaN;
       payload.linked_journey = {
         from_location: returnLeg.from_location.trim(),
         to_location: returnLeg.to_location.trim(),
@@ -140,7 +161,7 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
         arrival_time: returnLeg.arrival_time || undefined,
         reference_number: returnLeg.reference_number.trim() || undefined,
         price: isNaN(rPrice) ? undefined : rPrice,
-        currency: returnLeg.price ? returnLeg.currency : undefined,
+        currency: pricingMode === 'per-leg' && returnLeg.price ? returnLeg.currency : undefined,
       };
     }
 
@@ -354,20 +375,6 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                 value={outbound.reference_number}
                 onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
               />
-              <div className="grid grid-cols-3 gap-2">
-                <input
-                  type="number" step="0.01" min="0" placeholder="Price"
-                  className="vintage-input col-span-2"
-                  value={outbound.price}
-                  onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
-                />
-                <select className="vintage-input" value={outbound.currency}
-                  onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
-                  <option value="GBP">GBP</option>
-                  <option value="EUR">EUR</option>
-                  <option value="USD">USD</option>
-                </select>
-              </div>
             </div>
 
             {/* RETURN section — always visible for flights, no checkbox */}
@@ -434,20 +441,100 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                   <ChevronDown size={12} /> Add return arrival time
                 </button>
               )}
-              <div className="grid grid-cols-3 gap-2">
-                <input
-                  type="number" step="0.01" min="0" placeholder="Return price"
-                  className="vintage-input col-span-2"
-                  value={returnLeg.price}
-                  onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
-                />
-                <select className="vintage-input" value={returnLeg.currency}
-                  onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
-                  <option value="GBP">GBP</option>
-                  <option value="EUR">EUR</option>
-                  <option value="USD">USD</option>
-                </select>
+            </div>
+
+            {/* ── Unified pricing for flight pair ── */}
+            <div className="pt-2 border-t border-parchment-dark space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider">Price</p>
+                <div className="flex rounded-lg border border-parchment-dark overflow-hidden text-[11px] font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pricingMode === 'per-leg') {
+                        const sum = (parseFloat(outbound.price) || 0) + (parseFloat(returnLeg.price) || 0);
+                        if (sum > 0) setTotalPrice(sum.toFixed(2));
+                      }
+                      setPricingMode('total');
+                    }}
+                    className={`px-3 py-1.5 transition-colors ${pricingMode === 'total' ? 'bg-navy text-white' : 'bg-white text-ink-faint hover:bg-parchment/60'}`}
+                  >
+                    Total
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pricingMode === 'total') {
+                        const half = parseFloat(totalPrice) / 2;
+                        if (!isNaN(half) && half > 0) {
+                          setOutbound((o) => ({ ...o, price: half.toFixed(2) }));
+                          setReturnLeg((r) => ({ ...r, price: half.toFixed(2) }));
+                        }
+                      }
+                      setPricingMode('per-leg');
+                    }}
+                    className={`px-3 py-1.5 border-l border-parchment-dark transition-colors ${pricingMode === 'per-leg' ? 'bg-navy text-white' : 'bg-white text-ink-faint hover:bg-parchment/60'}`}
+                  >
+                    Per leg
+                  </button>
+                </div>
               </div>
+
+              {pricingMode === 'total' ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="number" step="0.01" min="0"
+                      placeholder="Total for both legs"
+                      className="vintage-input col-span-2"
+                      value={totalPrice}
+                      onChange={(e) => setTotalPrice(e.target.value)}
+                    />
+                    <select className="vintage-input" value={totalCurrency}
+                      onChange={(e) => setTotalCurrency(e.target.value)}>
+                      <option value="GBP">GBP</option>
+                      <option value="EUR">EUR</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-ink-faint">Covers both outbound &amp; return. Switch to "Per leg" to split.</p>
+                </>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm w-6 flex-shrink-0">🛫</span>
+                    <input
+                      type="number" step="0.01" min="0" placeholder="0.00"
+                      className="vintage-input flex-1 text-sm"
+                      value={outbound.price}
+                      onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
+                    />
+                    <select className="vintage-input text-sm" style={{ width: 'auto' }}
+                      value={outbound.currency}
+                      onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
+                      <option value="GBP">GBP</option>
+                      <option value="EUR">EUR</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm w-6 flex-shrink-0">🛬</span>
+                    <input
+                      type="number" step="0.01" min="0" placeholder="0.00"
+                      className="vintage-input flex-1 text-sm"
+                      value={returnLeg.price}
+                      onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
+                    />
+                    <select className="vintage-input text-sm" style={{ width: 'auto' }}
+                      value={returnLeg.currency}
+                      onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
+                      <option value="GBP">GBP</option>
+                      <option value="EUR">EUR</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
