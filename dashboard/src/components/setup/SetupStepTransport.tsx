@@ -93,14 +93,18 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transport', tripId] }),
   });
 
-  // For linked pairs, only show the outbound (earlier departure_time) in the list.
-  const displayBookings = useMemo(() => {
-    return bookings.filter((b) => {
-      if (!b.linked_booking_id) return true;
+  // All bookings shown; linked pairs get directional emojis (🛫 outbound, 🛬 return).
+  const displayBookings = bookings;
+
+  const flightEmoji = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of bookings) {
+      if (b.transport_type !== 'flight' || !b.linked_booking_id) continue;
       const partner = bookings.find((x) => x.id === b.linked_booking_id);
-      if (!partner) return true;
-      return b.departure_time <= partner.departure_time;
-    });
+      if (!partner) continue;
+      map.set(b.id, b.departure_time <= partner.departure_time ? '🛫' : '🛬');
+    }
+    return map;
   }, [bookings]);
 
   const returnFilled = returnLeg.from_location.trim() && returnLeg.to_location.trim() && returnLeg.departure_time;
@@ -208,15 +212,12 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
         <div className="space-y-2">
           {displayBookings.map((b) => (
             <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl border border-parchment-dark bg-white">
-              <span className="text-xl flex-shrink-0">{TRANSPORT_ICONS[b.transport_type]}</span>
+              <span className="text-xl flex-shrink-0">
+                {flightEmoji.get(b.id) ?? TRANSPORT_ICONS[b.transport_type]}
+              </span>
               <div className="flex-1 min-w-0">
                 <div className="font-display text-sm font-semibold text-ink truncate">
                   {b.from_location} &rarr; {b.to_location}
-                  {b.linked_booking_id && (
-                    <span className="ml-1.5 text-[10px] font-body font-normal text-navy bg-navy/10 border border-navy/20 rounded-full px-1.5 py-0.5">
-                      + return
-                    </span>
-                  )}
                 </div>
                 <div className="text-xs text-ink-faint">
                   {fmtDT(b.departure_time)}

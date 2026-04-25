@@ -34,16 +34,27 @@ function groupJourneys(bookings: TransportBooking[]): Array<{ main: TransportBoo
     if (seen.has(b.id)) continue;
     seen.add(b.id);
     if (b.linked_booking_id && !seen.has(b.linked_booking_id)) {
-      const linked = byId.get(b.linked_booking_id) ?? null;
-      if (linked) {
-        seen.add(linked.id);
-        groups.push({ main: b, linked });
+      const partner = byId.get(b.linked_booking_id) ?? null;
+      if (partner) {
+        seen.add(partner.id);
+        // Always put the outbound (earlier departure) as main
+        const [outbound, ret] = b.departure_time <= partner.departure_time
+          ? [b, partner] : [partner, b];
+        groups.push({ main: outbound, linked: ret });
         continue;
       }
     }
     groups.push({ main: b, linked: null });
   }
   return groups;
+}
+
+/** For flight pairs: outbound gets 🛫, return gets 🛬. All others use TRANSPORT_ICONS. */
+function journeyEmoji(b: TransportBooking, isReturn = false): string {
+  if (b.transport_type === 'flight' && b.linked_booking_id) {
+    return isReturn ? '🛬' : '🛫';
+  }
+  return TRANSPORT_ICONS[b.transport_type];
 }
 
 export default function TransportPage() {
@@ -175,7 +186,7 @@ export default function TransportPage() {
                       <div className="flex-1 min-w-0">
                         {/* Header row: icon + airline/type + ref */}
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-xl leading-none">{TRANSPORT_ICONS[b.transport_type]}</span>
+                          <span className="text-xl leading-none">{journeyEmoji(b, false)}</span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               {b.airline && (
@@ -289,7 +300,7 @@ export default function TransportPage() {
                         <div className="border-t border-navy/10 px-4 py-3 bg-parchment/40 flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-base leading-none">{TRANSPORT_ICONS[lt.transport_type]}</span>
+                              <span className="text-base leading-none">{journeyEmoji(lt, true)}</span>
                               {lt.airline && <span className="font-semibold text-ink text-sm">{lt.airline}</span>}
                               {lt.reference_number && (
                                 <span className="font-mono text-xs bg-white border border-parchment-dark px-2 py-0.5 rounded text-ink-light">
