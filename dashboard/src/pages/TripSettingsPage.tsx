@@ -5,6 +5,7 @@ import { useTrip } from '@/context/TripContext';
 import { tripsApi } from '@/api/trips';
 import { travellersApi } from '@/api/travellers';
 import { ArrowLeft, Copy, Check, MapPin, Search, X, Camera, Trash2 } from 'lucide-react';
+import { toDateInput } from '@/utils/date';
 
 const COMMON_CURRENCIES = ['GBP', 'EUR', 'USD', 'AED', 'AUD', 'CAD', 'CHF', 'DKK', 'JPY', 'MXN', 'NOK', 'NZD', 'PLN', 'SEK', 'SGD', 'THB', 'TRY', 'ZAR'];
 const AVATAR_COLOURS = ['#1B3A5C', '#C65D3E', '#B8963E', '#2A5580', '#D4806A', '#9A7B2F', '#5C4D3C', '#6B8E7B', '#8B6FAE', '#D4A574'];
@@ -53,8 +54,8 @@ export default function TripSettingsPage() {
       setLocSearch(currentTrip.destination);
       setLat(String(currentTrip.latitude));
       setLng(String(currentTrip.longitude));
-      setStartDate(currentTrip.start_date.slice(0, 10));
-      setEndDate(currentTrip.end_date.slice(0, 10));
+      setStartDate(toDateInput(currentTrip.start_date));
+      setEndDate(toDateInput(currentTrip.end_date));
       setHomeCurrency(currentTrip.home_currency);
       setDestCurrency(currentTrip.dest_currency);
     }

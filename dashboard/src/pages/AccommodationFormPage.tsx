@@ -7,6 +7,7 @@ import { travellersApi } from '@/api/travellers';
 import type { CreateAccommodationInput, CreateRoomInput } from '@trip-planner-ai/shared';
 import { ArrowLeft, Plus, Trash2, BedDouble } from 'lucide-react';
 import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
+import { toDateInput } from '@/utils/date';
 
 interface RoomDraft {
   key: string; // local unique key for React
@@ -69,10 +70,10 @@ export default function AccommodationFormPage() {
     setForm({
       name: b.name,
       address: b.address ?? '',
-      check_in_date: b.check_in_date,
-      check_out_date: b.check_out_date,
-      check_in_time: b.check_in_time ?? '',
-      check_out_time: b.check_out_time ?? '',
+      check_in_date: toDateInput(b.check_in_date),
+      check_out_date: toDateInput(b.check_out_date),
+      check_in_time: b.check_in_time ? b.check_in_time.slice(0, 5) : '',
+      check_out_time: b.check_out_time ? b.check_out_time.slice(0, 5) : '',
       reference_number: b.reference_number ?? '',
       price: b.price ? String(b.price) : '',
       currency: b.currency ?? 'EUR',

@@ -110,7 +110,9 @@ export default function DashboardPage() {
   const latestAnnouncement = pinnedAnnouncements[0] ?? announcements[0];
 
   // Today's plan
-  const todayStr = new Date().toISOString().split('T')[0];
+  const _now = new Date();
+  const _pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}`;
   const todayDay = days?.find((d) => d.date.startsWith(todayStr));
 
   // Next upcoming day if today has no entry

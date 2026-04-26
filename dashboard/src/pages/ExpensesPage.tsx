@@ -47,7 +47,7 @@ function fmt(amount: number, currency: string) {
 }
 
 function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return parseLocalDate(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function groupByDate(expenses: Expense[]): { date: string; items: Expense[] }[] {

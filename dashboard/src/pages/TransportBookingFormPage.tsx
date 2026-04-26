@@ -9,6 +9,7 @@ import { TRANSPORT_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft, Plane, RotateCcw, ChevronDown } from 'lucide-react';
 import PlaceAutocomplete from '@/components/setup/PlaceAutocomplete';
 import FlightLookup, { type FlightAutoFill } from '@/components/transport/FlightLookup';
+import { toDateTimeLocal } from '@/utils/date';
 
 const TRANSPORT_TYPES: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
 
@@ -91,8 +92,8 @@ export default function TransportBookingFormPage() {
       transport_type: b.transport_type,
       from_location: b.from_location,
       to_location: b.to_location,
-      departure_time: b.departure_time.slice(0, 16),
-      arrival_time: b.arrival_time ? b.arrival_time.slice(0, 16) : '',
+      departure_time: toDateTimeLocal(b.departure_time),
+      arrival_time: toDateTimeLocal(b.arrival_time),
       reference_number: b.reference_number ?? '',
       price: b.price ? String(b.price) : '',
       currency: b.currency ?? 'EUR',

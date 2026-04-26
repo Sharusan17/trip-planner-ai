@@ -8,6 +8,7 @@ import { travellersApi } from '@/api/travellers';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2 } from 'lucide-react';
+import { toDateInput } from '@/utils/date';
 
 const CATEGORIES: ExpenseCategory[] = [
   'accommodation', 'food', 'transport', 'activities', 'shopping', 'other',
@@ -84,7 +85,7 @@ export default function ExpenseFormPage() {
     for (const s of exp.splits) cs[s.traveller_id] = String(s.amount);
     setForm({
       description: exp.description, amount: String(exp.amount), currency: exp.currency,
-      category: exp.category, expense_date: exp.expense_date, paid_by: exp.paid_by,
+      category: exp.category, expense_date: toDateInput(exp.expense_date), paid_by: exp.paid_by,
       split_mode: exp.split_mode, traveller_ids: exp.splits.map((s) => s.traveller_id),
       custom_splits: cs, notes: exp.notes ?? '',
     });

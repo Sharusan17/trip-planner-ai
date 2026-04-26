@@ -42,7 +42,8 @@ export default function ItineraryPage() {
     const expectedDates: string[] = [];
     const cur = new Date(start);
     while (cur <= end) {
-      expectedDates.push(cur.toISOString().slice(0, 10));
+      const pad = (n: number) => String(n).padStart(2, '0');
+      expectedDates.push(`${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`);
       cur.setDate(cur.getDate() + 1);
     }
     const existingDates = new Set(days.map((d) => d.date.slice(0, 10)));

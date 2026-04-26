@@ -5,6 +5,7 @@ import { useTrip } from '@/context/TripContext';
 import { depositsApi } from '@/api/deposits';
 import type { CreateDepositInput } from '@trip-planner-ai/shared';
 import { ArrowLeft } from 'lucide-react';
+import { toDateInput } from '@/utils/date';
 
 const ALL_CURRENCIES = [
   'AED','AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP',
@@ -46,7 +47,7 @@ export default function DepositFormPage() {
     if (!dep) return;
     setForm({
       description: dep.description, amount: String(dep.amount), currency: dep.currency,
-      due_date: dep.due_date ?? '', linked_type: dep.linked_type ?? '', notes: dep.notes ?? '',
+      due_date: toDateInput(dep.due_date), linked_type: dep.linked_type ?? '', notes: dep.notes ?? '',
     });
   }, [isEdit, id, deposits]);
 
