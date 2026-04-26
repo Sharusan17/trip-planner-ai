@@ -88,9 +88,10 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
   const [rowError, setRowError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!draft.day_id && days.length > 0) {
-      setDraft((d) => ({ ...d, day_id: days[0].id }));
+    if (!draft.day_id && sortedDays.length > 0) {
+      setDraft((d) => ({ ...d, day_id: sortedDays[0].id }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, draft.day_id]);
 
   const createMutation = useMutation({
@@ -123,8 +124,11 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
     });
   };
 
-  const allActivities = days.flatMap((d) =>
-    (d.activities ?? []).map((a) => ({ ...a, dayNumber: d.day_number, dayDate: d.date })),
+  // Always show days in chronological order regardless of stored day_number
+  const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+
+  const allActivities = sortedDays.flatMap((d, idx) =>
+    (d.activities ?? []).map((a) => ({ ...a, dayNumber: idx + 1, dayDate: d.date })),
   );
 
   const fmtDayLabel = (date: string, num: number) => {
@@ -170,7 +174,7 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
       )}
 
       {/* Draft form */}
-      {days.length > 0 ? (
+      {sortedDays.length > 0 ? (
         <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2">
           {/* Day + time */}
           <div className="grid grid-cols-3 gap-2">
@@ -179,9 +183,9 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
               value={draft.day_id}
               onChange={(e) => setDraft({ ...draft, day_id: e.target.value })}
             >
-              {days.map((d) => (
+              {sortedDays.map((d, idx) => (
                 <option key={d.id} value={d.id}>
-                  {fmtDayLabel(d.date, d.day_number)}
+                  {fmtDayLabel(d.date, idx + 1)}
                 </option>
               ))}
             </select>
@@ -259,7 +263,7 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
       {rowError && <p className="text-xs text-terracotta">{rowError}</p>}
       <p className="text-xs text-ink-faint">
         {allActivities.length} {allActivities.length === 1 ? 'activity' : 'activities'} planned
-        &middot; {days.length} {days.length === 1 ? 'day' : 'days'} in itinerary
+        &middot; {sortedDays.length} {sortedDays.length === 1 ? 'day' : 'days'} in itinerary
       </p>
     </div>
   );
