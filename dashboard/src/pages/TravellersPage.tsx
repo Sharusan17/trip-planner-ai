@@ -4,12 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { travellersApi } from '@/api/travellers';
 import { QRCodeSVG } from 'qrcode.react';
-import { Copy, Check, User, Baby } from 'lucide-react';
+import { Copy, Check, User, Baby, Pencil } from 'lucide-react';
 
 const AVATAR_COLOURS = ['#1B3A5C', '#C65D3E', '#B8963E', '#2A5580', '#D4806A', '#9A7B2F', '#5C4D3C', '#6B8E7B', '#8B6FAE', '#D4A574'];
 
 export default function TravellersPage() {
-  const { currentTrip, isOrganiser } = useTrip();
+  const { currentTrip, isOrganiser, activeTraveller } = useTrip();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [pinInput, setPinInput] = useState<{ id: string; pin: string } | null>(null);
@@ -100,12 +100,20 @@ export default function TravellersPage() {
         {travellers.map((t) => (
           <div key={t.id} className="vintage-card p-4">
             <div className="flex items-start gap-3">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-parchment-light shrink-0"
-                style={{ backgroundColor: t.avatar_colour }}
-              >
-                {t.name.charAt(0).toUpperCase()}
-              </div>
+              {t.has_photo ? (
+                <img
+                  src={travellersApi.getPhotoUrl(t.id)}
+                  alt={t.name}
+                  className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-parchment-light shrink-0"
+                  style={{ backgroundColor: t.avatar_colour }}
+                >
+                  {t.name.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <h3 className="font-display text-lg font-semibold truncate flex items-center gap-1.5">
                   {t.name}
@@ -169,18 +177,45 @@ export default function TravellersPage() {
               </div>
             )}
 
-            {/* Actions */}
-            {isOrganiser && (
-              <div className="flex gap-2 mt-3 pt-3 border-t border-gold/20">
-                <button onClick={() => navigate(`/travellers/${t.id}/edit`)} className="text-xs text-navy font-display">Edit</button>
-                <button
-                  onClick={() => { if (confirm(`Remove ${t.name}?`)) deleteMutation.mutate(t.id); }}
-                  className="text-xs text-terracotta font-display"
-                >
-                  Remove
-                </button>
-              </div>
+            {/* Notes / bio */}
+            {t.notes && (
+              <p className="mt-2 text-xs text-ink-light italic leading-snug line-clamp-2">{t.notes}</p>
             )}
+
+            {/* Actions */}
+            <div className="flex gap-2 mt-3 pt-3 border-t border-gold/20">
+              {/* Any traveller can edit their own profile */}
+              {activeTraveller?.id === t.id && (
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="flex items-center gap-1 text-xs text-navy font-display"
+                >
+                  <Pencil size={11} /> Edit My Profile
+                </button>
+              )}
+              {isOrganiser && activeTraveller?.id !== t.id && (
+                <>
+                  <button onClick={() => navigate(`/travellers/${t.id}/edit`)} className="text-xs text-navy font-display">Edit</button>
+                  <button
+                    onClick={() => { if (confirm(`Remove ${t.name}?`)) deleteMutation.mutate(t.id); }}
+                    className="text-xs text-terracotta font-display"
+                  >
+                    Remove
+                  </button>
+                </>
+              )}
+              {isOrganiser && activeTraveller?.id === t.id && (
+                <>
+                  <span className="text-ink-faint/40">·</span>
+                  <button
+                    onClick={() => navigate(`/travellers/${t.id}/edit`)}
+                    className="text-xs text-ink-faint font-display"
+                  >
+                    Edit (organiser view)
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>

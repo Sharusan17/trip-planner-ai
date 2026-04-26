@@ -21,6 +21,8 @@ import AnnouncementFormPage from './pages/AnnouncementFormPage';
 import PollFormPage from './pages/PollFormPage';
 import PhotoUploadPage from './pages/PhotoUploadPage';
 import TripSetupPage from './pages/TripSetupPage';
+import TripSettingsPage from './pages/TripSettingsPage';
+import ProfilePage from './pages/ProfilePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentTrip, restoring } = useTrip();
@@ -46,6 +48,8 @@ function App() {
       >
         <Route path="/dashboard"      element={<DashboardPage />} />
         <Route path="/setup"          element={<TripSetupPage />} />
+        <Route path="/settings"       element={<TripSettingsPage />} />
+        <Route path="/profile"        element={<ProfilePage />} />
 
         {/* Travellers */}
         <Route path="/travellers"              element={<TravellersPage />} />

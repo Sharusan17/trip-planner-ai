@@ -390,6 +390,11 @@ const migrations = [
 
   // 019: notes on activities
   `ALTER TABLE activities ADD COLUMN IF NOT EXISTS notes TEXT;`,
+
+  // 020: traveller profile — notes + avatar photo
+  `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS notes TEXT;`,
+  `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS avatar_photo BYTEA;`,
+  `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS avatar_photo_mime VARCHAR(100);`,
 ];
 
 export async function runMigrations() {

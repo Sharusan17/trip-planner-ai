@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useTrip } from '@/context/TripContext';
+import { travellersApi } from '@/api/travellers';
 import {
   LayoutDashboard,
   Users,
@@ -13,6 +14,7 @@ import {
   Menu,
   X,
   Plane,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -33,8 +35,9 @@ const navItems: NavItem[] = [
 ];
 
 export default function Sidebar() {
-  const { currentTrip, clearSession } = useTrip();
+  const { currentTrip, activeTraveller, isOrganiser, clearSession } = useTrip();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const navigate = useNavigate();
 
   const navContent = (onNav?: () => void) => (
     <>
@@ -78,10 +81,57 @@ export default function Sidebar() {
             )}
           </NavLink>
         ))}
+
+        {/* Trip Settings — organiser only */}
+        {isOrganiser && (
+          <NavLink
+            to="/settings"
+            onClick={onNav}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-body font-medium transition-all duration-150 ${
+                isActive
+                  ? 'bg-[#1C1917] text-white shadow-sm'
+                  : 'text-ink-faint hover:text-ink hover:bg-parchment'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Settings size={17} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" />
+                Settings
+              </>
+            )}
+          </NavLink>
+        )}
       </nav>
 
-      {/* Leave trip */}
-      <div className="px-3 py-3 border-t border-[var(--color-sidebar-border)]">
+      {/* Bottom: My Profile + Leave Trip */}
+      <div className="px-3 py-3 border-t border-[var(--color-sidebar-border)] space-y-1">
+        {/* My Profile */}
+        {activeTraveller && (
+          <button
+            onClick={() => { navigate('/profile'); onNav?.(); }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-ink-faint hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
+          >
+            {activeTraveller.has_photo ? (
+              <img
+                src={travellersApi.getPhotoUrl(activeTraveller.id)}
+                alt={activeTraveller.name}
+                className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                style={{ backgroundColor: activeTraveller.avatar_colour }}
+              >
+                {activeTraveller.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className="truncate">{activeTraveller.name}</span>
+          </button>
+        )}
+
+        {/* Leave trip */}
         <button
           onClick={() => { clearSession(); onNav?.(); }}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-ink-faint hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"

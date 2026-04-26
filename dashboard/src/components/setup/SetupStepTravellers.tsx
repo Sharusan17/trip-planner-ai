@@ -26,6 +26,7 @@ function getTip(holidayType: string) {
 interface Draft {
   name: string;
   type: TravellerType;
+  colour: string;
 }
 
 interface Props {
@@ -40,15 +41,20 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
     queryFn: () => travellersApi.list(tripId),
   });
 
-  const [draft, setDraft] = useState<Draft>({ name: '', type: 'adult' });
+  const getNextColour = () => {
+    const usedColours = new Set(travellers.map((t) => t.avatar_colour));
+    return AVATAR_COLOURS.find((c) => !usedColours.has(c)) ?? AVATAR_COLOURS[travellers.length % AVATAR_COLOURS.length];
+  };
+
+  const [draft, setDraft] = useState<Draft>({ name: '', type: 'adult', colour: getNextColour() });
   const [rowError, setRowError] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: (data: CreateTravellerInput) => travellersApi.create(tripId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['travellers', tripId] });
-      setDraft({ name: '', type: 'adult' });
       setRowError(null);
+      // draft is reset in saveDraft() with the next colour pre-selected
     },
     onError: (err: Error) => setRowError(err.message || 'Failed to add traveller'),
   });
@@ -61,17 +67,17 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
   const saveDraft = () => {
     const name = draft.name.trim();
     if (!name) return;
-    const usedColours = new Set(travellers.map((t) => t.avatar_colour));
-    const colour =
-      AVATAR_COLOURS.find((c) => !usedColours.has(c)) ??
-      AVATAR_COLOURS[travellers.length % AVATAR_COLOURS.length];
     createMutation.mutate({
       name,
       type: draft.type,
       role: 'member',
-      avatar_colour: colour,
+      avatar_colour: draft.colour,
       cost_split_weight: 1.0,
     });
+    // Pre-pick the next available colour for the next person
+    const usedAfter = new Set([...travellers.map((t) => t.avatar_colour), draft.colour]);
+    const nextColour = AVATAR_COLOURS.find((c) => !usedAfter.has(c)) ?? AVATAR_COLOURS[(travellers.length + 1) % AVATAR_COLOURS.length];
+    setDraft({ name: '', type: 'adult', colour: nextColour });
   };
 
   return (
@@ -115,9 +121,14 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
         </div>
       )}
 
-      {/* Draft row — name + type on one line */}
-      <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30">
+      {/* Draft row */}
+      <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2.5">
         <div className="flex gap-2 items-center">
+          {/* Colour preview / picker trigger */}
+          <div
+            className="w-9 h-9 rounded-full flex-shrink-0 border-2 border-white shadow-sm"
+            style={{ backgroundColor: draft.colour }}
+          />
           <input
             className="vintage-input flex-1"
             placeholder="Name (e.g. Alex, Sarah…)"
@@ -144,6 +155,18 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
           >
             <Plus size={14} strokeWidth={2.5} /> Add
           </button>
+        </div>
+        {/* Compact colour picker */}
+        <div className="flex flex-wrap gap-1.5 pl-11">
+          {AVATAR_COLOURS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setDraft({ ...draft, colour: c })}
+              className={`w-6 h-6 rounded-full border-2 transition-all ${draft.colour === c ? 'border-ink scale-110' : 'border-transparent hover:scale-105'}`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
         </div>
       </div>
 

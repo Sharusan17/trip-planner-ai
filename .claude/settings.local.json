@@ -37,7 +37,8 @@
       "Bash(node -e \"const {searchAirports, loadAirports} = require\\('./server/dist/services/airportCache'\\); loadAirports\\(\\); console.log\\('london:', JSON.stringify\\(searchAirports\\('london'\\).slice\\(0,5\\), null, 2\\)\\);\")",
       "Bash(npx -w dashboard tsc --noEmit -p tsconfig.app.json)",
       "Bash(grep -oE \"https://[^'\\\\\"`\\)]*\")",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(xargs grep *)"
     ]
   }
 }

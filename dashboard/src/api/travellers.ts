@@ -1,5 +1,5 @@
 import type { Traveller, CreateTravellerInput, UpdateTravellerInput } from '@trip-planner-ai/shared';
-import { api } from './client';
+import { api, API_BASE } from './client';
 
 export const travellersApi = {
   list: (tripId: string) => api.get<Traveller[]>(`/trips/${tripId}/travellers`),
@@ -10,4 +10,11 @@ export const travellersApi = {
   delete: (id: string) => api.delete(`/travellers/${id}`),
   verifyPin: (id: string, pin: string) =>
     api.post<{ medical_notes: string }>(`/travellers/${id}/verify-pin`, { pin }),
+  uploadPhoto: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('photo', file);
+    return api.postFile<{ ok: boolean }>(`/travellers/${id}/photo`, form);
+  },
+  deletePhoto: (id: string) => api.delete(`/travellers/${id}/photo`),
+  getPhotoUrl: (id: string) => `${API_BASE}/travellers/${id}/photo`,
 };
