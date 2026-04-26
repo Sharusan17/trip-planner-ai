@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { travellersApi } from '@/api/travellers';
-import { ArrowLeft, Camera, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Camera, Trash2, User, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 
 const AVATAR_COLOURS = ['#1B3A5C', '#C65D3E', '#B8963E', '#2A5580', '#D4806A', '#9A7B2F', '#5C4D3C', '#6B8E7B', '#8B6FAE', '#D4A574'];
 
@@ -22,6 +22,12 @@ export default function ProfilePage() {
   const [hasExistingPhoto, setHasExistingPhoto] = useState(false);
   const [removePhoto, setRemovePhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Medical notes
+  const [medOpen, setMedOpen] = useState(false);
+  const [medNotes, setMedNotes] = useState('');
+  const [medPin, setMedPin] = useState('');
+  const [medSaved, setMedSaved] = useState(false);
 
   useEffect(() => {
     if (activeTraveller) {
@@ -62,10 +68,26 @@ export default function ProfilePage() {
       return updated;
     },
     onSuccess: (updated) => {
-      // Update activeTraveller in context so sidebar/header reflect changes immediately
-      setActiveTraveller({ ...updated, has_photo: photoFile ? true : (removePhoto ? false : hasExistingPhoto) });
+      const newHasPhoto = photoFile ? true : (removePhoto ? false : hasExistingPhoto);
+      setActiveTraveller({ ...updated, has_photo: newHasPhoto });
+      setHasExistingPhoto(newHasPhoto);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setRemovePhoto(false);
       qc.invalidateQueries({ queryKey: ['travellers'] });
       navigate('/dashboard');
+    },
+  });
+
+  const medMutation = useMutation({
+    mutationFn: () => travellersApi.update(activeTraveller!.id, {
+      medical_notes: medNotes || undefined,
+      medical_pin: medPin || undefined,
+    }),
+    onSuccess: () => {
+      setMedPin('');
+      setMedSaved(true);
+      setTimeout(() => setMedSaved(false), 2500);
     },
   });
 
@@ -194,6 +216,63 @@ export default function ProfilePage() {
             {updateMutation.isPending ? 'Saving…' : 'Save Profile'}
           </button>
         </div>
+      </div>
+
+      {/* Medical Notes card */}
+      <div className="vintage-card overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setMedOpen((o) => !o)}
+          className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-parchment/30 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <ShieldAlert size={16} className="text-amber-600" strokeWidth={1.75} />
+            <span className="font-display text-sm font-semibold text-ink">Medical Notes</span>
+            <span className="text-xs text-ink-faint font-body">(PIN protected)</span>
+          </div>
+          {medOpen ? <ChevronUp size={16} className="text-ink-faint" /> : <ChevronDown size={16} className="text-ink-faint" />}
+        </button>
+
+        {medOpen && (
+          <div className="px-5 pb-5 space-y-4 border-t border-parchment-dark">
+            <p className="text-xs text-ink-faint pt-4">
+              Only you and the organiser can view these — they're protected by a PIN you set.
+              Other group members won't see them.
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Medical Notes</label>
+              <textarea
+                className="vintage-input w-full"
+                rows={3}
+                value={medNotes}
+                onChange={(e) => setMedNotes(e.target.value)}
+                placeholder="Allergies, medications, blood type, emergency contact…"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+                4-digit PIN <span className="normal-case font-normal">(required to view)</span>
+              </label>
+              <input
+                className="vintage-input w-32 text-center tracking-widest"
+                type="password"
+                maxLength={4}
+                placeholder="••••"
+                value={medPin}
+                onChange={(e) => setMedPin(e.target.value.replace(/\D/g, ''))}
+              />
+              <p className="text-xs text-ink-faint mt-1">Leave blank to keep your existing PIN</p>
+            </div>
+            <button
+              type="button"
+              disabled={medMutation.isPending || (!medNotes && !medPin)}
+              onClick={() => medMutation.mutate()}
+              className="btn-primary w-full disabled:opacity-50"
+            >
+              {medMutation.isPending ? 'Saving…' : medSaved ? '✓ Medical Notes Saved' : 'Save Medical Notes'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

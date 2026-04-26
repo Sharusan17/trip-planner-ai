@@ -82,7 +82,7 @@ export default function Sidebar() {
           </NavLink>
         ))}
 
-        {/* Trip Settings — organiser only */}
+        {/* Settings — organiser only */}
         {isOrganiser && (
           <NavLink
             to="/settings"
