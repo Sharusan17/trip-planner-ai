@@ -7,11 +7,18 @@ const router = Router();
 router.get('/trips/:tripId/days', async (req: Request, res: Response) => {
   try {
     const daysResult = await pool.query(
-      'SELECT * FROM itinerary_days WHERE trip_id = $1 ORDER BY day_number',
+      'SELECT * FROM itinerary_days WHERE trip_id = $1 ORDER BY date, day_number',
       [req.params.tripId]
     );
 
-    const days = daysResult.rows;
+    // Deduplicate: if multiple rows share the same date, keep only the first (oldest day_number)
+    const seen = new Set<string>();
+    const days = daysResult.rows.filter((d: any) => {
+      const key = String(d.date).slice(0, 10);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     if (days.length === 0) {
       return res.json([]);
     }

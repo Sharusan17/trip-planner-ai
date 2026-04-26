@@ -34,33 +34,55 @@ export default function ItineraryPage() {
     enabled: !!currentTrip,
   });
 
-  // Auto-create all days from trip start_date → end_date
+  // Auto-create all days from trip start_date → end_date; delete any outside the range
   useEffect(() => {
     if (!currentTrip || hasInitDays.current || isLoading) return;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toLocalStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
     const start = parseLocalDate(currentTrip.start_date);
     const end = parseLocalDate(currentTrip.end_date);
     const expectedDates: string[] = [];
     const cur = new Date(start);
     while (cur <= end) {
-      const pad = (n: number) => String(n).padStart(2, '0');
-      expectedDates.push(`${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`);
+      expectedDates.push(toLocalStr(cur));
       cur.setDate(cur.getDate() + 1);
     }
-    const existingDates = new Set(days.map((d) => d.date.slice(0, 10)));
+    const expectedSet = new Set(expectedDates);
+
+    // Days outside the trip range (stale from old date bugs)
+    const outsideRange = days.filter((d) => !expectedSet.has(d.date.slice(0, 10)));
+
+    // Dates already present within range (after dedup — one per date)
+    const existingDates = new Set(
+      days.filter((d) => expectedSet.has(d.date.slice(0, 10))).map((d) => d.date.slice(0, 10))
+    );
     const missing = expectedDates.filter((d) => !existingDates.has(d));
-    if (missing.length === 0) { hasInitDays.current = true; return; }
+
+    if (outsideRange.length === 0 && missing.length === 0) {
+      hasInitDays.current = true;
+      return;
+    }
     hasInitDays.current = true;
-    Promise.all(
-      missing.map((date) =>
+
+    const ops: Promise<unknown>[] = [
+      // Delete days outside the trip range
+      ...outsideRange.map((d) => itineraryApi.deleteDay(d.id)),
+      // Create missing days
+      ...missing.map((date) =>
         itineraryApi.createDay(currentTrip.id, {
           date,
           day_number: expectedDates.indexOf(date) + 1,
         })
-      )
-    ).then(() => queryClient.invalidateQueries({ queryKey: ['days'] }));
+      ),
+    ];
+
+    Promise.all(ops).then(() => queryClient.invalidateQueries({ queryKey: ['days'] }));
   }, [currentTrip, days, isLoading, queryClient]);
 
-  const activeDay = days.find((d) => d.id === (selectedDayId ?? days[0]?.id)) ?? days[0] ?? null;
+  // Always render in chronological order regardless of stored day_number
+  const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const activeDay = sortedDays.find((d) => d.id === (selectedDayId ?? sortedDays[0]?.id)) ?? sortedDays[0] ?? null;
 
   const deleteActivityMutation = useMutation({
     mutationFn: (id: string) => itineraryApi.deleteActivity(id),
@@ -102,8 +124,8 @@ export default function ItineraryPage() {
         <>
           {/* Day tabs */}
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5">
-            {days.map((day) => {
-              const isActive = day.id === (selectedDayId ?? days[0]?.id);
+            {sortedDays.map((day, idx) => {
+              const isActive = day.id === (selectedDayId ?? sortedDays[0]?.id);
               return (
                 <button
                   key={day.id}
@@ -115,7 +137,7 @@ export default function ItineraryPage() {
                   }`}
                 >
                   <div className={`text-[10px] font-semibold uppercase tracking-wider ${isActive ? 'text-white/60' : 'text-ink-faint'}`}>
-                    Day {day.day_number}
+                    Day {idx + 1}
                   </div>
                   <div className={`text-sm font-semibold font-display mt-0.5 ${isActive ? 'text-white' : 'text-ink'}`}>
                     {parseLocalDate(day.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
@@ -141,7 +163,7 @@ export default function ItineraryPage() {
                           onChange={(e) => setTitleDraft(e.target.value)}
                           onBlur={commitTitle}
                           onKeyDown={(e) => { if (e.key === 'Enter') commitTitle(); if (e.key === 'Escape') setEditingTitle(null); }}
-                          placeholder={`Day ${activeDay.day_number}`}
+                          placeholder={`Day ${sortedDays.findIndex((d) => d.id === activeDay.id) + 1}`}
                         />
                         <button onClick={commitTitle} className="text-navy shrink-0">
                           <Check size={16} strokeWidth={2.5} />
@@ -150,7 +172,7 @@ export default function ItineraryPage() {
                     ) : (
                       <div className="flex items-center gap-2 group/title">
                         <h3 className="font-display text-lg font-bold text-navy">
-                          {activeDay.title || `Day ${activeDay.day_number}`}
+                          {activeDay.title || `Day ${sortedDays.findIndex((d) => d.id === activeDay.id) + 1}`}
                         </h3>
                         {isOrganiser && (
                           <button
