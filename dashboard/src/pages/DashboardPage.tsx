@@ -7,6 +7,7 @@ import { expensesApi } from '@/api/expenses';
 import { depositsApi } from '@/api/deposits';
 import { settlementsApi } from '@/api/settlements';
 import { announcementsApi } from '@/api/announcements';
+import { expenseClaimsApi } from '@/api/expenseClaims';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import type { ActivityType } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
@@ -58,7 +59,7 @@ function StatCard({ icon, value, label, iconBg }: StatCardProps) {
 }
 
 export default function DashboardPage() {
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
 
   const { data: travellers } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
@@ -100,6 +101,13 @@ export default function DashboardPage() {
     staleTime: 60_000,
   });
 
+  const { data: pendingClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
+    refetchInterval: 30_000,
+  });
+
   if (!currentTrip) return null;
 
   const totalSpent        = expenseSummary.reduce((s, r) => s + r.total_home, 0);
@@ -133,6 +141,26 @@ export default function DashboardPage() {
 
       {/* ── Onboarding card (organiser only, until all 4 sections filled) ── */}
       <SetupCard />
+
+      {/* ── Pending claims notification ── */}
+      {pendingClaims.length > 0 && (
+        <Link
+          to="/expenses?tab=claims"
+          className="flex items-center gap-4 p-4 rounded-xl border-2 border-amber-300 bg-amber-50
+                     hover:bg-amber-100 transition-colors no-underline"
+        >
+          <span className="text-2xl flex-shrink-0">📋</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-display font-bold text-amber-900 leading-tight">
+              {pendingClaims.length} expense claim{pendingClaims.length !== 1 ? 's' : ''} need your review
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {pendingClaims[0].created_by_name} and others want to know what you owe
+            </p>
+          </div>
+          <span className="text-sm font-semibold text-amber-800 flex-shrink-0">Review →</span>
+        </Link>
+      )}
 
       {/* ── Quick stats ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

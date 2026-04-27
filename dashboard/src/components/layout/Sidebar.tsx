@@ -70,33 +70,37 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={onNav}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-body font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-[#1C1917] text-white shadow-sm'
-                  : 'text-ink-faint hover:text-ink hover:bg-parchment'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={17} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" />
-                <span className="flex-1">{label}</span>
-                {to === '/expenses' && claimBadge > 0 && (
-                  <span className="ml-auto w-5 h-5 rounded-full bg-terracotta text-white text-[10px]
-                                    font-bold flex items-center justify-center shrink-0 leading-none">
-                    {claimBadge > 9 ? '9+' : claimBadge}
-                  </span>
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {navItems.map(({ to, label, Icon }) => {
+          // Finance nav deep-links to Claims tab when there are pending claims
+          const resolvedTo = to === '/expenses' && claimBadge > 0 ? '/expenses?tab=claims' : to;
+          return (
+            <NavLink
+              key={to}
+              to={resolvedTo}
+              onClick={onNav}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-body font-medium transition-all duration-150 ${
+                  isActive
+                    ? 'bg-[#1C1917] text-white shadow-sm'
+                    : 'text-ink-faint hover:text-ink hover:bg-parchment'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={17} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {to === '/expenses' && claimBadge > 0 && (
+                    <span className="ml-auto w-5 h-5 rounded-full bg-terracotta text-white text-[10px]
+                                      font-bold flex items-center justify-center shrink-0 leading-none">
+                      {claimBadge > 9 ? '9+' : claimBadge}
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          );
+        })}
 
         {/* Settings — organiser only */}
         {isOrganiser && (
