@@ -49,11 +49,13 @@ function SwipeQueue() {
 
   // ---- data ----------------------------------------------------------------
 
-  const { data: pendingClaims = [], isLoading: claimsLoading } = useQuery({
+  const { data: pendingClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
     queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
     queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
     enabled: !!currentTrip && !!activeTraveller,
     refetchInterval: 15_000,
+    // Keep the claim visible until the server confirms there's nothing left
+    staleTime: 0,
   });
 
   const { data: travellers = [] } = useQuery({
@@ -160,9 +162,11 @@ function SwipeQueue() {
 
   const claim = pendingClaims[currentIndex];
   const totalCards = pendingClaims.length;
-  // Only treat as "done" once we've confirmed the data has loaded (prevents
-  // the empty-array initial state from immediately showing "You're all done!")
-  const done = !claimsLoading && currentIndex >= totalCards;
+  // Only treat as "done" once we've confirmed the server returned the list
+  // (prevents the empty-array initial value or a stale cache hit from
+  // immediately triggering the "all done" state before data arrives).
+  const anyFetching = claimsLoading || claimsFetching;
+  const done = !anyFetching && currentIndex >= totalCards;
 
   const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
@@ -199,8 +203,8 @@ function SwipeQueue() {
         </div>
       </div>
 
-      {claimsLoading ? (
-        /* ---- Loading state ---------------------------------------------- */
+      {anyFetching && totalCards === 0 ? (
+        /* ---- Loading / refreshing state --------------------------------- */
         <div className="flex flex-col items-center justify-center py-24 px-4 gap-3">
           <div className="w-10 h-10 border-4 rounded-full animate-spin"
             style={{ borderColor: 'var(--color-parchment-dark)', borderTopColor: 'var(--color-navy)' }} />
