@@ -50,7 +50,7 @@ router.get('/trips/:tripId/claims/pending/:travellerId', async (req, res) => {
          (
            SELECT json_build_object(
              'nominated_by', nom.name,
-             'each_amount', (ecr2.claimed_amount::float / (json_array_length(ecr2.split_with_ids) + 1))
+             'each_amount', (ecr2.claimed_amount::float / (jsonb_array_length(ecr2.split_with_ids) + 1))
            )
            FROM expense_claim_responses ecr2
            JOIN travellers nom ON nom.id = ecr2.traveller_id
