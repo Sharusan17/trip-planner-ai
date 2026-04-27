@@ -48,15 +48,22 @@ function SwipeQueue() {
   const { currentTrip, activeTraveller } = useTrip();
 
   // ---- data ----------------------------------------------------------------
+  // Use allClaims (same query as the Finance claims tab) and filter client-side.
+  // This avoids depending on the /pending/:travellerId endpoint which can return
+  // stale or incorrect results depending on cache state.
 
-  const { data: pendingClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
-    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
-    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
-    enabled: !!currentTrip && !!activeTraveller,
+  const { data: allClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
+    queryKey: ['claims', currentTrip?.id],
+    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
     refetchInterval: 15_000,
-    // Keep the claim visible until the server confirms there's nothing left
     staleTime: 0,
   });
+
+  // Claims this traveller can respond to: open + not created by them
+  const pendingClaims = allClaims.filter(
+    (c) => c.status === 'open' && c.created_by !== activeTraveller?.id
+  );
 
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
