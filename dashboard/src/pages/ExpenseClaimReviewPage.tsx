@@ -310,6 +310,30 @@ function SwipeQueue() {
                 />
               )}
 
+              {/* Line items from receipt */}
+              {claim.line_items && claim.line_items.length > 0 && (
+                <div className="relative z-0 rounded-xl overflow-hidden"
+                  style={{ border: '1px solid var(--color-parchment-dark)' }}>
+                  <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
+                    style={{ backgroundColor: 'var(--color-parchment)', color: 'var(--color-ink-faint)' }}>
+                    Receipt items — tap 🤝 to pick yours
+                  </div>
+                  {claim.line_items.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm"
+                      style={{
+                        backgroundColor: 'white',
+                        borderTop: '1px solid var(--color-parchment-dark)',
+                        color: 'var(--color-ink)',
+                      }}>
+                      <span className="flex-1 truncate mr-2">{item.description}</span>
+                      <span className="font-semibold shrink-0" style={{ color: 'var(--color-navy)' }}>
+                        {fmt(item.amount, claim.currency)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Co-splitter nomination banner */}
               {claim.co_split_nomination && (
                 <div className="relative z-0 rounded-xl p-3 text-sm"
@@ -347,7 +371,7 @@ function SwipeQueue() {
               ❌
             </button>
 
-            {/* Partial / Split */}
+            {/* Partial / Pick items */}
             <button
               onClick={() => {
                 const cur = pendingClaims[currentIndex];
@@ -358,11 +382,14 @@ function SwipeQueue() {
                 setPartialNote('');
                 setShowPartialSheet(true);
               }}
-              className="w-12 h-12 rounded-full bg-amber-100 border-2 border-amber-300 text-xl
-                         flex items-center justify-center hover:bg-amber-200 transition-colors shadow-sm"
-              title="Split / Partial"
+              className="flex flex-col items-center justify-center w-14 h-14 rounded-2xl
+                         bg-amber-100 border-2 border-amber-300 hover:bg-amber-200 transition-colors shadow-sm"
+              title={claim.line_items?.length ? 'Pick my items' : 'Split / Partial'}
             >
-              🤝
+              <span className="text-xl leading-none">🤝</span>
+              <span className="text-[9px] font-bold text-amber-700 mt-0.5 leading-none">
+                {claim.line_items?.length ? 'MY ITEMS' : 'PARTIAL'}
+              </span>
             </button>
 
             {/* Accept */}

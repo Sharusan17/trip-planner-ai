@@ -916,71 +916,108 @@ export default function ExpensesPage() {
           )}
 
           {/* Claims list */}
-          {allClaims.length === 0 ? (
-            <div className="vintage-card text-center py-12">
-              <p className="text-3xl mb-2">🔍</p>
-              <p className="text-ink-faint mb-2">No claims yet.</p>
-              {isOrganiser && (
-                <>
-                  <p className="text-sm text-ink-faint mb-4">
-                    Use this when you're not sure who owes what — send it to the group to decide.
-                  </p>
-                  <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
-                    Send first claim for review
-                  </button>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {(allClaims as ExpenseClaim[]).map((claim) => (
-                <div
-                  key={claim.id}
-                  className={`vintage-card p-4 ${isOrganiser ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                  onClick={() => isOrganiser && navigate(`/expenses/claims/${claim.id}`)}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl shrink-0 mt-0.5">
-                      {EXPENSE_CATEGORY_ICONS[claim.category]}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-semibold text-ink">{claim.description}</p>
-                        <span className={`badge text-xs shrink-0 ${
-                          claim.status === 'approved'   ? 'badge-green'
-                          : claim.status === 'cancelled' ? 'badge-terracotta'
-                          : 'badge-gold'
-                        }`}>
-                          {claim.status}
+          {(() => {
+            const pendingClaimIds = new Set((pendingClaims as ExpenseClaim[]).map((c) => c.id));
+            return allClaims.length === 0 ? (
+              <div className="vintage-card text-center py-12">
+                <p className="text-3xl mb-2">🔍</p>
+                <p className="text-ink-faint mb-2">No claims yet.</p>
+                {isOrganiser && (
+                  <>
+                    <p className="text-sm text-ink-faint mb-4">
+                      Use this when you're not sure who owes what — send it to the group to decide.
+                    </p>
+                    <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
+                      Send first claim for review
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(allClaims as ExpenseClaim[]).map((claim) => {
+                  const needsMyReview = !isOrganiser && pendingClaimIds.has(claim.id);
+                  return (
+                    <div
+                      key={claim.id}
+                      className={`vintage-card p-4 ${isOrganiser || needsMyReview ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                      onClick={() => {
+                        if (isOrganiser) navigate(`/expenses/claims/${claim.id}`);
+                        else if (needsMyReview) navigate('/expenses/claims');
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl shrink-0 mt-0.5">
+                          {EXPENSE_CATEGORY_ICONS[claim.category]}
                         </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-semibold text-ink">{claim.description}</p>
+                            <span className={`badge text-xs shrink-0 ${
+                              claim.status === 'approved'   ? 'badge-green'
+                              : claim.status === 'cancelled' ? 'badge-terracotta'
+                              : 'badge-gold'
+                            }`}>
+                              {claim.status}
+                            </span>
+                          </div>
+                          <p className="text-lg font-bold text-navy mt-0.5">
+                            {new Intl.NumberFormat('en-GB', { style: 'currency', currency: claim.currency }).format(claim.total_amount)}
+                          </p>
+                          {/* Line items preview */}
+                          {claim.line_items && claim.line_items.length > 0 && (
+                            <div className="mt-1.5 space-y-0.5">
+                              {claim.line_items.slice(0, 3).map((li, i) => (
+                                <div key={i} className="flex items-center justify-between text-xs text-ink-faint">
+                                  <span className="truncate mr-2">• {li.description}</span>
+                                  <span className="shrink-0 font-medium">
+                                    {new Intl.NumberFormat('en-GB', { style: 'currency', currency: claim.currency }).format(li.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                              {claim.line_items.length > 3 && (
+                                <p className="text-xs text-ink-faint">+ {claim.line_items.length - 3} more items</p>
+                              )}
+                            </div>
+                          )}
+                          {claim.status === 'open' && (
+                            <div className="mt-2">
+                              <div className="flex items-center justify-between text-xs text-ink-faint mb-1">
+                                <span>{claim.response_count ?? 0} of {claim.total_travellers ?? 0} responded</span>
+                              </div>
+                              <div className="progress-bar-track">
+                                <div
+                                  className="progress-bar-fill"
+                                  style={{
+                                    width: `${((claim.response_count ?? 0) / Math.max(1, claim.total_travellers ?? 1)) * 100}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {claim.created_by_name && (
+                            <p className="text-xs text-ink-faint mt-1">Sent by {claim.created_by_name}</p>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-lg font-bold text-navy mt-0.5">
-                        {new Intl.NumberFormat('en-GB', { style: 'currency', currency: claim.currency }).format(claim.total_amount)}
-                      </p>
-                      {claim.status === 'open' && (
-                        <div className="mt-2">
-                          <div className="flex items-center justify-between text-xs text-ink-faint mb-1">
-                            <span>{claim.response_count ?? 0} of {claim.total_travellers ?? 0} responded</span>
-                          </div>
-                          <div className="progress-bar-track">
-                            <div
-                              className="progress-bar-fill"
-                              style={{
-                                width: `${((claim.response_count ?? 0) / Math.max(1, claim.total_travellers ?? 1)) * 100}%`,
-                              }}
-                            />
-                          </div>
+                      {/* Review CTA for non-organiser */}
+                      {needsMyReview && (
+                        <div className="mt-3 pt-3 border-t border-parchment-dark flex items-center justify-between">
+                          <p className="text-xs text-amber-700 font-medium">Awaiting your response</p>
+                          <button
+                            className="text-xs font-semibold text-navy hover:underline"
+                            onClick={(e) => { e.stopPropagation(); navigate('/expenses/claims'); }}
+                          >
+                            Review &amp; respond →
+                          </button>
                         </div>
                       )}
-                      {claim.created_by_name && (
-                        <p className="text-xs text-ink-faint mt-1">Sent by {claim.created_by_name}</p>
-                      )}
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
