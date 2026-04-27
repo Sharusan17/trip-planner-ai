@@ -8,6 +8,8 @@ import { settlementsApi } from '../api/settlements';
 import { depositsApi } from '../api/deposits';
 import { currencyApi } from '../api/currency';
 import { familiesApi } from '../api/families';
+import { expenseClaimsApi } from '../api/expenseClaims';
+import type { ExpenseClaim } from '@trip-planner-ai/shared';
 import { API_BASE } from '../api/client';
 import type {
   Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
@@ -17,7 +19,7 @@ import { parseLocalDate } from '@/utils/date';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
-type MainTab = 'expenses' | 'settlements' | 'deposits' | 'currency' | 'budget';
+type MainTab = 'expenses' | 'settlements' | 'deposits' | 'currency' | 'budget' | 'claims';
 
 const MAIN_TABS: { key: MainTab; label: string }[] = [
   { key: 'expenses',    label: 'Expenses'    },
@@ -25,6 +27,7 @@ const MAIN_TABS: { key: MainTab; label: string }[] = [
   { key: 'deposits',    label: 'Deposits'    },
   { key: 'currency',    label: 'Currency'    },
   { key: 'budget',      label: 'Budget'      },
+  { key: 'claims',      label: 'Claims'      },
 ];
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -170,6 +173,19 @@ export default function ExpensesPage() {
     queryFn: () => familiesApi.list(currentTrip!.id),
     enabled: !!currentTrip && tab === 'settlements',
   });
+  const { data: allClaims = [] } = useQuery({
+    queryKey: ['claims', currentTrip?.id],
+    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    refetchInterval: 15_000,
+  });
+  const { data: pendingClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
+    refetchInterval: 15_000,
+  });
+  const pendingClaimCount = pendingClaims.length;
   const { data: deposits = [], isLoading: depLoading } = useQuery({
     queryKey: ['deposits', currentTrip?.id],
     queryFn: () => depositsApi.list(currentTrip!.id),
@@ -340,6 +356,11 @@ export default function ExpensesPage() {
         {tab === 'settlements' && isOrganiser && (
           <button className="btn-primary" onClick={() => setShowCalcConfirm(true)}>⚖️ Calculate</button>
         )}
+        {tab === 'claims' && isOrganiser && (
+          <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
+            + Send for Group Review
+          </button>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -348,13 +369,19 @@ export default function ExpensesPage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`relative px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
               tab === key
                 ? 'bg-navy text-white'
                 : 'bg-parchment-dark/30 text-ink hover:bg-parchment-dark/60'
             }`}
           >
             {label}
+            {key === 'claims' && pendingClaimCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-terracotta text-white
+                                text-[10px] font-bold flex items-center justify-center leading-none">
+                {pendingClaimCount > 9 ? '9+' : pendingClaimCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -862,6 +889,93 @@ export default function ExpensesPage() {
             <button className="btn-primary" onClick={saveBudgets} disabled={savingBudgets}>
               {savingBudgets ? 'Saving…' : 'Save Budgets'}
             </button>
+          )}
+        </div>
+      )}
+
+      {/* ══ TAB: CLAIMS ═══════════════════════════════════════════════════════ */}
+      {tab === 'claims' && (
+        <div className="space-y-4">
+          {/* Non-organiser CTA when they have pending claims */}
+          {!isOrganiser && pendingClaimCount > 0 && (
+            <div className="vintage-card p-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-ink">
+                  {pendingClaimCount} claim{pendingClaimCount !== 1 ? 's' : ''} await your response
+                </p>
+                <p className="text-xs text-ink-faint mt-0.5">Swipe to accept, split, or decline</p>
+              </div>
+              <button className="btn-primary shrink-0" onClick={() => navigate('/expenses/claims')}>
+                Review Now
+              </button>
+            </div>
+          )}
+
+          {/* Claims list */}
+          {allClaims.length === 0 ? (
+            <div className="vintage-card text-center py-12">
+              <p className="text-3xl mb-2">🔍</p>
+              <p className="text-ink-faint mb-2">No claims yet.</p>
+              {isOrganiser && (
+                <>
+                  <p className="text-sm text-ink-faint mb-4">
+                    Use this when you're not sure who owes what — send it to the group to decide.
+                  </p>
+                  <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
+                    Send first claim for review
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(allClaims as ExpenseClaim[]).map((claim) => (
+                <div
+                  key={claim.id}
+                  className={`vintage-card p-4 ${isOrganiser ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                  onClick={() => isOrganiser && navigate(`/expenses/claims/${claim.id}`)}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl shrink-0 mt-0.5">
+                      {EXPENSE_CATEGORY_ICONS[claim.category]}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-ink">{claim.description}</p>
+                        <span className={`badge text-xs shrink-0 ${
+                          claim.status === 'approved'   ? 'badge-green'
+                          : claim.status === 'cancelled' ? 'badge-terracotta'
+                          : 'badge-gold'
+                        }`}>
+                          {claim.status}
+                        </span>
+                      </div>
+                      <p className="text-lg font-bold text-navy mt-0.5">
+                        {new Intl.NumberFormat('en-GB', { style: 'currency', currency: claim.currency }).format(claim.total_amount)}
+                      </p>
+                      {claim.status === 'open' && (
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between text-xs text-ink-faint mb-1">
+                            <span>{claim.response_count ?? 0} of {claim.total_travellers ?? 0} responded</span>
+                          </div>
+                          <div className="progress-bar-track">
+                            <div
+                              className="progress-bar-fill"
+                              style={{
+                                width: `${((claim.response_count ?? 0) / Math.max(1, claim.total_travellers ?? 1)) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {claim.created_by_name && (
+                        <p className="text-xs text-ink-faint mt-1">Sent by {claim.created_by_name}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

@@ -11,6 +11,8 @@ import ActivityFormPage from './pages/ActivityFormPage';
 import MapPage from './pages/MapPage';
 import ExpensesPage from './pages/ExpensesPage';
 import ExpenseFormPage from './pages/ExpenseFormPage';
+import ExpenseClaimFormPage   from './pages/ExpenseClaimFormPage';
+import ExpenseClaimReviewPage from './pages/ExpenseClaimReviewPage';
 import DepositFormPage from './pages/DepositFormPage';
 import LogisticsPage from './pages/LogisticsPage';
 import TransportBookingFormPage from './pages/TransportBookingFormPage';
@@ -74,6 +76,9 @@ function App() {
         <Route path="/expenses/:id/edit"       element={<ExpenseFormPage />} />
         <Route path="/expenses/deposits/add"   element={<DepositFormPage />} />
         <Route path="/expenses/deposits/:id/edit" element={<DepositFormPage />} />
+        <Route path="/expenses/claims/new"  element={<ExpenseClaimFormPage />} />
+        <Route path="/expenses/claims"      element={<ExpenseClaimReviewPage />} />
+        <Route path="/expenses/claims/:id"  element={<ExpenseClaimReviewPage />} />
 
         {/* Logistics */}
         <Route path="/logistics"                         element={<LogisticsPage />} />

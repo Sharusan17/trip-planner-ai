@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useTrip } from '@/context/TripContext';
 import { travellersApi } from '@/api/travellers';
+import { useQuery } from '@tanstack/react-query';
+import { expenseClaimsApi } from '@/api/expenseClaims';
 import {
   LayoutDashboard,
   Users,
@@ -36,6 +38,14 @@ const navItems: NavItem[] = [
 
 export default function Sidebar() {
   const { currentTrip, activeTraveller, isOrganiser, clearSession } = useTrip();
+  const { data: _sidebarPendingClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  const claimBadge = _sidebarPendingClaims.length;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -76,7 +86,13 @@ export default function Sidebar() {
             {({ isActive }) => (
               <>
                 <Icon size={17} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" />
-                {label}
+                <span className="flex-1">{label}</span>
+                {to === '/expenses' && claimBadge > 0 && (
+                  <span className="ml-auto w-5 h-5 rounded-full bg-terracotta text-white text-[10px]
+                                    font-bold flex items-center justify-center shrink-0 leading-none">
+                    {claimBadge > 9 ? '9+' : claimBadge}
+                  </span>
+                )}
               </>
             )}
           </NavLink>

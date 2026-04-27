@@ -406,6 +406,50 @@ const migrations = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
   `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS family_id UUID REFERENCES families(id) ON DELETE SET NULL;`,
+
+  // 022: expense claim review
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'expense_claim_status') THEN
+      CREATE TYPE expense_claim_status AS ENUM ('open', 'approved', 'cancelled');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'expense_claim_action') THEN
+      CREATE TYPE expense_claim_action AS ENUM ('accepted', 'partial', 'declined');
+    END IF;
+  END $$;`,
+
+  `CREATE TABLE IF NOT EXISTS expense_claims (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    description TEXT NOT NULL,
+    total_amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    category expense_category NOT NULL DEFAULT 'other',
+    expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    notes TEXT,
+    line_items JSONB DEFAULT '[]',
+    receipt_data BYTEA,
+    receipt_mime VARCHAR(100),
+    receipt_filename VARCHAR(255),
+    status expense_claim_status NOT NULL DEFAULT 'open',
+    approved_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_expense_claims_trip ON expense_claims(trip_id, created_at DESC);`,
+
+  `CREATE TABLE IF NOT EXISTS expense_claim_responses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id UUID NOT NULL REFERENCES expense_claims(id) ON DELETE CASCADE,
+    traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    action expense_claim_action NOT NULL,
+    claimed_amount DECIMAL(12,2),
+    split_with_ids JSONB DEFAULT '[]',
+    note TEXT,
+    responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(claim_id, traveller_id)
+  );`,
 ];
 
 export async function runMigrations() {
