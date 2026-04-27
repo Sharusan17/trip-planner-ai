@@ -395,6 +395,17 @@ const migrations = [
   `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS notes TEXT;`,
   `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS avatar_photo BYTEA;`,
   `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS avatar_photo_mime VARCHAR(100);`,
+
+  // 021: family groups
+  `CREATE TABLE IF NOT EXISTS families (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    lead_traveller_id UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    colour VARCHAR(7) NOT NULL DEFAULT '#1B3A5C',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `ALTER TABLE travellers ADD COLUMN IF NOT EXISTS family_id UUID REFERENCES families(id) ON DELETE SET NULL;`,
 ];
 
 export async function runMigrations() {

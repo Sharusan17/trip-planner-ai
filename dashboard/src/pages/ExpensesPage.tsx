@@ -7,6 +7,7 @@ import { travellersApi } from '../api/travellers';
 import { settlementsApi } from '../api/settlements';
 import { depositsApi } from '../api/deposits';
 import { currencyApi } from '../api/currency';
+import { familiesApi } from '../api/families';
 import { API_BASE } from '../api/client';
 import type {
   Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
@@ -128,6 +129,8 @@ export default function ExpensesPage() {
 
   // ── settlements state
   const [showCalcConfirm, setShowCalcConfirm] = useState(false);
+  const [familyView, setFamilyView] = useState(false);
+  const [expandedFamilyGroups, setExpandedFamilyGroups] = useState<Set<string>>(new Set());
 
   // ── deposits state
   const [depositStatusTab, setDepositStatusTab] = useState<'all' | DepositStatus>('all');
@@ -160,6 +163,11 @@ export default function ExpensesPage() {
   const { data: settlements = [], isLoading: settLoading } = useQuery({
     queryKey: ['settlements', currentTrip?.id],
     queryFn: () => settlementsApi.list(currentTrip!.id),
+    enabled: !!currentTrip && tab === 'settlements',
+  });
+  const { data: families = [] } = useQuery({
+    queryKey: ['families', currentTrip?.id],
+    queryFn: () => familiesApi.list(currentTrip!.id),
     enabled: !!currentTrip && tab === 'settlements',
   });
   const { data: deposits = [], isLoading: depLoading } = useQuery({
@@ -229,6 +237,42 @@ export default function ExpensesPage() {
   // ── settlement helpers
   const getName   = (id: string) => travellers.find((t) => t.id === id)?.name ?? 'Unknown';
   const getColour = (id: string) => travellers.find((t) => t.id === id)?.avatar_colour ?? '#2563EB';
+
+  // ── family grouping helpers (for settlements family view)
+  const travellerFamilyMap: Record<string, string> = {};
+  for (const fam of families) {
+    for (const m of fam.members) travellerFamilyMap[m.id] = fam.id;
+  }
+  function getFamilyKey(tid: string) {
+    const famId = travellerFamilyMap[tid];
+    if (famId) {
+      const fam = families.find((f) => f.id === famId);
+      if (fam) return { key: `fam:${famId}`, label: fam.name, colour: fam.colour, isFamily: true };
+    }
+    return { key: `ind:${tid}`, label: getName(tid), colour: getColour(tid), isFamily: false };
+  }
+  type FamilyAggRow = {
+    fromKey: string; fromLabel: string; fromColour: string; fromIsFamily: boolean;
+    toKey: string; toLabel: string; toColour: string; toIsFamily: boolean;
+    totalAmount: number; settlements: Settlement[];
+  };
+  const familyAggMap: Record<string, FamilyAggRow> = {};
+  for (const s of (settlements as Settlement[]).filter((s) => s.status === 'pending')) {
+    const from = getFamilyKey(s.from_traveller);
+    const to   = getFamilyKey(s.to_traveller);
+    if (from.key === to.key) continue; // same family — skip internal debt
+    const aggKey = `${from.key}→${to.key}`;
+    if (!familyAggMap[aggKey]) {
+      familyAggMap[aggKey] = {
+        fromKey: from.key, fromLabel: from.label, fromColour: from.colour, fromIsFamily: from.isFamily,
+        toKey: to.key,     toLabel: to.label,     toColour: to.colour,     toIsFamily: to.isFamily,
+        totalAmount: 0, settlements: [],
+      };
+    }
+    familyAggMap[aggKey].totalAmount += s.amount;
+    familyAggMap[aggKey].settlements.push(s);
+  }
+  const familyAggRows = Object.values(familyAggMap);
 
   // ── budget helpers
   async function saveBudgets() {
@@ -480,17 +524,142 @@ export default function ExpensesPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {pendingSettlements.length > 0 && (
-                <div>
-                  <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">Outstanding ({pendingSettlements.length})</h2>
-                  <div className="space-y-2">
-                    {pendingSettlements.map((s) => (
-                      <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
-                        isOrganiser={isOrganiser} homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)} />
-                    ))}
+              {/* Family view toggle — only shown when families exist */}
+              {families.length > 0 && pendingSettlements.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-ink-faint font-medium">View:</span>
+                  <div className="flex rounded-lg border border-parchment-dark overflow-hidden">
+                    <button
+                      onClick={() => setFamilyView(false)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        !familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'
+                      }`}
+                    >
+                      Individual
+                    </button>
+                    <button
+                      onClick={() => setFamilyView(true)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'
+                      }`}
+                    >
+                      By Family
+                    </button>
                   </div>
                 </div>
               )}
+
+              {pendingSettlements.length > 0 && (
+                <div>
+                  <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">
+                    Outstanding ({familyView ? familyAggRows.length : pendingSettlements.length})
+                  </h2>
+
+                  {familyView ? (
+                    /* ── Family-grouped view ── */
+                    <div className="space-y-2">
+                      {familyAggRows.map((row) => {
+                        const aggKey = `${row.fromKey}→${row.toKey}`;
+                        const isExpanded = expandedFamilyGroups.has(aggKey);
+                        const allPending = row.settlements.filter((s) => s.status === 'pending');
+                        return (
+                          <div key={aggKey} className="vintage-card overflow-hidden">
+                            {/* Aggregated row */}
+                            <div className="p-4 flex items-center gap-3">
+                              <span
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: row.fromColour }}
+                              >
+                                {row.fromLabel.charAt(0).toUpperCase()}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-ink">
+                                  <span className="font-semibold">{row.fromLabel}</span>
+                                  {row.fromIsFamily && <span className="text-[10px] text-ink-faint ml-1">family</span>}
+                                  <span className="text-ink/50 mx-2">pays</span>
+                                  <span className="font-semibold">{row.toLabel}</span>
+                                  {row.toIsFamily && <span className="text-[10px] text-ink-faint ml-1">family</span>}
+                                </p>
+                                <p className="text-lg font-bold text-navy">{fmt(row.totalAmount, homeCurrency)}</p>
+                                {allPending.length > 1 && (
+                                  <p className="text-[11px] text-ink-faint">{allPending.length} individual settlements</p>
+                                )}
+                              </div>
+                              <span
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: row.toColour }}
+                              >
+                                {row.toLabel.charAt(0).toUpperCase()}
+                              </span>
+                              <div className="flex flex-col gap-1 shrink-0">
+                                {isOrganiser && (
+                                  <button
+                                    onClick={() => allPending.forEach((s) => markPaidMutation.mutate(s.id))}
+                                    className="btn-secondary text-xs py-1 px-2"
+                                  >
+                                    ✓ Mark all paid
+                                  </button>
+                                )}
+                                {allPending.length > 1 && (
+                                  <button
+                                    onClick={() => setExpandedFamilyGroups((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(aggKey)) next.delete(aggKey); else next.add(aggKey);
+                                      return next;
+                                    })}
+                                    className="text-xs text-ink-faint hover:text-navy text-center"
+                                  >
+                                    {isExpanded ? '▲ Hide' : '▼ Expand'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Expanded individual settlements */}
+                            {isExpanded && (
+                              <div className="border-t border-parchment-dark bg-parchment/40 divide-y divide-parchment-dark">
+                                {allPending.map((s) => (
+                                  <div key={s.id} className="px-4 py-2.5 flex items-center gap-3">
+                                    <span
+                                      className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                      style={{ backgroundColor: getColour(s.from_traveller) }}
+                                    >
+                                      {getName(s.from_traveller).charAt(0).toUpperCase()}
+                                    </span>
+                                    <span className="text-xs text-ink flex-1">
+                                      <span className="font-medium">{getName(s.from_traveller)}</span>
+                                      <span className="text-ink/40 mx-1">→</span>
+                                      <span className="font-medium">{getName(s.to_traveller)}</span>
+                                    </span>
+                                    <span className="text-xs font-semibold text-navy">{fmt(s.amount, homeCurrency)}</span>
+                                    {isOrganiser && (
+                                      <button
+                                        onClick={() => markPaidMutation.mutate(s.id)}
+                                        className="text-xs text-ink-faint hover:text-navy ml-1"
+                                      >
+                                        ✓
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* ── Individual view ── */
+                    <div className="space-y-2">
+                      {pendingSettlements.map((s) => (
+                        <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
+                          isOrganiser={isOrganiser} homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {paidSettlements.length > 0 && (
                 <div>
                   <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">Completed ({paidSettlements.length})</h2>

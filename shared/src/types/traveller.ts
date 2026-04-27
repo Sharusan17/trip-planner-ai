@@ -13,6 +13,7 @@ export interface Traveller {
   medical_notes?: string;
   has_medical_pin: boolean;
   has_photo: boolean;
+  family_id?: string | null;
   sort_order: number;
   created_at: string;
 }

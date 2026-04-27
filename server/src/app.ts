@@ -19,6 +19,7 @@ import photosRouter from './routes/photos';
 import receiptsRouter from './routes/receipts';
 import hotelSearchRouter from './routes/hotelSearch';
 import flightSearchRouter from './routes/flightSearch';
+import familiesRouter from './routes/families';
 import { loadAirports } from './services/airportCache';
 import { cleanupStaleCache } from './services/flightService';
 import { createLogger } from './utils/logger';
@@ -62,6 +63,7 @@ app.use('/api/v1', photosRouter);
 app.use('/api/v1', receiptsRouter);
 app.use('/api/v1', hotelSearchRouter);
 app.use('/api/v1', flightSearchRouter);
+app.use('/api/v1', familiesRouter);
 
 // Pre-load airport cache in background (doesn't block startup)
 loadAirports();

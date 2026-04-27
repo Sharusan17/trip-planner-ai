@@ -23,6 +23,7 @@ import PhotoUploadPage from './pages/PhotoUploadPage';
 import TripSetupPage from './pages/TripSetupPage';
 import TripSettingsPage from './pages/TripSettingsPage';
 import ProfilePage from './pages/ProfilePage';
+import FamilyFormPage from './pages/FamilyFormPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentTrip, restoring } = useTrip();
@@ -55,6 +56,8 @@ function App() {
         <Route path="/travellers"              element={<TravellersPage />} />
         <Route path="/travellers/add"          element={<TravellerFormPage />} />
         <Route path="/travellers/:id/edit"     element={<TravellerFormPage />} />
+        <Route path="/families/add"            element={<FamilyFormPage />} />
+        <Route path="/families/:id/edit"       element={<FamilyFormPage />} />
 
         {/* Itinerary */}
         <Route path="/itinerary"                              element={<ItineraryPage />} />

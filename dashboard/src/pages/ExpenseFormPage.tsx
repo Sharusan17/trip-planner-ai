@@ -5,9 +5,10 @@ import { useTrip } from '@/context/TripContext';
 import { expensesApi } from '@/api/expenses';
 import type { ReceiptScanResult } from '@/api/expenses';
 import { travellersApi } from '@/api/travellers';
+import { familiesApi } from '@/api/families';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -68,6 +69,12 @@ export default function ExpenseFormPage() {
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
     queryFn: () => travellersApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+  });
+
+  const { data: families = [] } = useQuery({
+    queryKey: ['families', currentTrip?.id],
+    queryFn: () => familiesApi.list(currentTrip!.id),
     enabled: !!currentTrip,
   });
 
@@ -405,7 +412,26 @@ export default function ExpenseFormPage() {
             <select className="vintage-input w-full" value={form.paid_by} required
               onChange={(e) => setForm({ ...form, paid_by: e.target.value })}>
               <option value="">Select…</option>
-              {travellers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {families.length > 0 ? (
+                <>
+                  {/* Family leads first */}
+                  {families.map((fam) => {
+                    const lead = travellers.find((t) => t.id === fam.lead_traveller_id);
+                    if (!lead) return null;
+                    return (
+                      <option key={`fam-${fam.id}`} value={lead.id}>
+                        {lead.name} ({fam.name} lead)
+                      </option>
+                    );
+                  })}
+                  {/* Remaining travellers not leading any family */}
+                  {travellers
+                    .filter((t) => !families.some((f) => f.lead_traveller_id === t.id))
+                    .map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </>
+              ) : (
+                travellers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)
+              )}
             </select>
           </div>
         </div>
@@ -547,22 +573,113 @@ export default function ExpenseFormPage() {
             <label className="block text-xs font-semibold text-ink-faint mb-2 uppercase tracking-wider">
               Split Between {form.traveller_ids.length === 0 ? '(all)' : `(${form.traveller_ids.length})`}
             </label>
-            <div className="space-y-1.5">
-              {travellers.map((t) => (
-                <label key={t.id} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="accent-navy"
-                    checked={form.traveller_ids.includes(t.id)}
-                    onChange={() => setForm((f) => ({
-                      ...f,
-                      traveller_ids: f.traveller_ids.includes(t.id)
-                        ? f.traveller_ids.filter((x) => x !== t.id)
-                        : [...f.traveller_ids, t.id],
-                    }))} />
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white"
-                    style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
-                  <span className="text-sm text-ink flex-1">{t.name}</span>
-                </label>
-              ))}
+            <div className="space-y-3">
+              {/* Family groups */}
+              {families.map((fam) => {
+                const members = travellers.filter((t) => fam.members.some((m) => m.id === t.id));
+                const allSelected = members.length > 0 && members.every((t) => form.traveller_ids.includes(t.id));
+                return (
+                  <div key={fam.id}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: fam.colour }} />
+                        <span className="text-xs font-semibold text-ink-light">{fam.name}</span>
+                        <span className="text-[10px] text-ink-faint">{members.length} member{members.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const memberIds = members.map((t) => t.id);
+                          setForm((f) => {
+                            if (allSelected) {
+                              return { ...f, traveller_ids: f.traveller_ids.filter((x) => !memberIds.includes(x)) };
+                            }
+                            const existing = f.traveller_ids.filter((x) => !memberIds.includes(x));
+                            return { ...f, traveller_ids: [...existing, ...memberIds] };
+                          });
+                        }}
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors border ${
+                          allSelected
+                            ? 'bg-navy/10 text-navy border-navy/20'
+                            : 'text-ink-faint border-parchment-dark hover:text-navy hover:border-navy/20'
+                        }`}
+                      >
+                        {allSelected ? '✓ All' : 'Select all'}
+                      </button>
+                    </div>
+                    <div className="space-y-1 pl-5">
+                      {members.map((t) => (
+                        <label key={t.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="accent-navy"
+                            checked={form.traveller_ids.includes(t.id)}
+                            onChange={() => setForm((f) => ({
+                              ...f,
+                              traveller_ids: f.traveller_ids.includes(t.id)
+                                ? f.traveller_ids.filter((x) => x !== t.id)
+                                : [...f.traveller_ids, t.id],
+                            }))}
+                          />
+                          <span
+                            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0"
+                            style={{ backgroundColor: t.avatar_colour }}
+                          >
+                            {t.name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="text-sm text-ink flex-1">{t.name}</span>
+                          {t.id === fam.lead_traveller_id && (
+                            <Crown size={11} className="text-amber-500 flex-shrink-0" strokeWidth={2} />
+                          )}
+                          <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Individuals (not in any family) */}
+              {(() => {
+                const familyMemberIds = new Set(families.flatMap((f) => f.members.map((m) => m.id)));
+                const individuals = travellers.filter((t) => !familyMemberIds.has(t.id));
+                if (individuals.length === 0) return null;
+                return (
+                  <div>
+                    {families.length > 0 && (
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-3 h-3 rounded-full bg-parchment-dark flex-shrink-0" />
+                        <span className="text-xs font-semibold text-ink-light">Individuals</span>
+                      </div>
+                    )}
+                    <div className={`space-y-1 ${families.length > 0 ? 'pl-5' : ''}`}>
+                      {individuals.map((t) => (
+                        <label key={t.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="accent-navy"
+                            checked={form.traveller_ids.includes(t.id)}
+                            onChange={() => setForm((f) => ({
+                              ...f,
+                              traveller_ids: f.traveller_ids.includes(t.id)
+                                ? f.traveller_ids.filter((x) => x !== t.id)
+                                : [...f.traveller_ids, t.id],
+                            }))}
+                          />
+                          <span
+                            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0"
+                            style={{ backgroundColor: t.avatar_colour }}
+                          >
+                            {t.name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="text-sm text-ink flex-1">{t.name}</span>
+                          <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
