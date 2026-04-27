@@ -450,6 +450,10 @@ const migrations = [
     responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(claim_id, traveller_id)
   );`,
+
+  // 023: line_item_indices on claim responses
+  `ALTER TABLE expense_claim_responses
+     ADD COLUMN IF NOT EXISTS line_item_indices JSONB DEFAULT '[]';`,
 ];
 
 export async function runMigrations() {

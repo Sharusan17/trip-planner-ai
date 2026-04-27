@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { expensesApi } from '@/api/expenses';
 import type { ReceiptScanResult } from '@/api/expenses';
+import { expenseClaimsApi } from '@/api/expenseClaims';
 import { travellersApi } from '@/api/travellers';
 import { familiesApi } from '@/api/families';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
@@ -120,6 +121,44 @@ export default function ExpenseFormPage() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); navigate('/expenses'); },
   });
+
+  const claimMutation = useMutation({
+    mutationFn: ({ lineItemsData }: { lineItemsData?: ExpenseLineItem[] }) =>
+      expenseClaimsApi.create(
+        currentTrip!.id,
+        {
+          description: form.description,
+          total_amount: parseFloat(form.amount),
+          currency: form.currency,
+          category: form.category,
+          expense_date: form.expense_date,
+          notes: form.notes || undefined,
+          line_items: lineItemsData,
+          created_by: activeTraveller!.id,
+        },
+        receiptFile ?? undefined,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['claims'] });
+      navigate('/expenses?tab=claims');
+    },
+  });
+
+  function handleSendForReview() {
+    if (!form.description.trim() || !form.amount || parseFloat(form.amount) <= 0) {
+      alert('Please enter a description and amount first.');
+      return;
+    }
+    if (!activeTraveller) return;
+    let lineItemsData: ExpenseLineItem[] | undefined;
+    if (form.split_mode === 'itemised') {
+      lineItemsData = lineItems
+        .filter((li) => li.description.trim() && parseFloat(li.amount) > 0)
+        .map((li) => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+      if (lineItemsData.length === 0) lineItemsData = undefined;
+    }
+    claimMutation.mutate({ lineItemsData });
+  }
 
   // ── Receipt scan ──────────────────────────────────────────────────────────
   async function handleScanReceipt() {
@@ -692,11 +731,25 @@ export default function ExpenseFormPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <button type="button" onClick={() => navigate('/expenses')} className="btn-secondary flex-1">Cancel</button>
-          <button type="submit" className="btn-primary flex-1 disabled:opacity-50" disabled={isPending}>
-            {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Log Expense'}
-          </button>
+        <div className="space-y-2.5 pt-2">
+          {!isEdit && (
+            <button
+              type="button"
+              onClick={handleSendForReview}
+              disabled={claimMutation.isPending || isPending}
+              className="w-full py-3 rounded-xl border-2 border-dashed border-amber-400 text-amber-700
+                         bg-amber-50 hover:bg-amber-100 text-sm font-semibold transition-colors
+                         disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {claimMutation.isPending ? 'Sending…' : '📤 Send to Group for Review'}
+            </button>
+          )}
+          <div className="flex gap-3">
+            <button type="button" onClick={() => navigate('/expenses')} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" className="btn-primary flex-1 disabled:opacity-50" disabled={isPending}>
+              {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Log Expense'}
+            </button>
+          </div>
         </div>
       </form>
     </div>

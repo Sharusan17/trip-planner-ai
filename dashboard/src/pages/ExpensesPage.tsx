@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '../context/TripContext';
 import { expensesApi } from '../api/expenses';
@@ -117,10 +117,14 @@ function SettlementRow({
 export default function ExpensesPage() {
   const { currentTrip, activeTraveller, isOrganiser } = useTrip();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
 
   // ── tab state
-  const [tab, setTab] = useState<MainTab>('expenses');
+  const initialTab = searchParams.get('tab') as MainTab | null;
+  const [tab, setTab] = useState<MainTab>(
+    initialTab && MAIN_TABS.some((t) => t.key === initialTab) ? initialTab : 'expenses'
+  );
 
   // ── expenses state
   const [expenseCat, setExpenseCat] = useState<ExpenseCategory | 'all'>('all');

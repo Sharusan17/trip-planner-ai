@@ -15,6 +15,7 @@ const parseResponseRow = (row: any) => ({
   ...row,
   claimed_amount: row.claimed_amount ? parseFloat(row.claimed_amount) : null,
   split_with_ids: row.split_with_ids ?? [],
+  line_item_indices: row.line_item_indices ?? [],
 });
 
 // ── GET /trips/:tripId/claims — all claims with response progress
@@ -40,11 +41,24 @@ router.get('/trips/:tripId/claims', async (req, res) => {
 });
 
 // ── GET /trips/:tripId/claims/pending/:travellerId — open claims traveller hasn't responded to
+// Also includes co_split_nomination when another traveller named them as a co-splitter
 router.get('/trips/:tripId/claims/pending/:travellerId', async (req, res) => {
   try {
     const { tripId, travellerId } = req.params;
     const result = await pool.query(
-      `SELECT ec.*, t.name AS created_by_name, t.avatar_colour AS created_by_colour
+      `SELECT ec.*, t.name AS created_by_name, t.avatar_colour AS created_by_colour,
+         (
+           SELECT json_build_object(
+             'nominated_by', nom.name,
+             'each_amount', (ecr2.claimed_amount::float / (json_array_length(ecr2.split_with_ids) + 1))
+           )
+           FROM expense_claim_responses ecr2
+           JOIN travellers nom ON nom.id = ecr2.traveller_id
+           WHERE ecr2.claim_id = ec.id
+             AND ecr2.split_with_ids @> jsonb_build_array($2::text)
+             AND ecr2.claimed_amount IS NOT NULL
+           LIMIT 1
+         ) AS co_split_nomination
        FROM expense_claims ec
        JOIN travellers t ON t.id = ec.created_by
        WHERE ec.trip_id = $1
@@ -171,7 +185,7 @@ router.get('/claims/:id/receipt', async (req, res) => {
 // ── POST /claims/:id/respond — traveller submits / updates response
 router.post('/claims/:id/respond', async (req, res) => {
   try {
-    const { traveller_id, action, claimed_amount, split_with_ids, note } = req.body;
+    const { traveller_id, action, claimed_amount, split_with_ids, line_item_indices, note } = req.body;
 
     if (!traveller_id || !action) {
       return res.status(400).json({ error: 'traveller_id and action are required' });
@@ -188,12 +202,13 @@ router.post('/claims/:id/respond', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO expense_claim_responses
-         (claim_id, traveller_id, action, claimed_amount, split_with_ids, note)
-       VALUES ($1,$2,$3,$4,$5,$6)
+         (claim_id, traveller_id, action, claimed_amount, split_with_ids, line_item_indices, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (claim_id, traveller_id) DO UPDATE SET
          action = EXCLUDED.action,
          claimed_amount = EXCLUDED.claimed_amount,
          split_with_ids = EXCLUDED.split_with_ids,
+         line_item_indices = EXCLUDED.line_item_indices,
          note = EXCLUDED.note,
          responded_at = NOW()
        RETURNING *`,
@@ -203,6 +218,7 @@ router.post('/claims/:id/respond', async (req, res) => {
         action,
         claimed_amount != null ? parseFloat(claimed_amount) : null,
         JSON.stringify(split_with_ids ?? []),
+        JSON.stringify(line_item_indices ?? []),
         note || null,
       ]
     );
@@ -240,13 +256,20 @@ router.post('/claims/:id/approve', async (req, res) => {
     // Build splits map
     const splits: Record<string, number> = {};
 
+    // Travellers who submitted an explicit response take priority over
+    // being named as a co-splitter in someone else's partial response.
+    const respondedTravellers = new Set(responses.map((r: any) => r.traveller_id));
+
     for (const r of responses) {
       if (r.action === 'accepted') {
         // Full claim — treated as "I own this fully"
         splits[r.traveller_id] = (splits[r.traveller_id] ?? 0) + totalAmount;
       } else if (r.action === 'partial' && r.claimed_amount != null) {
         const claimedAmt = parseFloat(r.claimed_amount);
-        const coSplitters: string[] = r.split_with_ids ?? [];
+        // Skip co-splitters who have their own explicit response (their response wins)
+        const coSplitters: string[] = (r.split_with_ids ?? []).filter(
+          (sid: string) => !respondedTravellers.has(sid)
+        );
         if (coSplitters.length > 0) {
           const perPerson = claimedAmt / (coSplitters.length + 1);
           splits[r.traveller_id] = (splits[r.traveller_id] ?? 0) + perPerson;

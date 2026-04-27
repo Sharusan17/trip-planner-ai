@@ -25,6 +25,8 @@ export interface ExpenseClaim {
   responses?: ExpenseClaimResponse[];
   response_count?: number;
   total_travellers?: number;
+  /** Set when another traveller has already named this viewer as a co-splitter */
+  co_split_nomination?: { nominated_by: string; each_amount: number } | null;
 }
 
 export interface ExpenseClaimResponse {
@@ -34,6 +36,8 @@ export interface ExpenseClaimResponse {
   action: ExpenseClaimAction;
   claimed_amount: number | null;
   split_with_ids: string[];
+  /** Indices into claim.line_items the traveller claimed */
+  line_item_indices: number[];
   note: string | null;
   responded_at: string;
   traveller_name?: string;
@@ -56,5 +60,6 @@ export interface RespondToClaimInput {
   action: ExpenseClaimAction;
   claimed_amount?: number;
   split_with_ids?: string[];
+  line_item_indices?: number[];
   note?: string;
 }

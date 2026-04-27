@@ -72,6 +72,7 @@ function SwipeQueue() {
   const [showPartialSheet, setShowPartialSheet] = useState(false);
   const [partialAmount, setPartialAmount] = useState('');
   const [splitWithIds, setSplitWithIds] = useState<string[]>([]);
+  const [selectedLineItems, setSelectedLineItems] = useState<number[]>([]);
   const [partialNote, setPartialNote] = useState('');
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +140,7 @@ function SwipeQueue() {
           action: 'partial',
           claimed_amount: parseFloat(partialAmount),
           split_with_ids: splitWithIds,
+          line_item_indices: selectedLineItems.length > 0 ? selectedLineItems : undefined,
           note: partialNote || undefined,
         },
       });
@@ -149,6 +151,7 @@ function SwipeQueue() {
       setFlyDir(null);
       setPartialAmount('');
       setSplitWithIds([]);
+      setSelectedLineItems([]);
       setPartialNote('');
     }, 380);
   }
@@ -307,6 +310,20 @@ function SwipeQueue() {
                 />
               )}
 
+              {/* Co-splitter nomination banner */}
+              {claim.co_split_nomination && (
+                <div className="relative z-0 rounded-xl p-3 text-sm"
+                  style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                  <p style={{ color: '#92400e' }}>
+                    <strong>{claim.co_split_nomination.nominated_by}</strong> said they'd split this with you
+                    {' '}({fmt(claim.co_split_nomination.each_amount, claim.currency)} each).
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
+                    You can accept that share via 🤝, pay a different amount, or decline.
+                  </p>
+                </div>
+              )}
+
               {claim.notes && (
                 <p
                   className="text-sm italic text-center relative z-0"
@@ -333,8 +350,11 @@ function SwipeQueue() {
             {/* Partial / Split */}
             <button
               onClick={() => {
-                setPartialAmount(String(pendingClaims[currentIndex]?.total_amount ?? ''));
+                const cur = pendingClaims[currentIndex];
+                const nomination = cur?.co_split_nomination;
+                setPartialAmount(nomination ? String(nomination.each_amount.toFixed(2)) : String(cur?.total_amount ?? ''));
                 setSplitWithIds([]);
+                setSelectedLineItems([]);
                 setPartialNote('');
                 setShowPartialSheet(true);
               }}
@@ -377,13 +397,55 @@ function SwipeQueue() {
               Enter how much of this expense is yours.
             </p>
 
+            {/* Line items (tick to auto-sum) */}
+            {claim.line_items && claim.line_items.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold mb-2 uppercase tracking-wider"
+                  style={{ color: 'var(--color-ink-faint)' }}>
+                  My Items
+                </label>
+                <div className="space-y-1.5">
+                  {claim.line_items.map((item, i) => {
+                    const checked = selectedLineItems.includes(i);
+                    return (
+                      <label key={i}
+                        className="flex items-center gap-2 cursor-pointer p-2 rounded-xl transition-colors"
+                        style={{ backgroundColor: checked ? '#eff6ff' : 'transparent' }}>
+                        <input type="checkbox" className="accent-navy" checked={checked}
+                          onChange={() => {
+                            const updated = checked
+                              ? selectedLineItems.filter((x) => x !== i)
+                              : [...selectedLineItems, i];
+                            setSelectedLineItems(updated);
+                            const sum = claim.line_items!
+                              .filter((_, idx) => updated.includes(idx))
+                              .reduce((s, li) => s + li.amount, 0);
+                            if (sum > 0) setPartialAmount(sum.toFixed(2));
+                          }}
+                        />
+                        <span className="flex-1 text-sm" style={{ color: 'var(--color-ink)' }}>
+                          {item.description}
+                        </span>
+                        <span className="text-sm font-medium" style={{ color: 'var(--color-navy)' }}>
+                          {fmt(item.amount, claim.currency)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-ink-faint)' }}>
+                  Ticking items auto-fills the amount — or type a custom value below.
+                </p>
+              </div>
+            )}
+
             {/* My share */}
             <div>
               <label
                 className="block text-xs font-semibold mb-1.5 uppercase tracking-wider"
                 style={{ color: 'var(--color-ink-faint)' }}
               >
-                My Share
+                My Share ({claim.currency})
               </label>
               <input
                 type="number"
@@ -672,6 +734,14 @@ function DetailView({ id }: { id: string }) {
                     </span>
                   )}
                 </div>
+                {r.line_item_indices && r.line_item_indices.length > 0 && claim.line_items && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-faint)' }}>
+                    Items: {r.line_item_indices
+                      .map((i) => claim.line_items![i]?.description)
+                      .filter(Boolean)
+                      .join(', ')}
+                  </p>
+                )}
                 {r.note && (
                   <p className="text-xs mt-0.5 italic" style={{ color: 'var(--color-ink-faint)' }}>
                     {r.note}
