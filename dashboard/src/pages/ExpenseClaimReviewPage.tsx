@@ -49,7 +49,7 @@ function SwipeQueue() {
 
   // ---- data ----------------------------------------------------------------
 
-  const { data: pendingClaims = [] } = useQuery({
+  const { data: pendingClaims = [], isLoading: claimsLoading } = useQuery({
     queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
     queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
     enabled: !!currentTrip && !!activeTraveller,
@@ -160,7 +160,9 @@ function SwipeQueue() {
 
   const claim = pendingClaims[currentIndex];
   const totalCards = pendingClaims.length;
-  const done = currentIndex >= totalCards;
+  // Only treat as "done" once we've confirmed the data has loaded (prevents
+  // the empty-array initial state from immediately showing "You're all done!")
+  const done = !claimsLoading && currentIndex >= totalCards;
 
   const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
@@ -197,7 +199,14 @@ function SwipeQueue() {
         </div>
       </div>
 
-      {done ? (
+      {claimsLoading ? (
+        /* ---- Loading state ---------------------------------------------- */
+        <div className="flex flex-col items-center justify-center py-24 px-4 gap-3">
+          <div className="w-10 h-10 border-4 rounded-full animate-spin"
+            style={{ borderColor: 'var(--color-parchment-dark)', borderTopColor: 'var(--color-navy)' }} />
+          <p className="text-sm" style={{ color: 'var(--color-ink-faint)' }}>Loading claims…</p>
+        </div>
+      ) : done ? (
         /* ---- Empty / done state ----------------------------------------- */
         <div className="vintage-card text-center py-16 mx-4 mt-4">
           <p className="text-5xl mb-4">🎉</p>
