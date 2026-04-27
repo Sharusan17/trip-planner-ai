@@ -60,9 +60,12 @@ function SwipeQueue() {
     staleTime: 0,
   });
 
-  // Claims this traveller can respond to: open + not created by them
+  // Claims this traveller can respond to: open + not created by them + not already responded to this session
   const pendingClaims = allClaims.filter(
-    (c) => c.status === 'open' && c.created_by !== activeTraveller?.id
+    (c) =>
+      c.status === 'open' &&
+      c.created_by !== activeTraveller?.id &&
+      !respondedIds.has(c.id)
   );
 
   const { data: travellers = [] } = useQuery({
@@ -73,6 +76,7 @@ function SwipeQueue() {
 
   // ---- state ---------------------------------------------------------------
 
+  const [respondedIds, setRespondedIds] = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -130,6 +134,7 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
+      setRespondedIds(prev => new Set(prev).add(claim.id));
       setCurrentIndex(i => i + 1);
       setDragX(0);
       setFlyDir(null);
@@ -155,6 +160,7 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
+      setRespondedIds(prev => new Set(prev).add(claim.id));
       setCurrentIndex(i => i + 1);
       setDragX(0);
       setFlyDir(null);
