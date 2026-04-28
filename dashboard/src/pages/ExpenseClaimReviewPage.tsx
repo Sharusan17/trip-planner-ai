@@ -62,10 +62,8 @@ function SwipeQueue() {
     enabled: !!currentTrip,
   });
 
-  // open claims not created by this traveller, stable order (created_at DESC from server)
-  const pendingClaims = allClaims.filter(
-    (c) => c.status === 'open' && c.created_by !== activeTraveller?.id
-  );
+  // open claims this traveller hasn't responded to yet (everyone can review, including the creator)
+  const pendingClaims = allClaims.filter((c) => c.status === 'open');
 
   // ---- state ---------------------------------------------------------------
   const [currentIndex, setCurrentIndex] = useState(0);

@@ -63,7 +63,6 @@ router.get('/trips/:tripId/claims/pending/:travellerId', async (req, res) => {
        JOIN travellers t ON t.id = ec.created_by
        WHERE ec.trip_id = $1
          AND ec.status = 'open'
-         AND ec.created_by != $2
          AND NOT EXISTS (
            SELECT 1 FROM expense_claim_responses ecr
            WHERE ecr.claim_id = ec.id AND ecr.traveller_id = $2

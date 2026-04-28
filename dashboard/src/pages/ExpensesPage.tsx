@@ -904,7 +904,7 @@ export default function ExpensesPage() {
                pendingClaims has loaded. pendingClaimCount is still used for badge. */}
           {!isOrganiser && (() => {
             const openForMe = (allClaims as ExpenseClaim[]).filter(
-              (c) => c.status === 'open' && c.created_by !== activeTraveller?.id
+              (c) => c.status === 'open'
             );
             if (openForMe.length === 0) return null;
             return (
@@ -944,17 +944,15 @@ export default function ExpensesPage() {
                 // A non-organiser can go to the swipe queue for any open claim
                 // they didn't create — regardless of whether pendingClaims has
                 // loaded yet. The swipe queue itself handles "already responded".
-                const canReviewAsNonOrg = !isOrganiser
-                  && claim.status === 'open'
-                  && claim.created_by !== activeTraveller?.id;
-                const isClickable = isOrganiser || canReviewAsNonOrg;
+                const canReview = claim.status === 'open';
+                const isClickable = isOrganiser || canReview;
                 return (
                   <div
                     key={claim.id}
                     className={`vintage-card p-4 ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
                     onClick={() => {
                       if (isOrganiser) navigate(`/expenses/claims/${claim.id}`);
-                      else if (canReviewAsNonOrg) navigate('/expenses/claims');
+                      else if (canReview) navigate('/expenses/claims');
                     }}
                   >
                     <div className="flex items-start gap-3">
@@ -1012,7 +1010,7 @@ export default function ExpensesPage() {
                       </div>
                     </div>
                     {/* Review CTA for non-organiser — shown for any reviewable open claim */}
-                    {canReviewAsNonOrg && (
+                    {!isOrganiser && canReview && (
                       <div className="mt-3 pt-3 border-t border-parchment-dark flex items-center justify-between">
                         <p className="text-xs text-amber-700 font-medium">Tap to say what you owe</p>
                         <button
