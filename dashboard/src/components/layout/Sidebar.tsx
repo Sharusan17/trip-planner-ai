@@ -38,14 +38,14 @@ const navItems: NavItem[] = [
 
 export default function Sidebar() {
   const { currentTrip, activeTraveller, isOrganiser, clearSession } = useTrip();
-  const { data: _sidebarAllClaims = [] } = useQuery({
-    queryKey: ['claims', currentTrip?.id],
-    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
-    enabled: !!currentTrip,
+  const { data: _sidebarPendingClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
     refetchInterval: 30_000,
     staleTime: 0,
   });
-  const claimBadge = _sidebarAllClaims.filter((c) => c.status === 'open').length;
+  const claimBadge = _sidebarPendingClaims.length;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
 

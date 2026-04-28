@@ -101,14 +101,13 @@ export default function DashboardPage() {
     staleTime: 60_000,
   });
 
-  const { data: allClaims = [] } = useQuery({
-    queryKey: ['claims', currentTrip?.id],
-    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
-    enabled: !!currentTrip,
+  const { data: pendingClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
     refetchInterval: 20_000,
     staleTime: 0,
   });
-  const pendingClaims = allClaims.filter((c) => c.status === 'open');
 
   if (!currentTrip) return null;
 

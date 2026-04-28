@@ -8,21 +8,20 @@ import TripHeader from './TripHeader';
 function PendingClaimsBanner() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
 
-  const { data: allClaims = [] } = useQuery({
-    queryKey: ['claims', currentTrip?.id],
-    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
-    enabled: !!currentTrip,
+  const { data: pendingClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
     refetchInterval: 20_000,
     staleTime: 0,
   });
-  const openClaims = allClaims.filter((c) => c.status === 'open');
 
   // Hide banner when already on the review page or dashboard (dashboard has its own alert)
   const onReviewPage = location.pathname.startsWith('/expenses/claims');
   const onDashboard = location.pathname === '/dashboard' || location.pathname === '/';
-  if (openClaims.length === 0 || onReviewPage || onDashboard) return null;
+  if (pendingClaims.length === 0 || onReviewPage || onDashboard) return null;
 
   return (
     <button
@@ -35,7 +34,7 @@ function PendingClaimsBanner() {
       <span className="text-lg flex-shrink-0">📋</span>
       <div className="flex-1 min-w-0">
         <span className="font-bold text-sm">
-          {openClaims.length} expense claim{openClaims.length !== 1 ? 's' : ''} need{openClaims.length === 1 ? 's' : ''} your review
+          {pendingClaims.length} expense claim{pendingClaims.length !== 1 ? 's' : ''} need{pendingClaims.length === 1 ? 's' : ''} your review
         </span>
         <span className="text-xs ml-2 opacity-80">
           — tap to pick what you owe
