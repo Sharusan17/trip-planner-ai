@@ -58,7 +58,11 @@ function SwipeQueue() {
   });
 
   // unansweredClaims — server filters out claims this traveller already responded to
-  const { data: unansweredClaims = [] } = useQuery({
+  const {
+    data: unansweredClaims = [],
+    isLoading: pendingLoading,
+    isFetching: pendingFetching,
+  } = useQuery({
     queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
     queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
     enabled: !!currentTrip && !!activeTraveller,
@@ -172,7 +176,7 @@ function SwipeQueue() {
   // ---- derived -------------------------------------------------------------
   const claim = pendingClaims[currentIndex];
   const totalCards = pendingClaims.length;
-  const anyFetching = claimsLoading || claimsFetching;
+  const anyFetching = claimsLoading || claimsFetching || pendingLoading || pendingFetching;
   const done = !anyFetching && currentIndex >= totalCards;
   const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
