@@ -6,7 +6,7 @@ import { expenseClaimsApi } from '@/api/expenseClaims';
 import { travellersApi } from '@/api/travellers';
 import type { RespondToClaimInput } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, X, Check, Split } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -336,18 +336,20 @@ function SwipeQueue() {
           </div>
 
           {/* ---- Action buttons ------------------------------------------ */}
-          <div className="flex items-center justify-center gap-6 mt-6 px-4">
+          <div className="flex items-center justify-center gap-5 mt-6 px-4">
             {/* Decline */}
             <button
               onClick={() => commitAction('declined')}
-              className="w-16 h-16 rounded-full bg-red-100 border-2 border-red-300 text-3xl
-                         flex items-center justify-center hover:bg-red-200 transition-colors shadow-sm"
-              title="Not mine"
+              className="flex flex-col items-center justify-center gap-1 w-20 h-20 rounded-full
+                         bg-red-50 border-2 border-red-300 hover:bg-red-100 active:scale-95
+                         transition-all shadow-sm"
+              title="Decline"
             >
-              ❌
+              <X size={22} strokeWidth={2.5} className="text-red-500" />
+              <span className="text-[10px] font-bold text-red-500 leading-none">Decline</span>
             </button>
 
-            {/* Partial / Split */}
+            {/* Split */}
             <button
               onClick={() => {
                 const cur = pendingClaims[currentIndex];
@@ -358,21 +360,25 @@ function SwipeQueue() {
                 setPartialNote('');
                 setShowPartialSheet(true);
               }}
-              className="w-12 h-12 rounded-full bg-amber-100 border-2 border-amber-300 text-xl
-                         flex items-center justify-center hover:bg-amber-200 transition-colors shadow-sm"
-              title="Split / Partial"
+              className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full
+                         bg-amber-50 border-2 border-amber-300 hover:bg-amber-100 active:scale-95
+                         transition-all shadow-sm"
+              title="Split"
             >
-              🤝
+              <Split size={17} strokeWidth={2} className="text-amber-500" />
+              <span className="text-[9px] font-bold text-amber-600 leading-none">Split</span>
             </button>
 
             {/* Accept */}
             <button
               onClick={() => commitAction('accepted')}
-              className="w-16 h-16 rounded-full bg-green-100 border-2 border-green-300 text-3xl
-                         flex items-center justify-center hover:bg-green-200 transition-colors shadow-sm"
-              title="Mine!"
+              className="flex flex-col items-center justify-center gap-1 w-20 h-20 rounded-full
+                         bg-green-50 border-2 border-green-300 hover:bg-green-100 active:scale-95
+                         transition-all shadow-sm"
+              title="Accept"
             >
-              ✅
+              <Check size={22} strokeWidth={2.5} className="text-green-500" />
+              <span className="text-[10px] font-bold text-green-600 leading-none">Accept</span>
             </button>
           </div>
         </>
