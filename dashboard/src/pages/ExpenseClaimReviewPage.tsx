@@ -6,7 +6,7 @@ import { expenseClaimsApi } from '@/api/expenseClaims';
 import { travellersApi } from '@/api/travellers';
 import type { RespondToClaimInput } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft, X, Heart, Scissors } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -159,36 +159,29 @@ function SwipeQueue() {
 
   // ---- derived -------------------------------------------------------------
   const claim = pendingClaims[currentIndex];
-  const nextClaim = pendingClaims[currentIndex + 1];
   const totalCards = pendingClaims.length;
   const anyFetching = claimsLoading || claimsFetching;
   const done = !anyFetching && currentIndex >= totalCards;
-
-  const dragProgress = Math.min(Math.abs(dragX) / 150, 1);
-  const tintOpacity = dragProgress * 0.4;
-  const stampOpacity = Math.min(Math.max((Math.abs(dragX) - 30) / 60, 0), 1);
+  const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
   const cardStyle: React.CSSProperties = {
     transform: flyDir === 'right'
-      ? 'translateX(150vw) rotate(25deg)'
+      ? 'translateX(120vw) rotate(20deg)'
       : flyDir === 'left'
-      ? 'translateX(-150vw) rotate(-25deg)'
-      : `translateX(${dragX}px) rotate(${dragX * 0.06}deg)`,
-    transition: isDragging ? 'none' : flyDir ? 'transform 0.28s cubic-bezier(0.55,0,1,0.45)' : 'transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275)',
+      ? 'translateX(-120vw) rotate(-20deg)'
+      : `translateX(${dragX}px) rotate(${dragX * 0.08}deg)`,
+    transition: isDragging ? 'none' : 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
     touchAction: 'none',
-    boxShadow: isDragging
-      ? `0 ${8 + dragProgress * 24}px ${24 + dragProgress * 32}px rgba(0,0,0,${0.1 + dragProgress * 0.18})`
-      : '0 8px 24px rgba(0,0,0,0.10)',
   };
 
   // ---- render --------------------------------------------------------------
   return (
-    <div className="flex flex-col min-h-screen" style={{ backgroundColor: '#f1f5f9' }}>
-      {/* Header */}
-      <div className="px-4 pt-6 pb-2 flex items-center gap-3">
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--color-parchment)' }}>
+      {/* Page header */}
+      <div className="px-4 pt-6 pb-4 flex items-center gap-3">
         <button
           onClick={() => navigate('/expenses')}
-          className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-parchment-dark/40 transition-colors"
           style={{ color: 'var(--color-ink-faint)' }}
         >
           <ArrowLeft size={18} strokeWidth={2} />
@@ -205,193 +198,158 @@ function SwipeQueue() {
 
       {anyFetching && totalCards === 0 ? (
         /* ---- Loading ---------------------------------------------------- */
-        <div className="flex flex-col items-center justify-center flex-1 gap-3">
+        <div className="flex flex-col items-center justify-center py-24 px-4 gap-3">
           <div className="w-10 h-10 border-4 rounded-full animate-spin"
-            style={{ borderColor: '#e2e8f0', borderTopColor: 'var(--color-navy)' }} />
+            style={{ borderColor: 'var(--color-parchment-dark)', borderTopColor: 'var(--color-navy)' }} />
           <p className="text-sm" style={{ color: 'var(--color-ink-faint)' }}>Loading claims…</p>
         </div>
       ) : done ? (
         /* ---- Done ------------------------------------------------------- */
-        <div className="flex flex-col items-center justify-center flex-1 px-4">
-          <div className="bg-white rounded-3xl text-center py-16 px-8 w-full max-w-sm shadow-xl">
-            <p className="text-6xl mb-4">🎉</p>
-            <h2 className="font-display text-2xl font-bold" style={{ color: 'var(--color-navy)' }}>
-              You're all done!
-            </h2>
-            <p className="mt-2" style={{ color: 'var(--color-ink-faint)' }}>
-              No more claims to review.
-            </p>
-            <button className="btn-secondary mt-6" onClick={() => navigate('/expenses')}>
-              Back to Finance
-            </button>
-          </div>
+        <div className="vintage-card text-center py-16 mx-4 mt-4">
+          <p className="text-5xl mb-4">🎉</p>
+          <h2 className="font-display text-2xl font-bold" style={{ color: 'var(--color-navy)' }}>
+            You're all done!
+          </h2>
+          <p className="mt-2" style={{ color: 'var(--color-ink-faint)' }}>
+            No more claims to review.
+          </p>
+          <button className="btn-secondary mt-6" onClick={() => navigate('/expenses')}>
+            Back to Finance
+          </button>
         </div>
       ) : (
-        <div className="flex flex-col flex-1">
-          {/* Dot progress */}
-          <div className="flex items-center justify-center gap-2 py-3">
-            {pendingClaims.map((_, i) => (
-              <div
-                key={i}
-                className="rounded-full transition-all duration-300"
-                style={{
-                  width: i === currentIndex ? '24px' : '8px',
-                  height: '8px',
-                  backgroundColor: i < currentIndex ? '#cbd5e1' : i === currentIndex ? 'var(--color-navy)' : '#e2e8f0',
-                }}
-              />
-            ))}
+        <>
+          {/* ---- Progress indicator -------------------------------------- */}
+          <div className="flex flex-col items-center gap-2 px-4 mb-4">
+            <p className="text-sm font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+              {currentIndex + 1} of {totalCards} claim{totalCards !== 1 ? 's' : ''}
+            </p>
+            <div className="flex gap-1.5">
+              {pendingClaims.map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-full transition-all"
+                  style={{
+                    width: i === currentIndex ? '20px' : '8px',
+                    height: '8px',
+                    backgroundColor: i < currentIndex
+                      ? 'var(--color-ink-faint)'
+                      : i === currentIndex
+                      ? 'var(--color-navy)'
+                      : 'var(--color-parchment-dark)',
+                  }}
+                />
+              ))}
+            </div>
           </div>
-          <p className="text-center text-xs font-medium mb-4" style={{ color: 'var(--color-ink-faint)' }}>
-            {currentIndex + 1} / {totalCards}
-          </p>
 
-          {/* Card stack area */}
-          <div className="relative mx-4 flex-1" style={{ minHeight: '420px' }}>
+          {/* ---- Draggable card ------------------------------------------ */}
+          <div
+            ref={cardRef}
+            className="relative select-none cursor-grab active:cursor-grabbing"
+            style={cardStyle}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          >
+            <div className="vintage-card p-6 mx-4 space-y-4 overflow-hidden" style={{ minHeight: '400px' }}>
+              {/* Green tint overlay */}
+              <div className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity"
+                style={{ opacity: dragX > 0 ? tintOpacity : 0, backgroundColor: '#22c55e' }} />
+              {/* Red tint overlay */}
+              <div className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity"
+                style={{ opacity: dragX < 0 ? tintOpacity : 0, backgroundColor: '#ef4444' }} />
 
-            {/* Next card peeking behind */}
-            {nextClaim && (
-              <div
-                className="absolute inset-x-0"
-                style={{
-                  top: '10px',
-                  transform: 'scale(0.94)',
-                  transformOrigin: 'bottom center',
-                  zIndex: 0,
-                  borderRadius: '24px',
-                  backgroundColor: 'white',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.07)',
-                  minHeight: '380px',
-                  opacity: 0.6,
-                }}
-              />
-            )}
-
-            {/* Active draggable card */}
-            <div
-              ref={cardRef}
-              className="absolute inset-x-0 select-none cursor-grab active:cursor-grabbing"
-              style={{ ...cardStyle, zIndex: 1, borderRadius: '24px', overflow: 'hidden', backgroundColor: 'white', minHeight: '380px' }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-            >
-              {/* Green accept tint */}
-              <div className="absolute inset-0 pointer-events-none"
-                style={{ backgroundColor: '#22c55e', opacity: dragX > 0 ? tintOpacity : 0, transition: 'opacity 0.1s' }} />
-              {/* Red decline tint */}
-              <div className="absolute inset-0 pointer-events-none"
-                style={{ backgroundColor: '#ef4444', opacity: dragX < 0 ? tintOpacity : 0, transition: 'opacity 0.1s' }} />
-
-              {/* MINE stamp */}
-              {dragX > 20 && (
-                <div className="absolute top-8 left-6 z-10 pointer-events-none"
-                  style={{ opacity: stampOpacity, transform: 'rotate(-18deg)' }}>
-                  <div style={{
-                    border: '4px solid #16a34a', borderRadius: '10px', padding: '4px 14px',
-                    color: '#16a34a', fontWeight: 900, fontSize: '28px', letterSpacing: '2px',
-                    fontFamily: 'var(--font-display)',
-                  }}>MINE!</div>
+              {/* MINE! / NOPE stamps */}
+              {dragX > 30 && (
+                <div className="absolute top-6 left-6 rotate-[-15deg] border-4 border-green-500 rounded-xl px-3 py-1 text-green-600 font-bold text-xl pointer-events-none z-10">
+                  MINE!
                 </div>
               )}
-              {/* NOPE stamp */}
-              {dragX < -20 && (
-                <div className="absolute top-8 right-6 z-10 pointer-events-none"
-                  style={{ opacity: stampOpacity, transform: 'rotate(18deg)' }}>
-                  <div style={{
-                    border: '4px solid #dc2626', borderRadius: '10px', padding: '4px 14px',
-                    color: '#dc2626', fontWeight: 900, fontSize: '28px', letterSpacing: '2px',
-                    fontFamily: 'var(--font-display)',
-                  }}>NOPE</div>
+              {dragX < -30 && (
+                <div className="absolute top-6 right-6 rotate-[15deg] border-4 border-red-500 rounded-xl px-3 py-1 text-red-600 font-bold text-xl pointer-events-none z-10">
+                  NOPE
                 </div>
               )}
 
               {/* Card content */}
-              <div className="p-6 space-y-4">
-                <div className="text-center pt-2">
-                  <span className="text-6xl">{EXPENSE_CATEGORY_ICONS[claim.category]}</span>
-                  <h2 className="font-display text-2xl font-bold mt-3" style={{ color: 'var(--color-ink)' }}>
-                    {claim.description}
-                  </h2>
-                  <p className="text-4xl font-bold mt-1" style={{ color: 'var(--color-navy)' }}>
-                    {fmt(claim.total_amount, claim.currency)}
-                  </p>
-                  <p className="text-xs mt-2" style={{ color: 'var(--color-ink-faint)' }}>
-                    {fmtDate(claim.expense_date)} · from {claim.created_by_name ?? '…'}
+              <div className="relative z-0 text-center pt-2">
+                <span className="text-5xl">{EXPENSE_CATEGORY_ICONS[claim.category]}</span>
+                <h2 className="font-display text-xl font-bold mt-3" style={{ color: 'var(--color-navy)' }}>
+                  {claim.description}
+                </h2>
+                <p className="text-3xl font-bold mt-1" style={{ color: 'var(--color-ink)' }}>
+                  {fmt(claim.total_amount, claim.currency)}
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-ink-faint)' }}>
+                  {fmtDate(claim.expense_date)} · posted by {claim.created_by_name ?? '…'}
+                </p>
+              </div>
+
+              {/* Receipt thumbnail */}
+              {claim.receipt_filename && (
+                <img
+                  src={expenseClaimsApi.getReceiptUrl(claim.id)}
+                  alt="Receipt"
+                  className="w-full object-cover rounded-xl border"
+                  style={{ maxHeight: '128px', borderColor: 'var(--color-parchment-dark)' }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+
+              {/* Line items */}
+              {claim.line_items && claim.line_items.length > 0 && (
+                <div className="relative z-0 rounded-xl overflow-hidden"
+                  style={{ border: '1px solid var(--color-parchment-dark)' }}>
+                  <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
+                    style={{ backgroundColor: 'var(--color-parchment)', color: 'var(--color-ink-faint)' }}>
+                    Receipt items — tap 🤝 to pick yours
+                  </div>
+                  {claim.line_items.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2 text-sm"
+                      style={{ backgroundColor: 'white', borderTop: '1px solid var(--color-parchment-dark)', color: 'var(--color-ink)' }}>
+                      <span className="flex-1 truncate mr-2">{item.description}</span>
+                      <span className="font-semibold shrink-0" style={{ color: 'var(--color-navy)' }}>
+                        {fmt(item.amount, claim.currency)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Co-split nomination */}
+              {claim.co_split_nomination && (
+                <div className="relative z-0 rounded-xl p-3 text-sm"
+                  style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                  <p style={{ color: '#92400e' }}>
+                    <strong>{claim.co_split_nomination.nominated_by}</strong> said they'd split this with you
+                    {' '}({fmt(claim.co_split_nomination.each_amount, claim.currency)} each).
                   </p>
                 </div>
+              )}
 
-                {claim.receipt_filename && (
-                  <img
-                    src={expenseClaimsApi.getReceiptUrl(claim.id)}
-                    alt="Receipt"
-                    className="w-full object-cover"
-                    style={{ maxHeight: '120px', borderRadius: '14px', border: '1px solid #e2e8f0' }}
-                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                  />
-                )}
-
-                {claim.line_items && claim.line_items.length > 0 && (
-                  <div style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
-                      style={{ backgroundColor: '#f8fafc', color: 'var(--color-ink-faint)' }}>
-                      Receipt items — tap split to pick yours
-                    </div>
-                    {claim.line_items.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between px-3 py-2 text-sm"
-                        style={{ backgroundColor: 'white', borderTop: '1px solid #e2e8f0', color: 'var(--color-ink)' }}>
-                        <span className="flex-1 truncate mr-2">{item.description}</span>
-                        <span className="font-semibold shrink-0" style={{ color: 'var(--color-navy)' }}>
-                          {fmt(item.amount, claim.currency)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {claim.co_split_nomination && (
-                  <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '12px' }}>
-                    <p className="text-sm" style={{ color: '#92400e' }}>
-                      <strong>{claim.co_split_nomination.nominated_by}</strong> wants to split this with you
-                      {' '}({fmt(claim.co_split_nomination.each_amount, claim.currency)} each).
-                    </p>
-                  </div>
-                )}
-
-                {claim.notes && (
-                  <p className="text-sm italic text-center" style={{ color: 'var(--color-ink-faint)' }}>
-                    {claim.notes}
-                  </p>
-                )}
-              </div>
+              {claim.notes && (
+                <p className="text-sm italic text-center relative z-0" style={{ color: 'var(--color-ink-faint)' }}>
+                  {claim.notes}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center justify-center gap-5 mt-6 px-4 pb-10">
+          {/* ---- Action buttons ------------------------------------------ */}
+          <div className="flex items-center justify-center gap-6 mt-6 px-4">
             {/* Decline */}
             <button
               onClick={() => commitAction('declined')}
+              className="w-16 h-16 rounded-full bg-red-100 border-2 border-red-300 text-3xl
+                         flex items-center justify-center hover:bg-red-200 transition-colors shadow-sm"
               title="Not mine"
-              style={{
-                width: '68px', height: '68px', borderRadius: '50%',
-                backgroundColor: 'white',
-                border: '2px solid #fecaca',
-                boxShadow: '0 4px 16px rgba(239,68,68,0.18)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'transform 0.15s, box-shadow 0.15s',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 20px rgba(239,68,68,0.28)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 16px rgba(239,68,68,0.18)'; }}
-              onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.94)'; }}
-              onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; }}
             >
-              <X size={28} strokeWidth={2.5} color="#ef4444" />
+              ❌
             </button>
 
-            {/* Split / Partial */}
+            {/* Partial / Split */}
             <button
               onClick={() => {
                 const cur = pendingClaims[currentIndex];
@@ -402,49 +360,24 @@ function SwipeQueue() {
                 setPartialNote('');
                 setShowPartialSheet(true);
               }}
-              title={claim.line_items?.length ? 'Pick my items' : 'Split / Partial'}
-              style={{
-                width: '52px', height: '52px', borderRadius: '50%',
-                backgroundColor: 'white',
-                border: '2px solid #fde68a',
-                boxShadow: '0 4px 12px rgba(245,158,11,0.18)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px',
-                transition: 'transform 0.15s, box-shadow 0.15s',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
-              onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.94)'; }}
-              onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; }}
+              className="w-12 h-12 rounded-full bg-amber-100 border-2 border-amber-300 text-xl
+                         flex items-center justify-center hover:bg-amber-200 transition-colors shadow-sm"
+              title="Split / Partial"
             >
-              <Scissors size={18} strokeWidth={2} color="#d97706" />
-              <span style={{ fontSize: '8px', fontWeight: 700, color: '#d97706', lineHeight: 1 }}>
-                {claim.line_items?.length ? 'ITEMS' : 'SPLIT'}
-              </span>
+              🤝
             </button>
 
             {/* Accept */}
             <button
               onClick={() => commitAction('accepted')}
+              className="w-16 h-16 rounded-full bg-green-100 border-2 border-green-300 text-3xl
+                         flex items-center justify-center hover:bg-green-200 transition-colors shadow-sm"
               title="Mine!"
-              style={{
-                width: '68px', height: '68px', borderRadius: '50%',
-                backgroundColor: 'white',
-                border: '2px solid #bbf7d0',
-                boxShadow: '0 4px 16px rgba(34,197,94,0.18)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'transform 0.15s, box-shadow 0.15s',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 20px rgba(34,197,94,0.28)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 16px rgba(34,197,94,0.18)'; }}
-              onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.94)'; }}
-              onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; }}
             >
-              <Heart size={28} strokeWidth={2} fill="#22c55e" color="#22c55e" />
+              ✅
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {/* ---- Partial bottom sheet ----------------------------------------- */}
