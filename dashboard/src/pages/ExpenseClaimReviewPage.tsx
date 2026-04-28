@@ -62,9 +62,29 @@ function SwipeQueue() {
     enabled: !!currentTrip,
   });
 
-  const pendingClaims = allClaims.filter((c) => c.status === 'open');
-
   // ---- state ---------------------------------------------------------------
+
+  // Persist responded claim IDs in localStorage per traveller so that after
+  // responding the claim doesn't reappear on refresh or re-navigation.
+  const lsKey = `responded-claims-${activeTraveller?.id ?? 'anon'}`;
+  const [respondedIds, setRespondedIds] = useState<Set<string>>(
+    () => new Set(JSON.parse(localStorage.getItem(lsKey) ?? '[]') as string[])
+  );
+
+  function markResponded(claimId: string) {
+    setRespondedIds(prev => {
+      const next = new Set(prev);
+      next.add(claimId);
+      localStorage.setItem(lsKey, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  // Open claims this traveller hasn't responded to yet
+  const pendingClaims = allClaims.filter(
+    (c) => c.status === 'open' && !respondedIds.has(c.id)
+  );
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -119,6 +139,7 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
+      markResponded(claim.id);
       setCurrentIndex(i => i + 1);
       setDragX(0);
       setFlyDir(null);
@@ -144,6 +165,7 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
+      markResponded(claim.id);
       setCurrentIndex(i => i + 1);
       setDragX(0);
       setFlyDir(null);
