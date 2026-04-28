@@ -48,10 +48,6 @@ function SwipeQueue() {
   const { currentTrip, activeTraveller } = useTrip();
 
   // ---- data ----------------------------------------------------------------
-  // Use allClaims (same query as the Finance claims tab) and filter client-side.
-  // This avoids depending on the /pending/:travellerId endpoint which can return
-  // stale or incorrect results depending on cache state.
-
   const { data: allClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
     queryKey: ['claims', currentTrip?.id],
     queryFn: () => expenseClaimsApi.list(currentTrip!.id),
@@ -66,19 +62,13 @@ function SwipeQueue() {
     enabled: !!currentTrip,
   });
 
-  // ---- state ---------------------------------------------------------------
-
-  const [respondedIds, setRespondedIds] = useState<Set<string>>(new Set());
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  // Claims this traveller can respond to: open + not created by them + not already responded this session
+  // open claims not created by this traveller, stable order (created_at DESC from server)
   const pendingClaims = allClaims.filter(
-    (c) =>
-      c.status === 'open' &&
-      c.created_by !== activeTraveller?.id &&
-      !respondedIds.has(c.id)
+    (c) => c.status === 'open' && c.created_by !== activeTraveller?.id
   );
 
+  // ---- state ---------------------------------------------------------------
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
@@ -91,7 +81,6 @@ function SwipeQueue() {
   const cardRef = useRef<HTMLDivElement>(null);
 
   // ---- mutation ------------------------------------------------------------
-
   const respondMutation = useMutation({
     mutationFn: ({ claimId, data }: { claimId: string; data: RespondToClaimInput }) =>
       expenseClaimsApi.respond(claimId, data),
@@ -101,7 +90,6 @@ function SwipeQueue() {
   });
 
   // ---- drag handlers -------------------------------------------------------
-
   function handlePointerDown(e: React.PointerEvent) {
     setIsDragging(true);
     setDragStartX(e.clientX);
@@ -123,7 +111,6 @@ function SwipeQueue() {
   }
 
   // ---- commit --------------------------------------------------------------
-
   async function commitAction(action: 'accepted' | 'declined') {
     const claim = pendingClaims[currentIndex];
     if (!claim || !activeTraveller) return;
@@ -135,7 +122,6 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
-      setRespondedIds(prev => new Set(prev).add(claim.id));
       setCurrentIndex(i => i + 1);
       setDragX(0);
       setFlyDir(null);
@@ -161,7 +147,6 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
-      setRespondedIds(prev => new Set(prev).add(claim.id));
       setCurrentIndex(i => i + 1);
       setDragX(0);
       setFlyDir(null);
@@ -173,15 +158,10 @@ function SwipeQueue() {
   }
 
   // ---- derived -------------------------------------------------------------
-
   const claim = pendingClaims[currentIndex];
   const totalCards = pendingClaims.length;
-  // Only treat as "done" once we've confirmed the server returned the list
-  // (prevents the empty-array initial value or a stale cache hit from
-  // immediately triggering the "all done" state before data arrives).
   const anyFetching = claimsLoading || claimsFetching;
   const done = !anyFetching && currentIndex >= totalCards;
-
   const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
   const cardStyle: React.CSSProperties = {
@@ -195,14 +175,13 @@ function SwipeQueue() {
   };
 
   // ---- render --------------------------------------------------------------
-
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--color-parchment)' }}>
+    <div className="flex flex-col min-h-screen" style={{ backgroundColor: 'var(--color-parchment)' }}>
       {/* Page header */}
-      <div className="px-4 pt-6 pb-4 flex items-center gap-3">
+      <div className="px-4 pt-6 pb-2 flex items-center gap-3">
         <button
           onClick={() => navigate('/expenses')}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-parchment-dark/40 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
           style={{ color: 'var(--color-ink-faint)' }}
         >
           <ArrowLeft size={18} strokeWidth={2} />
@@ -218,56 +197,56 @@ function SwipeQueue() {
       </div>
 
       {anyFetching && totalCards === 0 ? (
-        /* ---- Loading / refreshing state --------------------------------- */
-        <div className="flex flex-col items-center justify-center py-24 px-4 gap-3">
+        /* ---- Loading ---------------------------------------------------- */
+        <div className="flex flex-col items-center justify-center flex-1 gap-3">
           <div className="w-10 h-10 border-4 rounded-full animate-spin"
             style={{ borderColor: 'var(--color-parchment-dark)', borderTopColor: 'var(--color-navy)' }} />
           <p className="text-sm" style={{ color: 'var(--color-ink-faint)' }}>Loading claims…</p>
         </div>
       ) : done ? (
-        /* ---- Empty / done state ----------------------------------------- */
-        <div className="vintage-card text-center py-16 mx-4 mt-4">
-          <p className="text-5xl mb-4">🎉</p>
-          <h2 className="font-display text-2xl font-bold" style={{ color: 'var(--color-navy)' }}>
-            You're all done!
-          </h2>
-          <p className="mt-2" style={{ color: 'var(--color-ink-faint)' }}>
-            No more claims to review.
-          </p>
-          <button className="btn-secondary mt-6" onClick={() => navigate('/expenses')}>
-            Back to Finance
-          </button>
+        /* ---- Done ------------------------------------------------------- */
+        <div className="flex flex-col items-center justify-center flex-1 px-4">
+          <div className="vintage-card text-center py-16 w-full max-w-sm">
+            <p className="text-5xl mb-4">🎉</p>
+            <h2 className="font-display text-2xl font-bold" style={{ color: 'var(--color-navy)' }}>
+              You're all done!
+            </h2>
+            <p className="mt-2" style={{ color: 'var(--color-ink-faint)' }}>
+              No more claims to review.
+            </p>
+            <button className="btn-secondary mt-6" onClick={() => navigate('/expenses')}>
+              Back to Finance
+            </button>
+          </div>
         </div>
       ) : (
-        <>
-          {/* ---- Progress indicator -------------------------------------- */}
-          <div className="flex flex-col items-center gap-2 px-4 mb-4">
-            <p className="text-sm font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-              {currentIndex + 1} of {totalCards} claim{totalCards !== 1 ? 's' : ''}
-            </p>
-            <div className="flex gap-1.5">
-              {pendingClaims.map((_, i) => (
-                <div
-                  key={i}
-                  className="rounded-full transition-all"
-                  style={{
-                    width: i === currentIndex ? '20px' : '8px',
-                    height: '8px',
-                    backgroundColor: i < currentIndex
-                      ? 'var(--color-ink-faint)'
-                      : i === currentIndex
-                      ? 'var(--color-navy)'
-                      : 'var(--color-parchment-dark)',
-                  }}
-                />
-              ))}
-            </div>
+        <div className="flex flex-col flex-1">
+          {/* ---- Dot progress ------------------------------------------ */}
+          <div className="flex items-center justify-center gap-1.5 py-3">
+            {pendingClaims.map((_, i) => (
+              <div
+                key={i}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width: i === currentIndex ? '20px' : '8px',
+                  height: '8px',
+                  backgroundColor: i < currentIndex
+                    ? 'var(--color-ink-faint)'
+                    : i === currentIndex
+                    ? 'var(--color-navy)'
+                    : 'var(--color-parchment-dark)',
+                }}
+              />
+            ))}
           </div>
+          <p className="text-center text-xs mb-3" style={{ color: 'var(--color-ink-faint)' }}>
+            {currentIndex + 1} of {totalCards}
+          </p>
 
-          {/* ---- Draggable card ------------------------------------------ */}
+          {/* ---- Draggable card ---------------------------------------- */}
           <div
             ref={cardRef}
-            className="relative select-none cursor-grab active:cursor-grabbing"
+            className="relative select-none cursor-grab active:cursor-grabbing mx-4"
             style={cardStyle}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -275,8 +254,8 @@ function SwipeQueue() {
             onPointerCancel={handlePointerUp}
           >
             <div
-              className="vintage-card p-6 mx-4 space-y-4 overflow-hidden"
-              style={{ minHeight: '400px' }}
+              className="vintage-card p-6 space-y-4 overflow-hidden"
+              style={{ minHeight: '380px' }}
             >
               {/* Green tint overlay */}
               <div
@@ -387,7 +366,7 @@ function SwipeQueue() {
           </div>
 
           {/* ---- Action buttons ------------------------------------------ */}
-          <div className="flex items-center justify-center gap-6 mt-6 px-4">
+          <div className="flex items-center justify-center gap-6 mt-6 px-4 pb-8">
             {/* Decline */}
             <button
               onClick={() => commitAction('declined')}
@@ -429,7 +408,7 @@ function SwipeQueue() {
               ✅
             </button>
           </div>
-        </>
+        </div>
       )}
 
       {/* ---- Partial bottom sheet ----------------------------------------- */}
