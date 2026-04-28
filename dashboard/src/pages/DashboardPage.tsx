@@ -101,12 +101,14 @@ export default function DashboardPage() {
     staleTime: 60_000,
   });
 
-  const { data: pendingClaims = [] } = useQuery({
-    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
-    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
-    enabled: !!currentTrip && !!activeTraveller,
-    refetchInterval: 30_000,
+  const { data: allClaims = [] } = useQuery({
+    queryKey: ['claims', currentTrip?.id],
+    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    refetchInterval: 20_000,
+    staleTime: 0,
   });
+  const pendingClaims = allClaims.filter((c) => c.status === 'open');
 
   if (!currentTrip) return null;
 
@@ -142,23 +144,48 @@ export default function DashboardPage() {
       {/* ── Onboarding card (organiser only, until all 4 sections filled) ── */}
       <SetupCard />
 
-      {/* ── Pending claims notification ── */}
+      {/* ── Pending claims alert ── */}
       {pendingClaims.length > 0 && (
         <Link
-          to="/expenses?tab=claims"
-          className="flex items-center gap-4 p-4 rounded-xl border-2 border-amber-300 bg-amber-50
-                     hover:bg-amber-100 transition-colors no-underline"
+          to="/expenses/claims"
+          className="block no-underline"
         >
-          <span className="text-2xl flex-shrink-0">📋</span>
-          <div className="flex-1 min-w-0">
-            <p className="font-display font-bold text-amber-900 leading-tight">
-              {pendingClaims.length} expense claim{pendingClaims.length !== 1 ? 's' : ''} need your review
-            </p>
-            <p className="text-xs text-amber-700 mt-0.5">
-              {pendingClaims[0].created_by_name} and others want to know what you owe
-            </p>
+          <div
+            className="relative overflow-hidden rounded-2xl p-4"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              boxShadow: '0 4px 16px rgba(245,158,11,0.35)',
+            }}
+          >
+            {/* Decorative ring */}
+            <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full opacity-20"
+              style={{ backgroundColor: 'white' }} />
+            <div className="absolute -right-2 -bottom-8 w-20 h-20 rounded-full opacity-10"
+              style={{ backgroundColor: 'white' }} />
+
+            <div className="relative flex items-center gap-4">
+              {/* Badge count */}
+              <div className="flex-shrink-0 w-12 h-12 rounded-2xl bg-white/25 flex items-center justify-center">
+                <span className="font-display text-2xl font-bold text-white leading-none">
+                  {pendingClaims.length}
+                </span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="font-display font-bold text-white text-base leading-tight">
+                  {pendingClaims.length === 1 ? 'Expense claim needs your response' : `${pendingClaims.length} expense claims need your response`}
+                </p>
+                <p className="text-xs text-white/80 mt-0.5 font-body">
+                  Tap to accept, split, or decline each one
+                </p>
+              </div>
+
+              <div className="flex-shrink-0 flex flex-col items-center gap-1">
+                <span className="text-white font-bold text-sm">Review</span>
+                <span className="text-white/80 text-lg leading-none">→</span>
+              </div>
+            </div>
           </div>
-          <span className="text-sm font-semibold text-amber-800 flex-shrink-0">Review →</span>
         </Link>
       )}
 

@@ -48,6 +48,7 @@ function SwipeQueue() {
   const { currentTrip, activeTraveller } = useTrip();
 
   // ---- data ----------------------------------------------------------------
+  // allClaims — full list, reliable source of truth for ordering + badge
   const { data: allClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
     queryKey: ['claims', currentTrip?.id],
     queryFn: () => expenseClaimsApi.list(currentTrip!.id),
@@ -56,14 +57,27 @@ function SwipeQueue() {
     staleTime: 0,
   });
 
+  // unansweredClaims — server filters out claims this traveller already responded to
+  const { data: unansweredClaims = [] } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
+    refetchInterval: 15_000,
+    staleTime: 0,
+  });
+  const unansweredIds = new Set(unansweredClaims.map((c) => c.id));
+
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
     queryFn: () => travellersApi.list(currentTrip!.id),
     enabled: !!currentTrip,
   });
 
-  // open claims this traveller hasn't responded to yet (everyone can review, including the creator)
-  const pendingClaims = allClaims.filter((c) => c.status === 'open');
+  // Open claims this traveller hasn't responded to yet — use allClaims for stable ordering,
+  // unansweredIds (server-side) to exclude already-answered ones
+  const pendingClaims = allClaims.filter(
+    (c) => c.status === 'open' && unansweredIds.has(c.id)
+  );
 
   // ---- state ---------------------------------------------------------------
   const [currentIndex, setCurrentIndex] = useState(0);
