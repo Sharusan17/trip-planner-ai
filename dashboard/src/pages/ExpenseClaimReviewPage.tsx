@@ -48,10 +48,13 @@ function SwipeQueue() {
   const { currentTrip, activeTraveller } = useTrip();
 
   // ---- data ----------------------------------------------------------------
-  const { data: allClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
-    queryKey: ['claims', currentTrip?.id],
-    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
-    enabled: !!currentTrip,
+  // Use listPending — the same source of truth as Dashboard/Sidebar/AppShell.
+  // This means invalidating ['claims', 'pending'] after a response immediately
+  // clears all notification badges everywhere.
+  const { data: pendingClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
+    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
+    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
+    enabled: !!currentTrip && !!activeTraveller,
     refetchInterval: 15_000,
     staleTime: 0,
   });
@@ -61,29 +64,6 @@ function SwipeQueue() {
     queryFn: () => travellersApi.list(currentTrip!.id),
     enabled: !!currentTrip,
   });
-
-  // ---- state ---------------------------------------------------------------
-
-  // Persist responded claim IDs in localStorage per traveller so that after
-  // responding the claim doesn't reappear on refresh or re-navigation.
-  const lsKey = `responded-claims-${activeTraveller?.id ?? 'anon'}`;
-  const [respondedIds, setRespondedIds] = useState<Set<string>>(
-    () => new Set(JSON.parse(localStorage.getItem(lsKey) ?? '[]') as string[])
-  );
-
-  function markResponded(claimId: string) {
-    setRespondedIds(prev => {
-      const next = new Set(prev);
-      next.add(claimId);
-      localStorage.setItem(lsKey, JSON.stringify([...next]));
-      return next;
-    });
-  }
-
-  // Open claims this traveller hasn't responded to yet
-  const pendingClaims = allClaims.filter(
-    (c) => c.status === 'open' && !respondedIds.has(c.id)
-  );
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
@@ -102,6 +82,10 @@ function SwipeQueue() {
     mutationFn: ({ claimId, data }: { claimId: string; data: RespondToClaimInput }) =>
       expenseClaimsApi.respond(claimId, data),
     onSuccess: () => {
+      // Invalidate the pending key first — this immediately clears the badge
+      // in Sidebar, AppShell banner, and Dashboard alert card.
+      qc.invalidateQueries({ queryKey: ['claims', 'pending'] });
+      // Also refresh the full claims list for the organiser detail view.
       qc.invalidateQueries({ queryKey: ['claims'] });
     },
   });
@@ -139,8 +123,9 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
-      markResponded(claim.id);
-      setCurrentIndex(i => i + 1);
+      // Reset to index 0 — after the pending query refetches, the responded
+      // claim is gone from the list so index 0 is always the next unresponded one.
+      setCurrentIndex(0);
       setDragX(0);
       setFlyDir(null);
     }, 380);
@@ -165,8 +150,7 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
-      markResponded(claim.id);
-      setCurrentIndex(i => i + 1);
+      setCurrentIndex(0);
       setDragX(0);
       setFlyDir(null);
       setPartialAmount('');
@@ -179,8 +163,8 @@ function SwipeQueue() {
   // ---- derived -------------------------------------------------------------
   const claim = pendingClaims[currentIndex];
   const totalCards = pendingClaims.length;
-  const anyFetching = claimsLoading || claimsFetching;
-  const done = !anyFetching && currentIndex >= totalCards;
+  // Done when not loading and the server confirms zero pending claims remain.
+  const done = !claimsLoading && !claimsFetching && pendingClaims.length === 0;
   const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
   const cardStyle: React.CSSProperties = {
@@ -215,7 +199,7 @@ function SwipeQueue() {
         </div>
       </div>
 
-      {anyFetching && totalCards === 0 ? (
+      {claimsLoading ? (
         /* ---- Loading ---------------------------------------------------- */
         <div className="flex flex-col items-center justify-center py-24 px-4 gap-3">
           <div className="w-10 h-10 border-4 rounded-full animate-spin"
