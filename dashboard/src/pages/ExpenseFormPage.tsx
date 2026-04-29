@@ -66,6 +66,7 @@ export default function ExpenseFormPage() {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
+  const [splitError, setSplitError] = useState<string>('');
 
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
@@ -283,12 +284,19 @@ export default function ExpenseFormPage() {
       return;
     }
 
+    // Equal split — must have at least one person selected
+    if (form.traveller_ids.length === 0) {
+      setSplitError('Please select at least one person to split this expense with.');
+      return;
+    }
+    setSplitError('');
+
     const data: CreateExpenseInput = {
       description: form.description, amount: parseFloat(form.amount),
       currency: form.currency, category: form.category,
       expense_date: form.expense_date, paid_by: form.paid_by,
       split_mode: form.split_mode,
-      traveller_ids: form.traveller_ids.length > 0 ? form.traveller_ids : travellers.map((t) => t.id),
+      traveller_ids: form.traveller_ids,
       notes: form.notes || undefined,
     };
     if (isEdit && id) updateMutation.mutate({ id, data });
@@ -609,9 +617,21 @@ export default function ExpenseFormPage() {
           </div>
         ) : (
           <div>
-            <label className="block text-xs font-semibold text-ink-faint mb-2 uppercase tracking-wider">
-              Split Between {form.traveller_ids.length === 0 ? '(all)' : `(${form.traveller_ids.length})`}
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold text-ink-faint uppercase tracking-wider">
+                Split Between {form.traveller_ids.length === 0 ? '(none selected)' : `(${form.traveller_ids.length})`}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setForm((f) => ({ ...f, traveller_ids: travellers.map((t) => t.id) }));
+                  setSplitError('');
+                }}
+                className="text-xs font-semibold text-navy hover:text-navy-dark bg-navy/10 hover:bg-navy/20 px-2.5 py-1 rounded-full transition-colors"
+              >
+                Everyone
+              </button>
+            </div>
             <div className="space-y-3">
               {/* Family groups */}
               {families.map((fam) => {
@@ -629,6 +649,7 @@ export default function ExpenseFormPage() {
                         type="button"
                         onClick={() => {
                           const memberIds = members.map((t) => t.id);
+                          setSplitError('');
                           setForm((f) => {
                             if (allSelected) {
                               return { ...f, traveller_ids: f.traveller_ids.filter((x) => !memberIds.includes(x)) };
@@ -653,12 +674,12 @@ export default function ExpenseFormPage() {
                             type="checkbox"
                             className="accent-navy"
                             checked={form.traveller_ids.includes(t.id)}
-                            onChange={() => setForm((f) => ({
+                            onChange={() => { setSplitError(''); setForm((f) => ({
                               ...f,
                               traveller_ids: f.traveller_ids.includes(t.id)
                                 ? f.traveller_ids.filter((x) => x !== t.id)
                                 : [...f.traveller_ids, t.id],
-                            }))}
+                            })); }}
                           />
                           <span
                             className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0"
@@ -698,12 +719,12 @@ export default function ExpenseFormPage() {
                             type="checkbox"
                             className="accent-navy"
                             checked={form.traveller_ids.includes(t.id)}
-                            onChange={() => setForm((f) => ({
+                            onChange={() => { setSplitError(''); setForm((f) => ({
                               ...f,
                               traveller_ids: f.traveller_ids.includes(t.id)
                                 ? f.traveller_ids.filter((x) => x !== t.id)
                                 : [...f.traveller_ids, t.id],
-                            }))}
+                            })); }}
                           />
                           <span
                             className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0"
@@ -720,6 +741,11 @@ export default function ExpenseFormPage() {
                 );
               })()}
             </div>
+            {splitError && (
+              <p className="mt-2 text-xs text-terracotta font-medium flex items-center gap-1">
+                ⚠ {splitError}
+              </p>
+            )}
           </div>
         )}
 
