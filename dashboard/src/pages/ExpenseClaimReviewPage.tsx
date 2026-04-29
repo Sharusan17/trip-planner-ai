@@ -48,13 +48,14 @@ function SwipeQueue() {
   const { currentTrip, activeTraveller } = useTrip();
 
   // ---- data ----------------------------------------------------------------
-  // Use listPending — the same source of truth as Dashboard/Sidebar/AppShell.
-  // This means invalidating ['claims', 'pending'] after a response immediately
-  // clears all notification badges everywhere.
-  const { data: pendingClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
-    queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
-    queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
-    enabled: !!currentTrip && !!activeTraveller,
+  // Use allClaims (not listPending) so the queue shows every open claim
+  // regardless of whether the user responded in a past session. Past responses
+  // are stored server-side and will be overwritten (upserted) if they swipe again.
+  // listPending is still used by Dashboard/Sidebar/AppShell for badge counts.
+  const { data: allClaims = [], isLoading: claimsLoading, isFetching: claimsFetching } = useQuery({
+    queryKey: ['claims', currentTrip?.id],
+    queryFn: () => expenseClaimsApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
     refetchInterval: 15_000,
     staleTime: 0,
   });
@@ -64,6 +65,16 @@ function SwipeQueue() {
     queryFn: () => travellersApi.list(currentTrip!.id),
     enabled: !!currentTrip,
   });
+
+  // Track which claims were swiped in THIS session only (resets on unmount/remount).
+  // This is intentionally NOT persisted — a new session means a fresh queue so users
+  // can always re-respond or change their mind.
+  const [swipedInSession, setSwipedInSession] = useState<Set<string>>(new Set());
+
+  // Open claims this user hasn't swiped yet in this session
+  const pendingClaims = allClaims.filter(
+    (c) => c.status === 'open' && !swipedInSession.has(c.id)
+  );
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
@@ -123,8 +134,9 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
-      // Reset to index 0 — after the pending query refetches, the responded
-      // claim is gone from the list so index 0 is always the next unresponded one.
+      // Mark as swiped in this session — the filter removes it from pendingClaims
+      // so the next card (at index 0 of the remaining list) appears automatically.
+      setSwipedInSession(prev => new Set([...prev, claim.id]));
       setCurrentIndex(0);
       setDragX(0);
       setFlyDir(null);
@@ -150,6 +162,7 @@ function SwipeQueue() {
       });
     } catch { /* ignore */ }
     setTimeout(() => {
+      setSwipedInSession(prev => new Set([...prev, claim.id]));
       setCurrentIndex(0);
       setDragX(0);
       setFlyDir(null);
@@ -163,7 +176,9 @@ function SwipeQueue() {
   // ---- derived -------------------------------------------------------------
   const claim = pendingClaims[currentIndex];
   const totalCards = pendingClaims.length;
-  // Done when not loading and the server confirms zero pending claims remain.
+  const openClaimsExist = allClaims.some((c) => c.status === 'open');
+  // Done = loaded AND no pending cards left to show.
+  // We only show "done" after data has actually loaded (not while disabled/loading).
   const done = !claimsLoading && !claimsFetching && pendingClaims.length === 0;
   const tintOpacity = Math.min(Math.abs(dragX) / 150, 0.45);
 
@@ -199,7 +214,7 @@ function SwipeQueue() {
         </div>
       </div>
 
-      {claimsLoading ? (
+      {(claimsLoading || claimsFetching && allClaims.length === 0) ? (
         /* ---- Loading ---------------------------------------------------- */
         <div className="flex flex-col items-center justify-center py-24 px-4 gap-3">
           <div className="w-10 h-10 border-4 rounded-full animate-spin"
@@ -209,12 +224,14 @@ function SwipeQueue() {
       ) : done ? (
         /* ---- Done ------------------------------------------------------- */
         <div className="vintage-card text-center py-16 mx-4 mt-4">
-          <p className="text-5xl mb-4">🎉</p>
+          <p className="text-5xl mb-4">{openClaimsExist ? '✅' : '🎉'}</p>
           <h2 className="font-display text-2xl font-bold" style={{ color: 'var(--color-navy)' }}>
-            You're all done!
+            {openClaimsExist ? 'All responded!' : 'You\'re all done!'}
           </h2>
           <p className="mt-2" style={{ color: 'var(--color-ink-faint)' }}>
-            No more claims to review.
+            {openClaimsExist
+              ? 'Your responses have been recorded. The organiser will review them.'
+              : 'No open claims to review right now.'}
           </p>
           <button className="btn-secondary mt-6" onClick={() => navigate('/expenses')}>
             Back to Finance
