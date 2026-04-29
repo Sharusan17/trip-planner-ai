@@ -42,7 +42,7 @@ export default function Sidebar() {
     queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
     queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
     enabled: !!currentTrip && !!activeTraveller,
-    refetchInterval: 30_000,
+    refetchInterval: 20_000,
     staleTime: 0,
   });
   const claimBadge = _sidebarPendingClaims.length;
