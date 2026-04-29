@@ -18,10 +18,11 @@ function PendingClaimsBanner() {
     staleTime: 0,
   });
 
-  // Hide banner when already on the review page or dashboard (dashboard has its own alert)
+  // Hide banner on pages that already show their own claim alerts
   const onReviewPage = location.pathname.startsWith('/expenses/claims');
   const onDashboard = location.pathname === '/dashboard' || location.pathname === '/';
-  if (pendingClaims.length === 0 || onReviewPage || onDashboard) return null;
+  const onExpenses = location.pathname === '/expenses';
+  if (pendingClaims.length === 0 || onReviewPage || onDashboard || onExpenses) return null;
 
   return (
     <button

@@ -188,6 +188,7 @@ export default function ExpensesPage() {
     queryFn: () => expenseClaimsApi.listPending(currentTrip!.id, activeTraveller!.id),
     enabled: !!currentTrip && !!activeTraveller,
     refetchInterval: 15_000,
+    staleTime: 0,
   });
   const pendingClaimCount = pendingClaims.length;
   const { data: deposits = [], isLoading: depLoading } = useQuery({
@@ -900,27 +901,20 @@ export default function ExpensesPage() {
       {/* ══ TAB: CLAIMS ═══════════════════════════════════════════════════════ */}
       {tab === 'claims' && (
         <div className="space-y-4">
-          {/* Non-organiser CTA — derived from allClaims so it shows even before
-               pendingClaims has loaded. pendingClaimCount is still used for badge. */}
-          {!isOrganiser && (() => {
-            const openForMe = (allClaims as ExpenseClaim[]).filter(
-              (c) => c.status === 'open'
-            );
-            if (openForMe.length === 0) return null;
-            return (
-              <div className="vintage-card p-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-ink">
-                    {openForMe.length} expense claim{openForMe.length !== 1 ? 's' : ''} need{openForMe.length === 1 ? 's' : ''} your response
-                  </p>
-                  <p className="text-xs text-ink-faint mt-0.5">Swipe to accept, split, or decline</p>
-                </div>
-                <button className="btn-primary shrink-0" onClick={() => navigate('/expenses/claims')}>
-                  Review Now
-                </button>
+          {/* CTA for anyone (including organiser) who still has claims to respond to */}
+          {pendingClaimCount > 0 && (
+            <div className="vintage-card p-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-ink">
+                  {pendingClaimCount} expense claim{pendingClaimCount !== 1 ? 's' : ''} need{pendingClaimCount === 1 ? 's' : ''} your response
+                </p>
+                <p className="text-xs text-ink-faint mt-0.5">Swipe to accept, split, or decline</p>
               </div>
-            );
-          })()}
+              <button className="btn-primary shrink-0" onClick={() => navigate('/expenses/claims')}>
+                Review Now
+              </button>
+            </div>
+          )}
 
           {/* Claims list */}
           {allClaims.length === 0 ? (
@@ -943,7 +937,8 @@ export default function ExpensesPage() {
               {(allClaims as ExpenseClaim[]).map((claim) => {
                 // A non-organiser can go to the swipe queue for any open claim
                 // they didn't create — regardless of whether pendingClaims has
-                // loaded yet. The swipe queue itself handles "already responded".
+                // Whether this specific claim is still pending a response from the current user
+                const needsMyResponse = pendingClaims.some((p) => p.id === claim.id);
                 const canReview = claim.status === 'open';
                 const isClickable = isOrganiser || canReview;
                 return (
@@ -1009,8 +1004,8 @@ export default function ExpensesPage() {
                         )}
                       </div>
                     </div>
-                    {/* Review CTA for non-organiser — shown for any reviewable open claim */}
-                    {!isOrganiser && canReview && (
+                    {/* Review CTA — shown for anyone who hasn't responded to this claim yet */}
+                    {needsMyResponse && (
                       <div className="mt-3 pt-3 border-t border-parchment-dark flex items-center justify-between">
                         <p className="text-xs text-amber-700 font-medium">Tap to say what you owe</p>
                         <button
