@@ -311,6 +311,20 @@ export default function ExpenseFormPage() {
   const customValid = customTarget > 0 && Math.abs(customDiff) < 0.01;
   const customOver = customDiff > 0.01;
 
+  // Equal split — per-person share amounts (shown instead of weight)
+  const equalTotal = parseFloat(form.amount) || 0;
+  const equalWeightSum = travellers
+    .filter((t) => form.traveller_ids.includes(t.id))
+    .reduce((s, t) => s + t.cost_split_weight, 0);
+  const equalShareMap: Record<string, string> = {};
+  if (equalTotal > 0 && equalWeightSum > 0) {
+    for (const t of travellers) {
+      if (form.traveller_ids.includes(t.id)) {
+        equalShareMap[t.id] = fmt((t.cost_split_weight / equalWeightSum) * equalTotal, form.currency);
+      }
+    }
+  }
+
   if (!currentTrip) return null;
 
   return (
@@ -691,7 +705,10 @@ export default function ExpenseFormPage() {
                           {t.id === fam.lead_traveller_id && (
                             <Crown size={11} className="text-amber-500 flex-shrink-0" strokeWidth={2} />
                           )}
-                          <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
+                          {equalShareMap[t.id]
+                            ? <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
+                            : <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
+                          }
                         </label>
                       ))}
                     </div>
@@ -733,7 +750,10 @@ export default function ExpenseFormPage() {
                             {t.name.charAt(0).toUpperCase()}
                           </span>
                           <span className="text-sm text-ink flex-1">{t.name}</span>
-                          <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
+                          {equalShareMap[t.id]
+                            ? <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
+                            : <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
+                          }
                         </label>
                       ))}
                     </div>
