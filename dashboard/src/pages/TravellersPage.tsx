@@ -104,7 +104,6 @@ export default function TravellersPage() {
               {t.role === 'organiser' && (
                 <span className="badge badge-gold capitalize text-[10px]">{t.role}</span>
               )}
-              <span className="text-[10px] text-ink-faint">{t.cost_split_weight}×</span>
             </div>
           </div>
         </div>
