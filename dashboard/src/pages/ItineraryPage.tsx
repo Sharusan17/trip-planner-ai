@@ -123,7 +123,7 @@ export default function ItineraryPage() {
       ) : (
         <>
           {/* Day tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5 hide-scrollbar">
             {sortedDays.map((day, idx) => {
               const isActive = day.id === (selectedDayId ?? sortedDays[0]?.id);
               return (
