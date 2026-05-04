@@ -105,9 +105,9 @@ export default function PhotoAlbumPage() {
       </div>
 
       {isLoading ? (
-        <div className="vintage-card p-8 text-center text-ink-faint text-sm">Loading…</div>
+        <div className="vintage-card p-5 sm:p-8 text-center text-ink-faint text-sm">Loading…</div>
       ) : photos.length === 0 ? (
-        <div className="vintage-card p-12 text-center">
+        <div className="vintage-card p-6 sm:p-12 text-center">
           <Image size={36} className="text-ink-faint mx-auto mb-3" strokeWidth={1.5} />
           <h3 className="font-display text-lg font-semibold text-navy mb-1">No photos yet</h3>
           <p className="text-sm text-ink-faint mb-4">Be the first to add a trip photo</p>
@@ -200,7 +200,7 @@ export default function PhotoAlbumPage() {
             {allPhotos.length > 1 && (
               <button
                 onClick={() => lightboxNav(-1)}
-                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-12 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-lg leading-none"
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors text-lg leading-none"
               >‹</button>
             )}
 
@@ -214,7 +214,7 @@ export default function PhotoAlbumPage() {
             {allPhotos.length > 1 && (
               <button
                 onClick={() => lightboxNav(1)}
-                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-12 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-lg leading-none"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors text-lg leading-none"
               >›</button>
             )}
 

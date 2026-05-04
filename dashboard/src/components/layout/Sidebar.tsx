@@ -166,43 +166,138 @@ export default function Sidebar() {
   return (
     <>
       {/* ── Desktop sidebar ───────────────────────────────────── */}
-      <aside className="hidden md:flex flex-col w-60 min-h-screen bg-[var(--color-sidebar)] border-r border-[var(--color-sidebar-border)] flex-shrink-0">
+      <aside className="hidden md:flex flex-col w-60 bg-[var(--color-sidebar)] border-r border-[var(--color-sidebar-border)] flex-shrink-0">
         {navContent()}
       </aside>
 
-      {/* ── Mobile: hamburger button ──────────────────────────── */}
+      {/* ── Mobile: hamburger button (hidden when overlay open) ── */}
       <button
         onClick={() => setDrawerOpen(true)}
         aria-label="Open menu"
-        className="md:hidden fixed top-4 left-4 z-40 w-10 h-10 rounded-xl bg-[#1C1917] text-white flex items-center justify-center shadow-lg"
+        className={`md:hidden fixed top-4 left-4 z-40 w-10 h-10 rounded-xl bg-[#1C1917] text-white flex items-center justify-center shadow-lg transition-opacity duration-200 ${
+          drawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
       >
         <Menu size={20} strokeWidth={2} />
       </button>
 
-      {/* ── Mobile: backdrop ─────────────────────────────────── */}
-      {drawerOpen && (
-        <div
-          className="md:hidden fixed inset-0 z-40 bg-[#1C1917]/40 backdrop-blur-sm"
-          onClick={() => setDrawerOpen(false)}
-        />
-      )}
-
-      {/* ── Mobile: slide-in drawer ───────────────────────────── */}
+      {/* ── Mobile: full-screen overlay (Apple.com style) ────────── */}
       <aside
-        className={`md:hidden fixed top-0 left-0 h-full w-64 z-50 bg-[var(--color-sidebar)] flex flex-col transition-transform duration-300 ease-out shadow-2xl border-r border-[var(--color-sidebar-border)] ${
-          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`md:hidden fixed inset-0 z-50 flex flex-col bg-[var(--color-sidebar)] transition-opacity duration-300 ease-out ${
+          drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
-        {/* Close button */}
-        <button
-          onClick={() => setDrawerOpen(false)}
-          aria-label="Close menu"
-          className="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center text-ink-faint hover:text-ink hover:bg-parchment transition-colors"
-        >
-          <X size={18} strokeWidth={2} />
-        </button>
+        {/* Header row: logo + close button */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[var(--color-sidebar-border)]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#1C1917] flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Plane size={16} className="text-white" strokeWidth={1.75} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-display text-sm font-bold text-ink leading-tight tracking-tight">
+                Trip Planner
+              </h1>
+              {currentTrip && (
+                <p className="text-xs text-ink-faint mt-0.5 truncate">{currentTrip.destination}</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Close menu"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-ink-faint hover:text-ink hover:bg-parchment transition-colors"
+          >
+            <X size={22} strokeWidth={2} />
+          </button>
+        </div>
 
-        {navContent(() => setDrawerOpen(false))}
+        {/* Nav items — larger touch targets */}
+        <nav className="flex-1 px-4 py-5 space-y-1 overflow-y-auto">
+          {navItems.map(({ to, label, Icon }) => {
+            const resolvedTo = to === '/expenses' && claimBadge > 0 ? '/expenses?tab=claims' : to;
+            return (
+              <NavLink
+                key={to}
+                to={resolvedTo}
+                onClick={() => setDrawerOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-4 px-4 py-3.5 rounded-xl font-body font-medium transition-all duration-150 ${
+                    isActive
+                      ? 'bg-[#1C1917] text-white shadow-sm'
+                      : 'text-ink hover:bg-parchment'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon size={20} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" />
+                    <span className="flex-1 text-base">{label}</span>
+                    {to === '/expenses' && claimBadge > 0 && (
+                      <span className="ml-auto w-5 h-5 rounded-full bg-terracotta text-white text-[10px]
+                                        font-bold flex items-center justify-center shrink-0 leading-none">
+                        {claimBadge > 9 ? '9+' : claimBadge}
+                      </span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
+
+          {isOrganiser && (
+            <NavLink
+              to="/settings"
+              onClick={() => setDrawerOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-4 px-4 py-3.5 rounded-xl font-body font-medium transition-all duration-150 ${
+                  isActive
+                    ? 'bg-[#1C1917] text-white shadow-sm'
+                    : 'text-ink hover:bg-parchment'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Settings size={20} strokeWidth={isActive ? 2 : 1.75} className="flex-shrink-0" />
+                  <span className="text-base">Settings</span>
+                </>
+              )}
+            </NavLink>
+          )}
+        </nav>
+
+        {/* Bottom: profile + leave trip */}
+        <div className="px-4 py-4 border-t border-[var(--color-sidebar-border)] space-y-1">
+          {activeTraveller && (
+            <button
+              onClick={() => { navigate('/profile'); setDrawerOpen(false); }}
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-faint hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
+            >
+              {activeTraveller.has_photo ? (
+                <img
+                  src={travellersApi.getPhotoUrl(activeTraveller.id)}
+                  alt={activeTraveller.name}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                  style={{ backgroundColor: activeTraveller.avatar_colour }}
+                >
+                  {activeTraveller.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="truncate text-base">{activeTraveller.name}</span>
+            </button>
+          )}
+          <button
+            onClick={() => { clearSession(); setDrawerOpen(false); }}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-faint hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"
+          >
+            <LogOut size={20} strokeWidth={1.75} />
+            <span className="text-base">Leave Trip</span>
+          </button>
+        </div>
       </aside>
     </>
   );

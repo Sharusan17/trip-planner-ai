@@ -300,7 +300,7 @@ export default function TravellersPage() {
 
       {/* Empty state */}
       {travellers.length === 0 && (
-        <div className="vintage-card p-12 text-center">
+        <div className="vintage-card p-6 sm:p-12 text-center">
           <div className="text-4xl mb-3">👥</div>
           <h3 className="font-display text-lg font-semibold text-navy mb-1">No travellers yet</h3>
           <p className="text-sm text-ink-faint">Add your group members to get started</p>

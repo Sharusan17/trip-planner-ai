@@ -153,9 +153,9 @@ export default function PollsPage() {
 
       {/* Polls list */}
       {isLoading ? (
-        <div className="vintage-card p-8 text-center text-ink-faint text-sm">Loading…</div>
+        <div className="vintage-card p-5 sm:p-8 text-center text-ink-faint text-sm">Loading…</div>
       ) : polls.length === 0 ? (
-        <div className="vintage-card p-12 text-center">
+        <div className="vintage-card p-6 sm:p-12 text-center">
           <BarChart2 size={36} className="text-ink-faint mx-auto mb-3" strokeWidth={1.5} />
           <h3 className="font-display text-lg font-semibold text-navy mb-1">No polls yet</h3>
           <p className="text-sm text-ink-faint">Create a poll to get everyone's opinion on trip decisions.</p>

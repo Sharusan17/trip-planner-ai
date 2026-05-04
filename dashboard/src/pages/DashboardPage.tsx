@@ -250,13 +250,13 @@ export default function DashboardPage() {
           <Link to="/itinerary" className="text-xs text-navy hover:underline font-body">View all →</Link>
         </div>
         {!planDay ? (
-          <div className="p-8 text-center">
+          <div className="p-5 sm:p-8 text-center">
             <CalendarDays size={28} className="text-ink-faint mx-auto mb-2" strokeWidth={1.5} />
             <p className="text-sm text-ink-faint">No activities planned yet.</p>
             <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Build itinerary →</Link>
           </div>
         ) : planDay.activities.length === 0 ? (
-          <div className="p-8 text-center">
+          <div className="p-5 sm:p-8 text-center">
             <p className="text-sm text-ink-faint">Nothing scheduled for this day yet.</p>
             <Link to="/itinerary" className="text-xs text-navy hover:underline mt-1 inline-block">Add activities →</Link>
           </div>
