@@ -238,7 +238,7 @@ export default function MapPage() {
       </div>
 
       {/* Map */}
-      <div className="rounded-2xl overflow-hidden border border-parchment-dark" style={{ height: '52vh', boxShadow: 'var(--shadow-card)' }}>
+      <div className="map-viewport rounded-2xl overflow-hidden border border-parchment-dark shadow-[var(--shadow-card)]">
         <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -319,7 +319,7 @@ export default function MapPage() {
           </div>
         </div>
       ) : (
-        <div className="vintage-card p-8 text-center">
+        <div className="vintage-card p-5 sm:p-8 text-center">
           <MapPin size={32} className="text-ink-faint mx-auto mb-3" strokeWidth={1.5} />
           <p className="text-sm font-medium text-ink-light">No mapped stops</p>
           <p className="text-xs text-ink-faint mt-1">

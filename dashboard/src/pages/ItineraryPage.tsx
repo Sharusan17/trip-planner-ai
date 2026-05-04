@@ -113,7 +113,7 @@ export default function ItineraryPage() {
       </div>
 
       {isLoading || days.length === 0 ? (
-        <div className="vintage-card p-12 text-center">
+        <div className="vintage-card p-6 sm:p-12 text-center">
           <CalendarDays size={36} className="text-ink-faint mx-auto mb-3" strokeWidth={1.5} />
           <h3 className="font-display text-lg font-semibold text-navy mb-1">
             {isLoading ? 'Loading itinerary…' : 'Preparing your itinerary…'}

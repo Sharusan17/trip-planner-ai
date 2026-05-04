@@ -211,12 +211,13 @@ h1, h2, h3, h4, h5, h6 {
   background: #FFFFFF;
   border: 1px solid var(--color-parchment-dark);
   border-radius: 10px;
-  padding: 0.5rem 0.75rem;
+  padding: 0.625rem 0.875rem;
   font-family: var(--font-body);
   color: var(--color-ink);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   width: 100%;
-  font-size: 0.875rem;
+  font-size: 1rem;
+  min-height: 44px;
 }
 
 .vintage-input:focus {
@@ -316,4 +317,14 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 9999px;
   background: linear-gradient(90deg, var(--color-charcoal), #4A4540);
   transition: width 0.3s ease;
+}
+
+/* ─── Map ───────────────────────────────────────────────── */
+.map-viewport {
+  height: 38vh;
+}
+@media (min-width: 768px) {
+  .map-viewport {
+    height: 52vh;
+  }
 }

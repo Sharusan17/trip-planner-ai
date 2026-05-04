@@ -47,11 +47,13 @@ function PendingClaimsBanner() {
 
 export default function AppShell() {
   return (
-    <div className="flex min-h-screen bg-parchment">
+    <div className="flex h-[100dvh] overflow-hidden bg-parchment">
       <Sidebar />
       <main className="flex-1 flex flex-col pt-16 md:pt-0 overflow-auto min-w-0 max-w-full">
-        <TripHeader />
-        <PendingClaimsBanner />
+        <div className="sticky top-0 z-10 bg-parchment">
+          <TripHeader />
+          <PendingClaimsBanner />
+        </div>
         <div className="flex-1 p-4 md:p-6">
           <Outlet />
         </div>
