@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useTrip } from '@/context/TripContext';
 import { travellersApi } from '@/api/travellers';
@@ -13,7 +12,6 @@ import {
   Package,
   MessageSquare,
   LogOut,
-  Menu,
   X,
   Plane,
   Settings,
@@ -36,7 +34,7 @@ const navItems: NavItem[] = [
   { to: '/community',  label: 'Community',  Icon: MessageSquare   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { currentTrip, activeTraveller, isOrganiser, clearSession } = useTrip();
   const { data: _sidebarPendingClaims = [] } = useQuery({
     queryKey: ['claims', 'pending', currentTrip?.id, activeTraveller?.id],
@@ -46,7 +44,6 @@ export default function Sidebar() {
     staleTime: 0,
   });
   const claimBadge = _sidebarPendingClaims.length;
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
 
   const navContent = (onNav?: () => void) => (
@@ -170,21 +167,10 @@ export default function Sidebar() {
         {navContent()}
       </aside>
 
-      {/* ── Mobile: hamburger button (hidden when overlay open) ── */}
-      <button
-        onClick={() => setDrawerOpen(true)}
-        aria-label="Open menu"
-        className={`md:hidden fixed top-4 left-4 z-40 w-10 h-10 rounded-xl bg-[#1C1917] text-white flex items-center justify-center shadow-lg transition-opacity duration-200 ${
-          drawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        }`}
-      >
-        <Menu size={20} strokeWidth={2} />
-      </button>
-
       {/* ── Mobile: full-screen overlay (Apple.com style) ────────── */}
       <aside
         className={`md:hidden fixed inset-0 z-50 flex flex-col bg-[var(--color-sidebar)] transition-opacity duration-300 ease-out ${
-          drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
         {/* Header row: logo + close button */}
@@ -203,7 +189,7 @@ export default function Sidebar() {
             </div>
           </div>
           <button
-            onClick={() => setDrawerOpen(false)}
+            onClick={() => onClose()}
             aria-label="Close menu"
             className="w-10 h-10 rounded-xl flex items-center justify-center text-ink-faint hover:text-ink hover:bg-parchment transition-colors"
           >
@@ -219,7 +205,7 @@ export default function Sidebar() {
               <NavLink
                 key={to}
                 to={resolvedTo}
-                onClick={() => setDrawerOpen(false)}
+                onClick={() => onClose()}
                 className={({ isActive }) =>
                   `flex items-center gap-4 px-4 py-3.5 rounded-xl font-body font-medium transition-all duration-150 ${
                     isActive
@@ -247,7 +233,7 @@ export default function Sidebar() {
           {isOrganiser && (
             <NavLink
               to="/settings"
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => onClose()}
               className={({ isActive }) =>
                 `flex items-center gap-4 px-4 py-3.5 rounded-xl font-body font-medium transition-all duration-150 ${
                   isActive
@@ -270,7 +256,7 @@ export default function Sidebar() {
         <div className="px-4 py-4 border-t border-[var(--color-sidebar-border)] space-y-1">
           {activeTraveller && (
             <button
-              onClick={() => { navigate('/profile'); setDrawerOpen(false); }}
+              onClick={() => { navigate('/profile'); onClose(); }}
               className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-faint hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
             >
               {activeTraveller.has_photo ? (
@@ -291,7 +277,7 @@ export default function Sidebar() {
             </button>
           )}
           <button
-            onClick={() => { clearSession(); setDrawerOpen(false); }}
+            onClick={() => { clearSession(); onClose(); }}
             className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-faint hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"
           >
             <LogOut size={20} strokeWidth={1.75} />

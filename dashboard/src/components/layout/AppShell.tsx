@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
@@ -46,15 +47,17 @@ function PendingClaimsBanner() {
 }
 
 export default function AppShell() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-parchment">
-      <Sidebar />
-      <main className="flex-1 flex flex-col pt-16 md:pt-0 overflow-auto min-w-0 max-w-full">
-        <div className="sticky top-0 z-10 bg-parchment">
-          <TripHeader />
+      <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      <main className="flex-1 flex flex-col overflow-auto min-w-0 max-w-full">
+        <div className="sticky top-0 z-10 bg-parchment px-4 pt-4 md:px-6 md:pt-6">
+          <TripHeader onMenuOpen={() => setMobileNavOpen(true)} />
           <PendingClaimsBanner />
         </div>
-        <div className="flex-1 p-4 md:p-6">
+        <div className="flex-1 p-4 md:p-6 pt-0 md:pt-0">
           <Outlet />
         </div>
       </main>
