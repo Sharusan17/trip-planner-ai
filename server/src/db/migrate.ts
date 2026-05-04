@@ -454,6 +454,21 @@ const migrations = [
   // 023: line_item_indices on claim responses
   `ALTER TABLE expense_claim_responses
      ADD COLUMN IF NOT EXISTS line_item_indices JSONB DEFAULT '[]';`,
+
+  // 024: transfers table (peer-to-peer cash movements that offset settlement balances)
+  `CREATE TABLE IF NOT EXISTS transfers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    from_traveller UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    to_traveller UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    amount_home DECIMAL(12,2),
+    note TEXT,
+    transfer_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_transfers_trip ON transfers(trip_id, transfer_date DESC);`,
 ];
 
 export async function runMigrations() {

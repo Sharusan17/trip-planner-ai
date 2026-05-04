@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
+import { getRate } from '../services/currencyService';
 
 const router = Router();
 
@@ -55,6 +56,8 @@ router.get('/trips/:tripId/settlements', async (req: Request, res: Response) => 
 });
 
 // POST /trips/:tripId/settlements/calculate
+// Computes net balances from expenses + transfers, then produces minimal settlement set.
+// Transfers offset balances: payer's net increases, receiver's net decreases.
 router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
@@ -64,7 +67,7 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
     if (tripResult.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
     const homeCurrency: string = tripResult.rows[0].home_currency;
 
-    // Build net balances: credits (paid_by) minus debits (splits)
+    // Build net balances from expenses
     const creditsResult = await client.query(
       `SELECT paid_by AS traveller_id, COALESCE(SUM(amount_home), 0) AS total
        FROM expenses WHERE trip_id = $1 AND amount_home IS NOT NULL
@@ -86,6 +89,18 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
     }
     for (const row of debitsResult.rows) {
       netMap[row.traveller_id] = (netMap[row.traveller_id] ?? 0) - parseFloat(row.total);
+    }
+
+    // Adjust for transfers: payer (from_traveller) gains credit, receiver (to_traveller) loses credit
+    const transfersResult = await client.query(
+      `SELECT from_traveller, to_traveller, COALESCE(amount_home, amount) AS effective_amount
+       FROM transfers WHERE trip_id = $1`,
+      [tripId]
+    );
+    for (const row of transfersResult.rows) {
+      const amt = parseFloat(row.effective_amount);
+      netMap[row.from_traveller] = (netMap[row.from_traveller] ?? 0) + amt;
+      netMap[row.to_traveller]   = (netMap[row.to_traveller]   ?? 0) - amt;
     }
 
     const balances: Balance[] = Object.entries(netMap).map(([traveller_id, net]) => ({
@@ -141,6 +156,95 @@ router.delete('/settlements/:id', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `DELETE FROM settlements WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Transfer routes ──────────────────────────────────────────────────────────
+
+// GET /trips/:tripId/transfers
+router.get('/trips/:tripId/transfers', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT t.*,
+              tf.name AS from_name, tf.avatar_colour AS from_colour,
+              tt.name AS to_name,   tt.avatar_colour AS to_colour
+       FROM transfers t
+       JOIN travellers tf ON tf.id = t.from_traveller
+       JOIN travellers tt ON tt.id = t.to_traveller
+       WHERE t.trip_id = $1
+       ORDER BY t.transfer_date DESC, t.created_at DESC`,
+      [req.params.tripId]
+    );
+    res.json(result.rows.map((r) => ({
+      ...r,
+      amount:      parseFloat(r.amount),
+      amount_home: r.amount_home ? parseFloat(r.amount_home) : null,
+    })));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /trips/:tripId/transfers
+router.post('/trips/:tripId/transfers', async (req: Request, res: Response) => {
+  try {
+    const { tripId } = req.params;
+    const { from_traveller, to_traveller, amount, currency, note, transfer_date } = req.body;
+
+    if (!from_traveller || !to_traveller || !amount || !currency) {
+      return res.status(400).json({ error: 'from_traveller, to_traveller, amount, currency are required' });
+    }
+    if (from_traveller === to_traveller) {
+      return res.status(400).json({ error: 'from_traveller and to_traveller must be different' });
+    }
+
+    // Resolve amount in home currency
+    const tripResult = await pool.query(`SELECT home_currency FROM trips WHERE id = $1`, [tripId]);
+    if (tripResult.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
+    const homeCurrency: string = tripResult.rows[0].home_currency;
+
+    let amountHome: number | null = null;
+    try {
+      if (currency === homeCurrency) {
+        amountHome = parseFloat(amount);
+      } else {
+        const { rate } = await getRate(currency, homeCurrency);
+        amountHome = Math.round(parseFloat(amount) * rate * 100) / 100;
+      }
+    } catch {
+      // If rate lookup fails, store without home amount
+    }
+
+    const result = await pool.query(
+      `INSERT INTO transfers (trip_id, from_traveller, to_traveller, amount, currency, amount_home, note, transfer_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING *`,
+      [tripId, from_traveller, to_traveller, parseFloat(amount), currency, amountHome,
+       note || null, transfer_date || new Date().toISOString().split('T')[0]]
+    );
+
+    const row = result.rows[0];
+    res.status(201).json({
+      ...row,
+      amount:      parseFloat(row.amount),
+      amount_home: row.amount_home ? parseFloat(row.amount_home) : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// DELETE /transfers/:id
+router.delete('/transfers/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM transfers WHERE id = $1 RETURNING id`,
       [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });

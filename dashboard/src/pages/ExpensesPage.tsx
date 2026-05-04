@@ -12,7 +12,7 @@ import { expenseClaimsApi } from '../api/expenseClaims';
 import type { ExpenseClaim } from '@trip-planner-ai/shared';
 import { API_BASE } from '../api/client';
 import type {
-  Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
+  Expense, ExpenseCategory, Settlement, Deposit, DepositStatus, Transfer,
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
@@ -135,9 +135,14 @@ export default function ExpensesPage() {
   const [savingBudgets, setSavingBudgets] = useState(false);
 
   // ── settlements state
-  const [showCalcConfirm, setShowCalcConfirm] = useState(false);
   const [familyView, setFamilyView] = useState(false);
   const [expandedFamilyGroups, setExpandedFamilyGroups] = useState<Set<string>>(new Set());
+  const [showTransferForm, setShowTransferForm] = useState(false);
+  const [tfFrom, setTfFrom] = useState('');
+  const [tfTo, setTfTo] = useState('');
+  const [tfAmount, setTfAmount] = useState('');
+  const [tfNote, setTfNote] = useState('');
+  const [tfDate, setTfDate] = useState(new Date().toISOString().split('T')[0]);
 
   // ── deposits state
   const [depositStatusTab, setDepositStatusTab] = useState<'all' | DepositStatus>('all');
@@ -169,8 +174,19 @@ export default function ExpensesPage() {
   });
   const { data: settlements = [], isLoading: settLoading } = useQuery({
     queryKey: ['settlements', currentTrip?.id],
-    queryFn: () => settlementsApi.list(currentTrip!.id),
+    // Auto-calculate then fetch so settlements are always current
+    queryFn: async () => {
+      await settlementsApi.calculate(currentTrip!.id);
+      return settlementsApi.list(currentTrip!.id);
+    },
     enabled: !!currentTrip && tab === 'settlements',
+    staleTime: 0,
+  });
+  const { data: transfers = [], isLoading: transfersLoading } = useQuery({
+    queryKey: ['transfers', currentTrip?.id],
+    queryFn: () => settlementsApi.listTransfers(currentTrip!.id),
+    enabled: !!currentTrip && tab === 'settlements',
+    staleTime: 0,
   });
   const { data: families = [] } = useQuery({
     queryKey: ['families', currentTrip?.id],
@@ -235,13 +251,28 @@ export default function ExpensesPage() {
   });
 
   // ── settlement mutations
-  const calculateMutation = useMutation({
-    mutationFn: () => settlementsApi.calculate(currentTrip!.id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settlements'] }); setShowCalcConfirm(false); },
-  });
   const markPaidMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.markPaid(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+  });
+  const createTransferMutation = useMutation({
+    mutationFn: (data: Parameters<typeof settlementsApi.createTransfer>[1]) =>
+      settlementsApi.createTransfer(currentTrip!.id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] });
+      qc.invalidateQueries({ queryKey: ['settlements'] });
+      // Reset form
+      setShowTransferForm(false);
+      setTfFrom(''); setTfTo(''); setTfAmount(''); setTfNote('');
+      setTfDate(new Date().toISOString().split('T')[0]);
+    },
+  });
+  const deleteTransferMutation = useMutation({
+    mutationFn: (id: string) => settlementsApi.deleteTransfer(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] });
+      qc.invalidateQueries({ queryKey: ['settlements'] });
+    },
   });
 
   // ── deposit mutations
@@ -358,8 +389,10 @@ export default function ExpensesPage() {
             + Add Deposit
           </button>
         )}
-        {tab === 'settlements' && isOrganiser && (
-          <button className="btn-primary" onClick={() => setShowCalcConfirm(true)}>⚖️ Calculate</button>
+        {tab === 'settlements' && (
+          <button className="btn-secondary text-sm" onClick={() => { setShowTransferForm(true); setTfFrom(activeTraveller?.id ?? ''); }}>
+            + Record Transfer
+          </button>
         )}
         {tab === 'claims' && isOrganiser && (
           <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
@@ -515,12 +548,79 @@ export default function ExpensesPage() {
       {/* ══ TAB: SETTLEMENTS ═══════════════════════════════════════════════════ */}
       {tab === 'settlements' && (
         <>
+          {/* Transfer form modal */}
+          {showTransferForm && (
+            <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+              <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => setShowTransferForm(false)} />
+              <div className="relative bg-white rounded-t-2xl md:rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+                <h3 className="font-display text-lg font-bold text-ink">Record Transfer</h3>
+                <p className="text-xs text-ink-faint -mt-2">Log a cash payment between two people. This offsets their settlement balance automatically.</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">From</label>
+                    <select className="vintage-input w-full text-sm" value={tfFrom} onChange={(e) => setTfFrom(e.target.value)}>
+                      <option value="">Select…</option>
+                      {travellers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">To</label>
+                    <select className="vintage-input w-full text-sm" value={tfTo} onChange={(e) => setTfTo(e.target.value)}>
+                      <option value="">Select…</option>
+                      {travellers.filter((t) => t.id !== tfFrom).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount</label>
+                    <input type="number" step="0.01" min="0" className="vintage-input w-full text-sm"
+                      placeholder="0.00" value={tfAmount} onChange={(e) => setTfAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Date</label>
+                    <input type="date" className="vintage-input w-full text-sm" value={tfDate} onChange={(e) => setTfDate(e.target.value)} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Note (optional)</label>
+                  <input className="vintage-input w-full text-sm" placeholder="e.g. Cash handover at airport"
+                    value={tfNote} onChange={(e) => setTfNote(e.target.value)} />
+                </div>
+
+                <div className="flex gap-3 pt-1">
+                  <button type="button" className="btn-secondary flex-1" onClick={() => setShowTransferForm(false)}>Cancel</button>
+                  <button
+                    type="button"
+                    className="btn-primary flex-1 disabled:opacity-50"
+                    disabled={!tfFrom || !tfTo || !tfAmount || parseFloat(tfAmount) <= 0 || createTransferMutation.isPending}
+                    onClick={() => createTransferMutation.mutate({
+                      from_traveller: tfFrom,
+                      to_traveller: tfTo,
+                      amount: parseFloat(tfAmount),
+                      currency: homeCurrency,
+                      note: tfNote || undefined,
+                      transfer_date: tfDate,
+                    })}
+                  >
+                    {createTransferMutation.isPending ? 'Saving…' : 'Record Transfer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {totalSpent > 0 && (
             <div className="vintage-card p-4 text-center">
               <p className="text-sm text-ink-faint">Total Group Spend</p>
               <p className="text-3xl font-bold text-navy mt-1">{fmt(totalSpent, homeCurrency)}</p>
+              <p className="text-xs text-ink-faint mt-1">Settlements update automatically as expenses change</p>
             </div>
           )}
+
           {Object.keys(balanceMap).length > 0 && (
             <div className="vintage-card p-4">
               <h2 className="text-sm font-semibold text-ink-faint mb-3">Net Balances</h2>
@@ -541,18 +641,14 @@ export default function ExpensesPage() {
               </div>
             </div>
           )}
+
           {settLoading ? (
-            <p className="text-ink-faint text-center py-8">Loading…</p>
+            <p className="text-ink-faint text-center py-8">Calculating settlements…</p>
           ) : pendingSettlements.length === 0 && paidSettlements.length === 0 ? (
             <div className="vintage-card text-center py-12">
-              <p className="text-3xl mb-2">⚖️</p>
-              <p className="text-ink-faint mb-2">No settlements calculated yet.</p>
-              {isOrganiser && (
-                <>
-                  <p className="text-sm text-ink-faint mb-4">Add expenses first, then calculate who owes whom.</p>
-                  <button className="btn-primary" onClick={() => setShowCalcConfirm(true)}>Calculate Settlements</button>
-                </>
-              )}
+              <p className="text-3xl mb-2">✅</p>
+              <p className="font-semibold text-ink mb-1">All settled up!</p>
+              <p className="text-sm text-ink-faint">No outstanding balances. Add expenses to see who owes whom.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -561,20 +657,12 @@ export default function ExpensesPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-ink-faint font-medium">View:</span>
                   <div className="flex rounded-lg border border-parchment-dark overflow-hidden">
-                    <button
-                      onClick={() => setFamilyView(false)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                        !familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'
-                      }`}
-                    >
+                    <button onClick={() => setFamilyView(false)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${!familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'}`}>
                       Individual
                     </button>
-                    <button
-                      onClick={() => setFamilyView(true)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                        familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'
-                      }`}
-                    >
+                    <button onClick={() => setFamilyView(true)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'}`}>
                       By Family
                     </button>
                   </div>
@@ -586,9 +674,7 @@ export default function ExpensesPage() {
                   <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">
                     Outstanding ({familyView ? familyAggRows.length : pendingSettlements.length})
                   </h2>
-
                   {familyView ? (
-                    /* ── Family-grouped view ── */
                     <div className="space-y-2">
                       {familyAggRows.map((row) => {
                         const aggKey = `${row.fromKey}→${row.toKey}`;
@@ -596,12 +682,9 @@ export default function ExpensesPage() {
                         const allPending = row.settlements.filter((s) => s.status === 'pending');
                         return (
                           <div key={aggKey} className="vintage-card overflow-hidden">
-                            {/* Aggregated row */}
                             <div className="p-4 flex items-center gap-3">
-                              <span
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-                                style={{ backgroundColor: row.fromColour }}
-                              >
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: row.fromColour }}>
                                 {row.fromLabel.charAt(0).toUpperCase()}
                               </span>
                               <div className="flex-1 min-w-0">
@@ -617,20 +700,14 @@ export default function ExpensesPage() {
                                   <p className="text-[11px] text-ink-faint">{allPending.length} individual settlements</p>
                                 )}
                               </div>
-                              <span
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-                                style={{ backgroundColor: row.toColour }}
-                              >
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: row.toColour }}>
                                 {row.toLabel.charAt(0).toUpperCase()}
                               </span>
                               <div className="flex flex-col gap-1 shrink-0">
                                 {isOrganiser && (
-                                  <button
-                                    onClick={() => allPending.forEach((s) => markPaidMutation.mutate(s.id))}
-                                    className="btn-secondary text-xs py-1 px-2"
-                                  >
-                                    ✓ Mark all paid
-                                  </button>
+                                  <button onClick={() => allPending.forEach((s) => markPaidMutation.mutate(s.id))}
+                                    className="btn-secondary text-xs py-1 px-2">✓ Mark all paid</button>
                                 )}
                                 {allPending.length > 1 && (
                                   <button
@@ -639,23 +716,18 @@ export default function ExpensesPage() {
                                       if (next.has(aggKey)) next.delete(aggKey); else next.add(aggKey);
                                       return next;
                                     })}
-                                    className="text-xs text-ink-faint hover:text-navy text-center"
-                                  >
+                                    className="text-xs text-ink-faint hover:text-navy text-center">
                                     {isExpanded ? '▲ Hide' : '▼ Expand'}
                                   </button>
                                 )}
                               </div>
                             </div>
-
-                            {/* Expanded individual settlements */}
                             {isExpanded && (
                               <div className="border-t border-parchment-dark bg-parchment/40 divide-y divide-parchment-dark">
                                 {allPending.map((s) => (
                                   <div key={s.id} className="px-4 py-2.5 flex items-center gap-3">
-                                    <span
-                                      className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                                      style={{ backgroundColor: getColour(s.from_traveller) }}
-                                    >
+                                    <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                      style={{ backgroundColor: getColour(s.from_traveller) }}>
                                       {getName(s.from_traveller).charAt(0).toUpperCase()}
                                     </span>
                                     <span className="text-xs text-ink flex-1">
@@ -665,12 +737,8 @@ export default function ExpensesPage() {
                                     </span>
                                     <span className="text-xs font-semibold text-navy">{fmt(s.amount, homeCurrency)}</span>
                                     {isOrganiser && (
-                                      <button
-                                        onClick={() => markPaidMutation.mutate(s.id)}
-                                        className="text-xs text-ink-faint hover:text-navy ml-1"
-                                      >
-                                        ✓
-                                      </button>
+                                      <button onClick={() => markPaidMutation.mutate(s.id)}
+                                        className="text-xs text-ink-faint hover:text-navy ml-1">✓</button>
                                     )}
                                   </div>
                                 ))}
@@ -681,7 +749,6 @@ export default function ExpensesPage() {
                       })}
                     </div>
                   ) : (
-                    /* ── Individual view ── */
                     <div className="space-y-2">
                       {pendingSettlements.map((s) => (
                         <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
@@ -703,6 +770,53 @@ export default function ExpensesPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Transfers section ── */}
+          {!transfersLoading && transfers.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">
+                Transfers ({transfers.length})
+              </h2>
+              <div className="space-y-2">
+                {(transfers as (Transfer & { from_name: string; from_colour: string; to_name: string; to_colour: string })[]).map((tf) => (
+                  <div key={tf.id} className="vintage-card p-4 flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                      style={{ backgroundColor: tf.from_colour }}>
+                      {tf.from_name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink">
+                        <span className="font-semibold">{tf.from_name}</span>
+                        <span className="text-ink/50 mx-2">→</span>
+                        <span className="font-semibold">{tf.to_name}</span>
+                      </p>
+                      <p className="text-xs text-ink-faint">
+                        {new Date(tf.transfer_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        {tf.note && <span className="ml-2 italic">{tf.note}</span>}
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                      style={{ backgroundColor: tf.to_colour }}>
+                      {tf.to_name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="text-right shrink-0 min-w-[60px]">
+                      <p className="font-bold text-green-700">{fmt(tf.amount, tf.currency)}</p>
+                      {tf.amount_home !== null && tf.currency !== homeCurrency && (
+                        <p className="text-[10px] text-ink-faint">~{fmt(tf.amount_home, homeCurrency)}</p>
+                      )}
+                    </div>
+                    {isOrganiser && (
+                      <button
+                        onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tf.id); }}
+                        className="text-ink-faint hover:text-terracotta transition-colors text-sm shrink-0 ml-1"
+                        title="Delete transfer"
+                      >×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </>
@@ -1021,26 +1135,6 @@ export default function ExpensesPage() {
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Calculate settlements confirmation */}
-      {showCalcConfirm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="vintage-card rounded-t-2xl sm:rounded-xl w-full max-w-sm text-center p-6">
-            <p className="text-3xl mb-3">⚖️</p>
-            <h2 className="text-xl font-display font-bold text-navy mb-2">Recalculate Settlements?</h2>
-            <p className="text-sm text-ink-faint mb-6">
-              Replaces all pending settlements with fresh calculations. Paid settlements are unaffected.
-            </p>
-            <div className="flex gap-3">
-              <button className="btn-primary flex-1" onClick={() => calculateMutation.mutate()}
-                disabled={calculateMutation.isPending}>
-                {calculateMutation.isPending ? 'Calculating…' : 'Calculate'}
-              </button>
-              <button className="btn-secondary flex-1" onClick={() => setShowCalcConfirm(false)}>Cancel</button>
-            </div>
-          </div>
         </div>
       )}
 
