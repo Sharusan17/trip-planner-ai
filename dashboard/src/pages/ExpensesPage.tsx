@@ -402,7 +402,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
         {MAIN_TABS.map(({ key, label }) => (
           <button
             key={key}
@@ -428,7 +428,7 @@ export default function ExpensesPage() {
       {tab === 'expenses' && (
         <>
           {expSummary.length > 0 && (
-            <div className="overflow-x-auto pb-2">
+            <div className="overflow-x-auto pb-2 hide-scrollbar">
               <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
                 <button
                   onClick={() => setExpenseCat('all')}
@@ -843,7 +843,7 @@ export default function ExpensesPage() {
               </div>
             </div>
           )}
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
             {DEPOSIT_STATUS_TABS.map(({ key, label }) => (
               <button key={key} onClick={() => setDepositStatusTab(key)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${

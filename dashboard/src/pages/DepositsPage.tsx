@@ -172,7 +172,7 @@ export default function DepositsPage() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 hide-scrollbar">
         {STATUS_TABS.map((tab) => (
           <button
             key={tab.key}

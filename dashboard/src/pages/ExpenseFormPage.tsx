@@ -112,6 +112,7 @@ export default function ExpenseFormPage() {
       return expense;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); navigate('/expenses'); },
+    onError: () => { alert('Failed to save expense. Please check your connection and try again.'); },
   });
 
   const updateMutation = useMutation({
@@ -121,6 +122,7 @@ export default function ExpenseFormPage() {
       return expense;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); navigate('/expenses'); },
+    onError: () => { alert('Failed to update expense. Please check your connection and try again.'); },
   });
 
   const claimMutation = useMutation({
@@ -143,6 +145,7 @@ export default function ExpenseFormPage() {
       qc.invalidateQueries({ queryKey: ['claims'] });
       navigate('/expenses?tab=claims');
     },
+    onError: () => { alert('Failed to send for review. Please check your connection and try again.'); },
   });
 
   function handleSendForReview() {
@@ -243,6 +246,10 @@ export default function ExpenseFormPage() {
       }
 
       const computedSplits = computeItemisedSplits();
+      if (Object.keys(computedSplits).length === 0) {
+        alert('Please assign at least one person to each line item using the "Who had this?" buttons.');
+        return;
+      }
       const data: CreateExpenseInput = {
         description: form.description, amount: parseFloat(form.amount),
         currency: form.currency, category: form.category,
