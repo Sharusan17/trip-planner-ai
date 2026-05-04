@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { expenseClaimsApi } from '@/api/expenseClaims';
-import { Menu } from 'lucide-react';
+import { Menu, Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import TripHeader from './TripHeader';
 
@@ -20,7 +20,6 @@ function PendingClaimsBanner() {
     staleTime: 0,
   });
 
-  // Hide only on pages that fully replace this banner with their own UI
   const onReviewPage = location.pathname.startsWith('/expenses/claims');
   const onDashboard = location.pathname === '/dashboard' || location.pathname === '/';
   if (pendingClaims.length === 0 || onReviewPage || onDashboard) return null;
@@ -47,15 +46,37 @@ function PendingClaimsBanner() {
   );
 }
 
+const PULL_THRESHOLD = 72;
+
 export default function AppShell() {
   const { currentTrip } = useTrip();
+  const queryClient = useQueryClient();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
+  const pullStart = useRef<{ y: number; atTop: boolean }>({ y: 0, atTop: false });
 
   const handleScroll = useCallback(() => {
     setScrolled((mainRef.current?.scrollTop ?? 0) > 50);
   }, []);
+
+  const onTouchStart = useCallback((e: React.TouchEvent<HTMLElement>) => {
+    pullStart.current = {
+      y: e.touches[0].clientY,
+      atTop: (mainRef.current?.scrollTop ?? 1) === 0,
+    };
+  }, []);
+
+  const onTouchEnd = useCallback(async (e: React.TouchEvent<HTMLElement>) => {
+    if (!pullStart.current.atTop) return;
+    const delta = e.changedTouches[0].clientY - pullStart.current.y;
+    if (delta > PULL_THRESHOLD) {
+      setIsRefreshing(true);
+      await queryClient.invalidateQueries();
+      setIsRefreshing(false);
+    }
+  }, [queryClient]);
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-parchment">
@@ -63,8 +84,20 @@ export default function AppShell() {
       <main
         ref={mainRef}
         onScroll={handleScroll}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
         className="flex-1 flex flex-col overflow-auto min-w-0 max-w-full"
       >
+        {/* Pull-to-refresh indicator */}
+        <div
+          className={`flex items-center justify-center gap-2 text-ink-faint text-xs font-body overflow-hidden transition-all duration-300 ${
+            isRefreshing ? 'h-10 opacity-100' : 'h-0 opacity-0'
+          }`}
+        >
+          <Loader2 size={14} className="animate-spin" />
+          Refreshing…
+        </div>
+
         <div className="sticky top-0 z-10 bg-parchment px-4 pt-4 md:px-6 md:pt-6">
           {/* Collapsed header — mobile only, shown after scrolling 50px */}
           <div
@@ -98,9 +131,13 @@ export default function AppShell() {
             <PendingClaimsBanner />
           </div>
         </div>
+
         <div className="flex-1 p-4 md:p-6 pt-0 md:pt-0">
           <Outlet />
         </div>
+
+        {/* Safe area spacer — fills the home indicator gap on notched iPhones */}
+        <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} />
       </main>
     </div>
   );
