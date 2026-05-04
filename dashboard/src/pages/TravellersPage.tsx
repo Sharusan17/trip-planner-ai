@@ -169,14 +169,6 @@ export default function TravellersPage() {
               </button>
             </>
           )}
-          {isOrganiser && activeTraveller?.id === t.id && (
-            <>
-              <span className="text-ink-faint/40">·</span>
-              <button onClick={() => navigate(`/travellers/${t.id}/edit`)} className="text-xs text-ink-faint font-display">
-                Edit (organiser view)
-              </button>
-            </>
-          )}
         </div>
       </div>
     );
