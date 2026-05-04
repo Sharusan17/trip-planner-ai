@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
@@ -25,6 +25,7 @@ export default function PhotoAlbumPage() {
   const qc = useQueryClient();
   const [lightbox, setLightbox] = useState<TripPhoto | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const swipeStartX = useRef(0);
 
   const { data: photos = [], isLoading } = useQuery({
     queryKey: ['photos', currentTrip?.id],
@@ -183,6 +184,11 @@ export default function PhotoAlbumPage() {
         <div
           className="fixed inset-0 z-50 bg-ink/95 flex items-center justify-center p-4"
           onClick={() => setLightbox(null)}
+          onTouchStart={(e) => { swipeStartX.current = e.touches[0].clientX; }}
+          onTouchEnd={(e) => {
+            const delta = swipeStartX.current - e.changedTouches[0].clientX;
+            if (Math.abs(delta) > 50) lightboxNav(delta > 0 ? 1 : -1);
+          }}
         >
           <div className="relative max-w-3xl w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
             {/* Close */}
