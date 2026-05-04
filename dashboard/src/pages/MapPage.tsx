@@ -211,7 +211,7 @@ export default function MapPage() {
       )}
 
       {/* Day filter pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
         <button
           onClick={() => setSelectedDay(null)}
           className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium transition-all border ${

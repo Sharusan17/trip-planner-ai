@@ -14,7 +14,7 @@ export default function SetupProgressStrip({
   onStepClick,
 }: SetupProgressStripProps) {
   return (
-    <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1">
+    <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1 hide-scrollbar">
       {stepLabels.map((label, i) => {
         const isActive = i === step;
         const isDone = doneFlags[i];
