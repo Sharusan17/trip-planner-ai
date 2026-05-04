@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { expenseClaimsApi } from '@/api/expenseClaims';
+import { Plane, Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import TripHeader from './TripHeader';
 
@@ -48,14 +49,51 @@ function PendingClaimsBanner() {
 
 export default function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+
+  const handleScroll = useCallback(() => {
+    setScrolled((mainRef.current?.scrollTop ?? 0) > 50);
+  }, []);
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-parchment">
       <Sidebar isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-      <main className="flex-1 flex flex-col overflow-auto min-w-0 max-w-full">
+      <main
+        ref={mainRef}
+        onScroll={handleScroll}
+        className="flex-1 flex flex-col overflow-auto min-w-0 max-w-full"
+      >
         <div className="sticky top-0 z-10 bg-parchment px-4 pt-4 md:px-6 md:pt-6">
-          <TripHeader onMenuOpen={() => setMobileNavOpen(true)} />
-          <PendingClaimsBanner />
+          {/* Collapsed header — mobile only, shown after scrolling 50px */}
+          <div
+            className={`md:hidden mb-4 transition-all duration-300 ease-out overflow-hidden ${
+              scrolled ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0 mb-0'
+            }`}
+          >
+            <div className="bg-white border border-parchment-dark rounded-2xl px-3 py-2.5 shadow-[var(--shadow-card)] flex items-center gap-3">
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open menu"
+                className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#1C1917] text-white flex items-center justify-center shadow-sm"
+              >
+                <Menu size={18} strokeWidth={2} />
+              </button>
+              <div className="w-8 h-8 rounded-xl bg-[#1C1917] flex items-center justify-center flex-shrink-0 shadow-sm">
+                <Plane size={15} className="text-white" strokeWidth={1.75} />
+              </div>
+            </div>
+          </div>
+
+          {/* Full header — hidden on mobile once scrolled */}
+          <div
+            className={`transition-all duration-300 ease-out overflow-hidden ${
+              scrolled ? 'md:block max-h-0 opacity-0 md:max-h-40 md:opacity-100' : 'max-h-40 opacity-100'
+            }`}
+          >
+            <TripHeader onMenuOpen={() => setMobileNavOpen(true)} />
+            <PendingClaimsBanner />
+          </div>
         </div>
         <div className="flex-1 p-4 md:p-6 pt-0 md:pt-0">
           <Outlet />
