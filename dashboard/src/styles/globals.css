@@ -328,3 +328,10 @@ h1, h2, h3, h4, h5, h6 {
     height: 52vh;
   }
 }
+
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

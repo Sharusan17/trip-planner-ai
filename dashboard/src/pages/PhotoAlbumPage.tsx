@@ -191,14 +191,14 @@ export default function PhotoAlbumPage() {
           }}
         >
           <div className="relative max-w-3xl w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-            {/* Close */}
+            {/* Close — overlaid on photo */}
             <button onClick={() => setLightbox(null)}
-              className="absolute -top-10 right-0 text-white/60 hover:text-white z-10">
-              <X size={22} />
+              className="absolute top-3 right-3 z-20 w-9 h-9 rounded-full bg-ink/60 hover:bg-ink/80 text-white flex items-center justify-center transition-colors">
+              <X size={18} />
             </button>
 
-            {/* Counter */}
-            <div className="absolute -top-10 left-0 text-white/50 text-sm">
+            {/* Counter — overlaid on photo */}
+            <div className="absolute top-3 left-3 z-20 text-white/80 text-xs font-body bg-ink/40 px-2 py-1 rounded-lg">
               {lightboxIndex + 1} / {allPhotos.length}
             </div>
 

@@ -3,7 +3,7 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { expenseClaimsApi } from '@/api/expenseClaims';
-import { Menu, Loader2 } from 'lucide-react';
+import { Menu, Loader2, Plane } from 'lucide-react';
 import Sidebar from './Sidebar';
 import TripHeader from './TripHeader';
 
@@ -105,7 +105,7 @@ export default function AppShell() {
               scrolled ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0 mb-0'
             }`}
           >
-            <div className="bg-white border border-parchment-dark rounded-2xl px-3 py-2.5 shadow-[var(--shadow-card)] relative flex items-center">
+            <div className="bg-white border border-parchment-dark rounded-2xl px-3 py-2.5 shadow-[var(--shadow-card)] flex items-center">
               <button
                 onClick={() => setMobileNavOpen(true)}
                 aria-label="Open menu"
@@ -113,11 +113,12 @@ export default function AppShell() {
               >
                 <Menu size={18} strokeWidth={2} />
               </button>
-              {currentTrip && (
-                <span className="absolute left-1/2 -translate-x-1/2 font-display font-bold text-ink text-sm leading-tight truncate max-w-[55%]">
-                  {currentTrip.name}
-                </span>
-              )}
+              <span className="flex-1 text-center font-display font-bold text-ink text-sm leading-tight truncate px-2">
+                {currentTrip?.name ?? ''}
+              </span>
+              <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#1C1917] flex items-center justify-center shadow-sm">
+                <Plane size={15} className="text-white" strokeWidth={1.75} />
+              </div>
             </div>
           </div>
 
@@ -136,8 +137,7 @@ export default function AppShell() {
           <Outlet />
         </div>
 
-        {/* Safe area spacer — fills the home indicator gap on notched iPhones */}
-        <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} />
+
       </main>
     </div>
   );
