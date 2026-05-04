@@ -157,8 +157,8 @@ export default function ExpenseFormPage() {
     let lineItemsData: ExpenseLineItem[] | undefined;
     if (form.split_mode === 'itemised') {
       lineItemsData = lineItems
-        .filter((li) => li.description.trim() && parseFloat(li.amount) > 0)
-        .map((li) => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+        .filter((li) => parseFloat(li.amount) > 0)
+        .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
       if (lineItemsData.length === 0) lineItemsData = undefined;
     }
     claimMutation.mutate({ lineItemsData });
@@ -231,8 +231,8 @@ export default function ExpenseFormPage() {
 
     if (form.split_mode === 'itemised') {
       const validLineItems: ExpenseLineItem[] = lineItems
-        .filter((li) => li.description.trim() && parseFloat(li.amount) > 0)
-        .map((li) => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+        .filter((li) => parseFloat(li.amount) > 0)
+        .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
 
       // Validate: line items must sum to the expense total
       const expenseTotal   = parseFloat(form.amount) || 0;
