@@ -7,12 +7,12 @@ import {
   LayoutDashboard,
   Users,
   CalendarDays,
-  Map,
   Wallet,
   MessageSquare,
   LogOut,
   X,
   Plane,
+  BedDouble,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -27,9 +27,9 @@ const navItems: NavItem[] = [
   { to: '/dashboard',  label: 'Dashboard',  Icon: LayoutDashboard },
   { to: '/travellers', label: 'Travellers', Icon: Users           },
   { to: '/itinerary',  label: 'Itinerary',  Icon: CalendarDays    },
-  { to: '/map',        label: 'Map',        Icon: Map             },
   { to: '/expenses',   label: 'Finance',    Icon: Wallet          },
-  { to: '/logistics',  label: 'Travel',     Icon: Plane           },
+  { to: '/transport',  label: 'Travel',     Icon: Plane           },
+  { to: '/stays',      label: 'Stays',      Icon: BedDouble       },
   { to: '/community',  label: 'Community',  Icon: MessageSquare   },
 ];
 

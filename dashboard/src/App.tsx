@@ -8,13 +8,13 @@ import TravellerFormPage from './pages/TravellerFormPage';
 import ItineraryPage from './pages/ItineraryPage';
 import DayFormPage from './pages/DayFormPage';
 import ActivityFormPage from './pages/ActivityFormPage';
-import MapPage from './pages/MapPage';
 import ExpensesPage from './pages/ExpensesPage';
 import ExpenseFormPage from './pages/ExpenseFormPage';
 import ExpenseClaimFormPage   from './pages/ExpenseClaimFormPage';
 import ExpenseClaimReviewPage from './pages/ExpenseClaimReviewPage';
 import DepositFormPage from './pages/DepositFormPage';
-import LogisticsPage from './pages/LogisticsPage';
+import TransportPage from './pages/TransportPage';
+import AccommodationPage from './pages/AccommodationPage';
 import TransportBookingFormPage from './pages/TransportBookingFormPage';
 import VehicleFormPage from './pages/VehicleFormPage';
 import AccommodationFormPage from './pages/AccommodationFormPage';
@@ -67,9 +67,6 @@ function App() {
         <Route path="/itinerary/days/:dayId/activities/add"  element={<ActivityFormPage />} />
         <Route path="/itinerary/activities/:id/edit"         element={<ActivityFormPage />} />
 
-        {/* Map */}
-        <Route path="/map" element={<MapPage />} />
-
         {/* Expenses / Finance */}
         <Route path="/expenses"                element={<ExpensesPage />} />
         <Route path="/expenses/add"            element={<ExpenseFormPage />} />
@@ -80,8 +77,9 @@ function App() {
         <Route path="/expenses/claims"      element={<ExpenseClaimReviewPage />} />
         <Route path="/expenses/claims/:id"  element={<ExpenseClaimReviewPage />} />
 
-        {/* Logistics */}
-        <Route path="/logistics"                         element={<LogisticsPage />} />
+        {/* Travel (transport) + Stays (accommodation) */}
+        <Route path="/transport"                         element={<TransportPage />} />
+        <Route path="/stays"                             element={<AccommodationPage />} />
         <Route path="/logistics/transport/add"           element={<TransportBookingFormPage />} />
         <Route path="/logistics/transport/:id/edit"      element={<TransportBookingFormPage />} />
         <Route path="/logistics/vehicles/add"            element={<VehicleFormPage />} />
@@ -96,11 +94,12 @@ function App() {
         <Route path="/community/photos/upload"      element={<PhotoUploadPage />} />
 
         {/* Legacy redirects */}
+        <Route path="/map"            element={<Navigate to="/itinerary" replace />} />
+        <Route path="/logistics"      element={<Navigate to="/transport" replace />} />
+        <Route path="/accommodation"  element={<Navigate to="/stays" replace />} />
         <Route path="/currency"       element={<Navigate to="/expenses" replace />} />
         <Route path="/settlements"    element={<Navigate to="/expenses" replace />} />
         <Route path="/deposits"       element={<Navigate to="/expenses" replace />} />
-        <Route path="/transport"      element={<Navigate to="/logistics" replace />} />
-        <Route path="/accommodation"  element={<Navigate to="/logistics" replace />} />
         <Route path="/announcements"  element={<Navigate to="/community" replace />} />
         <Route path="/polls"          element={<Navigate to="/community" replace />} />
       </Route>
