@@ -11,6 +11,9 @@ export const settlementsApi = {
   markPaid: (id: string) =>
     api.patch<Settlement>(`/settlements/${id}/pay`, {}),
 
+  markUnpaid: (id: string) =>
+    api.patch<Settlement>(`/settlements/${id}/unpay`, {}),
+
   delete: (id: string) =>
     api.delete<void>(`/settlements/${id}`),
 
@@ -22,6 +25,9 @@ export const settlementsApi = {
 
   createTransfer: (tripId: string, data: CreateTransferInput) =>
     api.post<Transfer>(`/trips/${tripId}/transfers`, data),
+
+  updateTransfer: (id: string, data: Partial<CreateTransferInput>) =>
+    api.patch<Transfer>(`/transfers/${id}`, data),
 
   deleteTransfer: (id: string) =>
     api.delete<void>(`/transfers/${id}`),
