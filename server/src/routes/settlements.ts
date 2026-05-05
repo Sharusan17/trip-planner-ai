@@ -164,6 +164,21 @@ router.patch('/settlements/:id/pay', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /settlements/:id/unpay — reverse a paid settlement back to pending
+router.patch('/settlements/:id/unpay', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `UPDATE settlements SET status = 'pending', paid_at = NULL
+       WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...result.rows[0], amount: parseFloat(result.rows[0].amount) });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // DELETE /settlements/:id
 router.delete('/settlements/:id', async (req: Request, res: Response) => {
   try {
@@ -248,6 +263,31 @@ router.post('/trips/:tripId/transfers', async (req: Request, res: Response) => {
       amount:      parseFloat(row.amount),
       amount_home: row.amount_home ? parseFloat(row.amount_home) : null,
     });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// PATCH /transfers/:id — edit a transfer
+router.patch('/transfers/:id', async (req: Request, res: Response) => {
+  try {
+    const { amount, currency, note, transfer_date, from_traveller, to_traveller } = req.body;
+    const result = await pool.query(
+      `UPDATE transfers
+       SET amount = COALESCE($1, amount),
+           currency = COALESCE($2, currency),
+           note = $3,
+           transfer_date = COALESCE($4, transfer_date),
+           from_traveller = COALESCE($5, from_traveller),
+           to_traveller = COALESCE($6, to_traveller)
+       WHERE id = $7
+       RETURNING *`,
+      [amount ?? null, currency ?? null, note ?? null, transfer_date ?? null,
+       from_traveller ?? null, to_traveller ?? null, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    const row = result.rows[0];
+    res.json({ ...row, amount: parseFloat(row.amount), amount_home: row.amount_home ? parseFloat(row.amount_home) : null });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
