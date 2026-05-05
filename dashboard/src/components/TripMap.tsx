@@ -173,7 +173,7 @@ export default function TripMap({ selectedDayId, days }: TripMapProps) {
       {/* Search row — button + inline expanding input */}
       <div className="flex items-center justify-end gap-2 relative">
         {searchOpen && (
-          <div className="relative w-44 sm:w-52">
+          <div className="relative w-36 sm:w-44">
             <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
             <input
               autoFocus
