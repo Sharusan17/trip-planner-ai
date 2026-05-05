@@ -621,11 +621,19 @@ export default function ExpenseFormPage() {
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
                     style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
-                  <span className="flex-1 text-sm text-ink">{t.name}</span>
-                  <input type="number" step="0.01" min="0"
-                    className="vintage-input w-28 text-sm text-right" placeholder="0.00"
-                    value={form.custom_splits[t.id] ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))} />
+                  <span className="flex-1 text-sm text-ink truncate">{t.name}</span>
+                  <div className="flex items-center border border-parchment-dark rounded-lg overflow-hidden bg-white shrink-0 focus-within:ring-2 focus-within:ring-navy/30">
+                    <span className="px-2 text-xs font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark h-full flex items-center py-2 select-none">
+                      {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
+                    </span>
+                    <input
+                      type="number" step="0.01" min="0"
+                      className="w-24 text-sm text-right px-2 py-2 outline-none bg-white"
+                      placeholder="0.00"
+                      value={form.custom_splits[t.id] ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

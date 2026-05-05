@@ -91,7 +91,7 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
       netMap[row.traveller_id] = (netMap[row.traveller_id] ?? 0) - parseFloat(row.total);
     }
 
-    // Adjust for transfers: payer (from_traveller) gains credit, receiver (to_traveller) loses credit
+    // Adjust for transfers: payer gains credit, receiver loses credit
     const transfersResult = await client.query(
       `SELECT from_traveller, to_traveller, COALESCE(amount_home, amount) AS effective_amount
        FROM transfers WHERE trip_id = $1`,
@@ -99,6 +99,19 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
     );
     for (const row of transfersResult.rows) {
       const amt = parseFloat(row.effective_amount);
+      netMap[row.from_traveller] = (netMap[row.from_traveller] ?? 0) + amt;
+      netMap[row.to_traveller]   = (netMap[row.to_traveller]   ?? 0) - amt;
+    }
+
+    // Adjust for already-paid settlements — they represent money that has already moved,
+    // so they reduce the remaining balance just like transfers do.
+    const paidResult = await client.query(
+      `SELECT from_traveller, to_traveller, amount FROM settlements
+       WHERE trip_id = $1 AND status = 'paid'`,
+      [tripId]
+    );
+    for (const row of paidResult.rows) {
+      const amt = parseFloat(row.amount);
       netMap[row.from_traveller] = (netMap[row.from_traveller] ?? 0) + amt;
       netMap[row.to_traveller]   = (netMap[row.to_traveller]   ?? 0) - amt;
     }
