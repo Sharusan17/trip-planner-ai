@@ -74,20 +74,20 @@ function depositStatusBadge(status: DepositStatus) {
 // ─── SettlementRow ────────────────────────────────────────────────────────────
 
 function SettlementRow({
-  settlement, getName, getColour, isOrganiser, homeCurrency, onMarkPaid,
+  settlement, getName, getColour, homeCurrency, onMarkPaid, onUnpay,
 }: {
   settlement: Settlement;
   getName: (id: string) => string;
   getColour: (id: string) => string;
-  isOrganiser: boolean;
   homeCurrency: string;
   onMarkPaid: () => void;
+  onUnpay?: () => void;
 }) {
   const fromName = getName(settlement.from_traveller);
   const toName   = getName(settlement.to_traveller);
   const isPaid   = settlement.status === 'paid';
   return (
-    <div className={`vintage-card p-4 flex items-center gap-4 ${isPaid ? 'opacity-50' : ''}`}>
+    <div className={`vintage-card p-4 flex items-center gap-3 ${isPaid ? 'opacity-70' : ''}`}>
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
         style={{ backgroundColor: getColour(settlement.from_traveller) }}>
         {fromName.charAt(0).toUpperCase()}
@@ -99,15 +99,25 @@ function SettlementRow({
           <span className="font-semibold">{toName}</span>
         </p>
         <p className="text-lg font-bold text-navy">{fmt(settlement.amount, homeCurrency)}</p>
+        {isPaid && settlement.paid_at && (
+          <p className="text-[11px] text-ink-faint mt-0.5">
+            Paid {new Date(settlement.paid_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            {' · '}{new Date(settlement.paid_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        )}
       </div>
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
         style={{ backgroundColor: getColour(settlement.to_traveller) }}>
         {toName.charAt(0).toUpperCase()}
       </span>
-      {isOrganiser && !isPaid && (
+      {!isPaid && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
-      {isPaid && <span className="badge status-badge-paid text-xs px-2 py-0.5 rounded shrink-0">Paid</span>}
+      {isPaid && onUnpay && (
+        <button onClick={onUnpay} className="text-xs text-ink-faint hover:text-terracotta border border-parchment-dark rounded-lg px-2 py-1 transition-colors shrink-0">
+          Undo
+        </button>
+      )}
     </div>
   );
 }
@@ -138,6 +148,7 @@ export default function ExpensesPage() {
   const [familyView, setFamilyView] = useState(false);
   const [expandedFamilyGroups, setExpandedFamilyGroups] = useState<Set<string>>(new Set());
   const [showTransferForm, setShowTransferForm] = useState(false);
+  const [editingTransferId, setEditingTransferId] = useState<string | null>(null);
   const [tfFrom, setTfFrom] = useState('');
   const [tfTo, setTfTo] = useState('');
   const [tfAmount, setTfAmount] = useState('');
@@ -255,16 +266,34 @@ export default function ExpensesPage() {
     mutationFn: (id: string) => settlementsApi.markPaid(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
   });
+  const markUnpaidMutation = useMutation({
+    mutationFn: (id: string) => settlementsApi.markUnpaid(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+  });
+
+  function resetTransferForm() {
+    setShowTransferForm(false);
+    setEditingTransferId(null);
+    setTfFrom(''); setTfTo(''); setTfAmount(''); setTfNote('');
+    setTfDate(new Date().toISOString().split('T')[0]);
+  }
+
   const createTransferMutation = useMutation({
     mutationFn: (data: Parameters<typeof settlementsApi.createTransfer>[1]) =>
       settlementsApi.createTransfer(currentTrip!.id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transfers'] });
       qc.invalidateQueries({ queryKey: ['settlements'] });
-      // Reset form
-      setShowTransferForm(false);
-      setTfFrom(''); setTfTo(''); setTfAmount(''); setTfNote('');
-      setTfDate(new Date().toISOString().split('T')[0]);
+      resetTransferForm();
+    },
+  });
+  const updateTransferMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof settlementsApi.updateTransfer>[1] }) =>
+      settlementsApi.updateTransfer(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] });
+      qc.invalidateQueries({ queryKey: ['settlements'] });
+      resetTransferForm();
     },
   });
   const deleteTransferMutation = useMutation({
@@ -553,7 +582,7 @@ export default function ExpensesPage() {
             <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
               <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => setShowTransferForm(false)} />
               <div className="relative bg-white rounded-t-2xl md:rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-                <h3 className="font-display text-lg font-bold text-ink">Record Transfer</h3>
+                <h3 className="font-display text-lg font-bold text-ink">{editingTransferId ? 'Edit Transfer' : 'Record Transfer'}</h3>
                 <p className="text-xs text-ink-faint -mt-2">Log a cash payment between two people. This offsets their settlement balance automatically.</p>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -592,32 +621,40 @@ export default function ExpensesPage() {
                 </div>
 
                 <div className="flex gap-3 pt-1">
-                  <button type="button" className="btn-secondary flex-1" onClick={() => setShowTransferForm(false)}>Cancel</button>
+                  <button type="button" className="btn-secondary flex-1" onClick={resetTransferForm}>Cancel</button>
                   <button
                     type="button"
                     className="btn-primary flex-1 disabled:opacity-50"
-                    disabled={!tfFrom || !tfTo || !tfAmount || parseFloat(tfAmount) <= 0 || createTransferMutation.isPending}
-                    onClick={() => createTransferMutation.mutate({
-                      from_traveller: tfFrom,
-                      to_traveller: tfTo,
-                      amount: parseFloat(tfAmount),
-                      currency: homeCurrency,
-                      note: tfNote || undefined,
-                      transfer_date: tfDate,
-                    })}
+                    disabled={!tfFrom || !tfTo || !tfAmount || parseFloat(tfAmount) <= 0 || createTransferMutation.isPending || updateTransferMutation.isPending}
+                    onClick={() => {
+                      if (editingTransferId) {
+                        updateTransferMutation.mutate({
+                          id: editingTransferId,
+                          data: {
+                            from_traveller: tfFrom,
+                            to_traveller: tfTo,
+                            amount: parseFloat(tfAmount),
+                            currency: homeCurrency,
+                            note: tfNote || undefined,
+                            transfer_date: tfDate,
+                          },
+                        });
+                      } else {
+                        createTransferMutation.mutate({
+                          from_traveller: tfFrom,
+                          to_traveller: tfTo,
+                          amount: parseFloat(tfAmount),
+                          currency: homeCurrency,
+                          note: tfNote || undefined,
+                          transfer_date: tfDate,
+                        });
+                      }
+                    }}
                   >
-                    {createTransferMutation.isPending ? 'Saving…' : 'Record Transfer'}
+                    {(createTransferMutation.isPending || updateTransferMutation.isPending) ? 'Saving…' : editingTransferId ? 'Save Changes' : 'Record Transfer'}
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {totalSpent > 0 && (
-            <div className="vintage-card p-4 text-center">
-              <p className="text-sm text-ink-faint">Total Group Spend</p>
-              <p className="text-3xl font-bold text-navy mt-1">{fmt(totalSpent, homeCurrency)}</p>
-              <p className="text-xs text-ink-faint mt-1">Settlements update automatically as expenses change</p>
             </div>
           )}
 
@@ -752,7 +789,7 @@ export default function ExpensesPage() {
                     <div className="space-y-2">
                       {pendingSettlements.map((s) => (
                         <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
-                          isOrganiser={isOrganiser} homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)} />
+                          homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)} />
                       ))}
                     </div>
                   )}
@@ -765,7 +802,8 @@ export default function ExpensesPage() {
                   <div className="space-y-2">
                     {paidSettlements.map((s) => (
                       <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
-                        isOrganiser={false} homeCurrency={homeCurrency} onMarkPaid={() => {}} />
+                        homeCurrency={homeCurrency} onMarkPaid={() => {}}
+                        onUnpay={() => markUnpaidMutation.mutate(s.id)} />
                     ))}
                   </div>
                 </div>
@@ -794,6 +832,8 @@ export default function ExpensesPage() {
                       </p>
                       <p className="text-xs text-ink-faint">
                         {new Date(tf.transfer_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        {' · '}
+                        {new Date(tf.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                         {tf.note && <span className="ml-2 italic">{tf.note}</span>}
                       </p>
                     </div>
@@ -807,13 +847,24 @@ export default function ExpensesPage() {
                         <p className="text-[10px] text-ink-faint">~{fmt(tf.amount_home, homeCurrency)}</p>
                       )}
                     </div>
-                    {isOrganiser && (
-                      <button
-                        onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tf.id); }}
-                        className="text-ink-faint hover:text-terracotta transition-colors text-sm shrink-0 ml-1"
-                        title="Delete transfer"
-                      >×</button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setEditingTransferId(tf.id);
+                        setTfFrom(tf.from_traveller);
+                        setTfTo(tf.to_traveller);
+                        setTfAmount(String(tf.amount));
+                        setTfNote(tf.note ?? '');
+                        setTfDate(tf.transfer_date.split('T')[0]);
+                        setShowTransferForm(true);
+                      }}
+                      className="text-ink-faint hover:text-navy transition-colors text-xs shrink-0 ml-1 px-2 py-1 rounded-lg border border-parchment-dark hover:border-navy/30"
+                      title="Edit transfer"
+                    >Edit</button>
+                    <button
+                      onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tf.id); }}
+                      className="text-ink-faint hover:text-terracotta transition-colors text-sm shrink-0 ml-1"
+                      title="Delete transfer"
+                    >×</button>
                   </div>
                 ))}
               </div>

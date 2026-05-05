@@ -322,7 +322,7 @@ export default function ExpenseFormPage() {
   const equalTotal = parseFloat(form.amount) || 0;
   const equalWeightSum = travellers
     .filter((t) => form.traveller_ids.includes(t.id))
-    .reduce((s, t) => s + t.cost_split_weight, 0);
+    .reduce((s, t) => s + Number(t.cost_split_weight), 0);
   const equalShareMap: Record<string, string> = {};
   if (equalTotal > 0 && equalWeightSum > 0) {
     for (const t of travellers) {
@@ -431,10 +431,16 @@ export default function ExpenseFormPage() {
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2">
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount *</label>
-            <input type="number" step="0.01" min="0" className="vintage-input w-full"
-              value={form.amount} required
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="0.00" />
+            <div className="flex items-center border border-parchment-dark rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-navy/30">
+              <span className="px-2.5 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark h-full flex items-center py-2.5 select-none">
+                {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
+              </span>
+              <input type="number" step="0.01" min="0"
+                className="flex-1 px-3 py-2.5 text-sm outline-none bg-white"
+                value={form.amount} required
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                placeholder="0.00" />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Currency</label>
@@ -720,8 +726,10 @@ export default function ExpenseFormPage() {
                           {t.id === fam.lead_traveller_id && (
                             <Crown size={11} className="text-amber-500 flex-shrink-0" strokeWidth={2} />
                           )}
-                          {equalShareMap[t.id] && (
+                          {equalShareMap[t.id] ? (
                             <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
+                          ) : (
+                            <span className="text-xs text-ink-faint">{Number(t.cost_split_weight)}×</span>
                           )}
                         </label>
                       ))}
@@ -764,8 +772,10 @@ export default function ExpenseFormPage() {
                             {t.name.charAt(0).toUpperCase()}
                           </span>
                           <span className="text-sm text-ink flex-1">{t.name}</span>
-                          {equalShareMap[t.id] && (
+                          {equalShareMap[t.id] ? (
                             <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
+                          ) : (
+                            <span className="text-xs text-ink-faint">{Number(t.cost_split_weight)}×</span>
                           )}
                         </label>
                       ))}
