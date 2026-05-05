@@ -112,10 +112,12 @@ function SettlementRow({
           </p>
         )}
       </div>
-      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-        style={{ backgroundColor: getColour(settlement.to_traveller) }}>
-        {toName.charAt(0).toUpperCase()}
-      </span>
+      {!isPaid && (
+        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+          style={{ backgroundColor: getColour(settlement.to_traveller) }}>
+          {toName.charAt(0).toUpperCase()}
+        </span>
+      )}
       {!isPaid && canAct && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
