@@ -421,7 +421,7 @@ export default function ExpensesPage() {
         {tab === 'expenses' && (
           <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
         )}
-        {tab === 'deposits' && isOrganiser && (
+        {tab === 'deposits' && (
           <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
             + Add Deposit
           </button>
@@ -565,7 +565,7 @@ export default function ExpensesPage() {
                               {exp.notes && <p className="text-xs text-ink-faint mt-1 italic">{exp.notes}</p>}
                             </div>
                           </div>
-                          {isOrganiser && (
+                          {(isOrganiser || exp.paid_by === activeTraveller?.id) && (
                             <div className="flex gap-2 mt-3 justify-end">
                               <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
@@ -971,12 +971,12 @@ export default function ExpensesPage() {
                     )}
                     {d.notes && <p className="text-sm text-ink-faint mt-1 italic">{d.notes}</p>}
                   </div>
-                  {isOrganiser && (
+                  {(isOrganiser || d.created_by === activeTraveller?.id) && (
                     <div className="flex flex-col gap-2 shrink-0">
-                      {d.status !== 'paid' && (
+                      {isOrganiser && d.status !== 'paid' && (
                         <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'paid' })} className="btn-secondary text-xs py-1 px-2">✓ Paid</button>
                       )}
-                      {d.status === 'pending' && (
+                      {isOrganiser && d.status === 'pending' && (
                         <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'overdue' })} className="btn-danger text-xs py-1 px-2">Overdue</button>
                       )}
                       <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)} className="btn-secondary text-xs py-1 px-2">Edit</button>

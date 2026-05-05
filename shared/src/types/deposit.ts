@@ -14,6 +14,7 @@ export interface Deposit {
   linked_type: DepositLinkedType | null;
   linked_id: string | null;
   notes: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,6 +27,7 @@ export interface CreateDepositInput {
   linked_type?: DepositLinkedType;
   linked_id?: string;
   notes?: string;
+  created_by?: string;
 }
 
 export interface UpdateDepositInput extends Partial<CreateDepositInput> {

@@ -70,12 +70,13 @@ router.post('/trips/:tripId/deposits', async (req: Request, res: Response) => {
       }
     } catch { amountHome = null; }
 
+    const { created_by } = req.body;
     const result = await pool.query(
       `INSERT INTO deposits
-         (trip_id, description, amount, currency, amount_home, due_date, linked_type, linked_id, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+         (trip_id, description, amount, currency, amount_home, due_date, linked_type, linked_id, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [tripId, description, amount, currency, amountHome,
-       due_date || null, linked_type || null, linked_id || null, notes || null]
+       due_date || null, linked_type || null, linked_id || null, notes || null, created_by || null]
     );
 
     const r = result.rows[0];

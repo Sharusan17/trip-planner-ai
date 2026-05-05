@@ -469,6 +469,9 @@ const migrations = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
   `CREATE INDEX IF NOT EXISTS idx_transfers_trip ON transfers(trip_id, transfer_date DESC);`,
+
+  // 025: deposits — add created_by so non-organisers can manage their own
+  `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
 ];
 
 export async function runMigrations() {

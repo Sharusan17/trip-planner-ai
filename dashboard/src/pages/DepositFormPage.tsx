@@ -27,7 +27,7 @@ export default function DepositFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
   const qc = useQueryClient();
 
   const destCurrency = currentTrip?.dest_currency ?? 'EUR';
@@ -69,6 +69,7 @@ export default function DepositFormPage() {
       currency: form.currency, due_date: form.due_date || undefined,
       linked_type: (form.linked_type as CreateDepositInput['linked_type']) || undefined,
       notes: form.notes || undefined,
+      created_by: activeTraveller?.id,
     };
     if (isEdit && id) updateMutation.mutate({ id, data });
     else createMutation.mutate(data);
