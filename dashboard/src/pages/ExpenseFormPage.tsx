@@ -67,6 +67,15 @@ export default function ExpenseFormPage() {
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
   const [splitError, setSplitError] = useState<string>('');
+  const descRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [focusNewItem, setFocusNewItem] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (focusNewItem !== null) {
+      descRefs.current[focusNewItem]?.focus();
+      setFocusNewItem(null);
+    }
+  }, [focusNewItem]);
 
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
@@ -528,22 +537,38 @@ export default function ExpenseFormPage() {
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-semibold text-ink-faint uppercase tracking-wider">Line Items</label>
               <button type="button"
-                onClick={() => setLineItems((p) => [...p, { description: '', qty: 1, amount: '', traveller_ids: [] }])}
+                onClick={() => {
+                  const newIdx = lineItems.length;
+                  setLineItems((p) => [...p, { description: '', qty: 1, amount: '', traveller_ids: [] }]);
+                  setFocusNewItem(newIdx);
+                }}
                 className="text-xs text-navy hover:underline font-medium">+ Add item</button>
             </div>
             <div className="space-y-3">
               {lineItems.map((item, i) => (
                 <div key={i} className="border border-parchment-dark rounded-xl p-3 space-y-2">
                   <div className="flex gap-2 items-center">
-                    <input className="vintage-input flex-1 text-sm" placeholder="Item (e.g. Burger)"
+                    <input
+                      ref={(el) => { descRefs.current[i] = el; }}
+                      className="vintage-input flex-1 text-sm"
+                      placeholder="e.g. Pizza, Hotel room"
                       value={item.description}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })} />
-                    <input type="number" step="1" min="1" className="vintage-input w-14 text-sm text-center" placeholder="Qty"
-                      value={item.qty}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, parseInt(e.target.value) || 1) }; return n; })} />
-                    <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm text-right" placeholder="0.00"
-                      value={item.amount}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })} />
+                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })}
+                    />
+                    <div className="relative flex-shrink-0">
+                      {CURRENCY_SYMBOLS[form.currency] && (
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-faint pointer-events-none">
+                          {CURRENCY_SYMBOLS[form.currency]}
+                        </span>
+                      )}
+                      <input
+                        type="number" step="0.01" min="0"
+                        className={`vintage-input w-24 text-sm text-right ${CURRENCY_SYMBOLS[form.currency] ? 'pl-5' : ''}`}
+                        placeholder="0.00"
+                        value={item.amount}
+                        onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })}
+                      />
+                    </div>
                     {lineItems.length > 1 && (
                       <button type="button" onClick={() => setLineItems((p) => p.filter((_, idx) => idx !== i))}
                         className="text-terracotta text-xl leading-none flex-shrink-0 hover:opacity-70">×</button>
@@ -569,6 +594,11 @@ export default function ExpenseFormPage() {
                         </button>
                       ))}
                     </div>
+                    {item.traveller_ids.length > 0 && parseFloat(item.amount) > 0 && (
+                      <p className="text-xs text-ink-faint mt-1.5">
+                        {fmt(parseFloat(item.amount) / item.traveller_ids.length, form.currency)} each
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
