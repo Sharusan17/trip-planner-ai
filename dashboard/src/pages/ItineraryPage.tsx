@@ -287,19 +287,17 @@ export default function ItineraryPage() {
 
           {/* Route Map — synced to selected day */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-display text-base font-semibold text-ink">Route Map</h3>
-              <button
-                onClick={() => setMapShowAll((v) => !v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  mapShowAll
-                    ? 'bg-navy text-white border-navy'
-                    : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
-                }`}
-              >
-                All Days
-              </button>
-            </div>
+            <h3 className="font-display text-base font-semibold text-ink mb-1.5">Route Map</h3>
+            <button
+              onClick={() => setMapShowAll((v) => !v)}
+              className={`mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                mapShowAll
+                  ? 'bg-navy text-white border-navy'
+                  : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
+              }`}
+            >
+              All Days
+            </button>
             <TripMap selectedDayId={mapShowAll ? null : selectedDayId} days={sortedDays} />
           </div>
         </>
