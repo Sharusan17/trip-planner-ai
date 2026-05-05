@@ -16,6 +16,7 @@ import type {
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
+import { Pencil, RotateCcw } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ function depositStatusBadge(status: DepositStatus) {
 
 function SettlementRow({
   settlement, getName, getColour, homeCurrency, onMarkPaid, onUnpay,
+  activeTravellerId, isOrganiser,
 }: {
   settlement: Settlement;
   getName: (id: string) => string;
@@ -82,10 +84,14 @@ function SettlementRow({
   homeCurrency: string;
   onMarkPaid: () => void;
   onUnpay?: () => void;
+  activeTravellerId?: string;
+  isOrganiser?: boolean;
 }) {
   const fromName = getName(settlement.from_traveller);
   const toName   = getName(settlement.to_traveller);
   const isPaid   = settlement.status === 'paid';
+  const isInvolved = activeTravellerId === settlement.from_traveller || activeTravellerId === settlement.to_traveller;
+  const canAct = isOrganiser || isInvolved;
   return (
     <div className={`vintage-card p-4 flex items-center gap-3 ${isPaid ? 'opacity-70' : ''}`}>
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
@@ -110,12 +116,14 @@ function SettlementRow({
         style={{ backgroundColor: getColour(settlement.to_traveller) }}>
         {toName.charAt(0).toUpperCase()}
       </span>
-      {!isPaid && (
+      {!isPaid && canAct && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
-      {isPaid && onUnpay && (
-        <button onClick={onUnpay} className="text-xs text-ink-faint hover:text-terracotta border border-parchment-dark rounded-lg px-2 py-1 transition-colors shrink-0">
-          Undo
+      {isPaid && canAct && onUnpay && (
+        <button onClick={onUnpay}
+          className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors shrink-0"
+          title="Undo — mark as pending">
+          <RotateCcw size={14} strokeWidth={2} />
         </button>
       )}
     </div>
@@ -681,12 +689,31 @@ export default function ExpensesPage() {
 
           {settLoading ? (
             <p className="text-ink-faint text-center py-8">Calculating settlements…</p>
-          ) : pendingSettlements.length === 0 && paidSettlements.length === 0 ? (
-            <div className="vintage-card text-center py-12">
-              <p className="text-3xl mb-2">✅</p>
-              <p className="font-semibold text-ink mb-1">All settled up!</p>
-              <p className="text-sm text-ink-faint">No outstanding balances. Add expenses to see who owes whom.</p>
-            </div>
+          ) : pendingSettlements.length === 0 ? (
+            <>
+              <div className="vintage-card text-center py-10">
+                <p className="text-3xl mb-2">✅</p>
+                <p className="font-semibold text-ink mb-1">All settled up!</p>
+                <p className="text-sm text-ink-faint">
+                  {paidSettlements.length > 0
+                    ? `${paidSettlements.length} payment${paidSettlements.length !== 1 ? 's' : ''} completed.`
+                    : 'No outstanding balances. Add expenses to see who owes whom.'}
+                </p>
+              </div>
+              {paidSettlements.length > 0 && (
+                <div>
+                  <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">Completed ({paidSettlements.length})</h2>
+                  <div className="space-y-2">
+                    {paidSettlements.map((s) => (
+                      <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
+                        homeCurrency={homeCurrency} onMarkPaid={() => {}}
+                        onUnpay={() => markUnpaidMutation.mutate(s.id)}
+                        activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="space-y-4">
               {/* Family view toggle — only shown when families exist */}
@@ -789,7 +816,8 @@ export default function ExpensesPage() {
                     <div className="space-y-2">
                       {pendingSettlements.map((s) => (
                         <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
-                          homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)} />
+                          homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)}
+                          activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
                       ))}
                     </div>
                   )}
@@ -803,7 +831,8 @@ export default function ExpensesPage() {
                     {paidSettlements.map((s) => (
                       <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
                         homeCurrency={homeCurrency} onMarkPaid={() => {}}
-                        onUnpay={() => markUnpaidMutation.mutate(s.id)} />
+                        onUnpay={() => markUnpaidMutation.mutate(s.id)}
+                        activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
                     ))}
                   </div>
                 </div>
@@ -847,24 +876,28 @@ export default function ExpensesPage() {
                         <p className="text-[10px] text-ink-faint">~{fmt(tf.amount_home, homeCurrency)}</p>
                       )}
                     </div>
-                    <button
-                      onClick={() => {
-                        setEditingTransferId(tf.id);
-                        setTfFrom(tf.from_traveller);
-                        setTfTo(tf.to_traveller);
-                        setTfAmount(String(tf.amount));
-                        setTfNote(tf.note ?? '');
-                        setTfDate(tf.transfer_date.split('T')[0]);
-                        setShowTransferForm(true);
-                      }}
-                      className="text-ink-faint hover:text-navy transition-colors text-xs shrink-0 ml-1 px-2 py-1 rounded-lg border border-parchment-dark hover:border-navy/30"
-                      title="Edit transfer"
-                    >Edit</button>
-                    <button
-                      onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tf.id); }}
-                      className="text-ink-faint hover:text-terracotta transition-colors text-sm shrink-0 ml-1"
-                      title="Delete transfer"
-                    >×</button>
+                    {(isOrganiser || activeTraveller?.id === tf.from_traveller || activeTraveller?.id === tf.to_traveller) && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditingTransferId(tf.id);
+                            setTfFrom(tf.from_traveller);
+                            setTfTo(tf.to_traveller);
+                            setTfAmount(String(tf.amount));
+                            setTfNote(tf.note ?? '');
+                            setTfDate(tf.transfer_date.split('T')[0]);
+                            setShowTransferForm(true);
+                          }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors shrink-0"
+                          title="Edit transfer"
+                        ><Pencil size={13} strokeWidth={2} /></button>
+                        <button
+                          onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tf.id); }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-terracotta hover:border-terracotta/30 transition-colors shrink-0"
+                          title="Delete transfer"
+                        >×</button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
