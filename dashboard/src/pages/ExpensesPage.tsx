@@ -157,13 +157,6 @@ export default function ExpensesPage() {
   // ── settlements state
   const [familyView, setFamilyView] = useState(false);
   const [expandedFamilyGroups, setExpandedFamilyGroups] = useState<Set<string>>(new Set());
-  const [showTransferForm, setShowTransferForm] = useState(false);
-  const [editingTransferId, setEditingTransferId] = useState<string | null>(null);
-  const [tfFrom, setTfFrom] = useState('');
-  const [tfTo, setTfTo] = useState('');
-  const [tfAmount, setTfAmount] = useState('');
-  const [tfNote, setTfNote] = useState('');
-  const [tfDate, setTfDate] = useState(new Date().toISOString().split('T')[0]);
 
   // ── deposits state
   const [depositStatusTab, setDepositStatusTab] = useState<'all' | DepositStatus>('all');
@@ -281,31 +274,6 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
   });
 
-  function resetTransferForm() {
-    setShowTransferForm(false);
-    setEditingTransferId(null);
-    setTfFrom(''); setTfTo(''); setTfAmount(''); setTfNote('');
-    setTfDate(new Date().toISOString().split('T')[0]);
-  }
-
-  const createTransferMutation = useMutation({
-    mutationFn: (data: Parameters<typeof settlementsApi.createTransfer>[1]) =>
-      settlementsApi.createTransfer(currentTrip!.id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['transfers'] });
-      qc.invalidateQueries({ queryKey: ['settlements'] });
-      resetTransferForm();
-    },
-  });
-  const updateTransferMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof settlementsApi.updateTransfer>[1] }) =>
-      settlementsApi.updateTransfer(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['transfers'] });
-      qc.invalidateQueries({ queryKey: ['settlements'] });
-      resetTransferForm();
-    },
-  });
   const deleteTransferMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.deleteTransfer(id),
     onSuccess: () => {
@@ -429,7 +397,7 @@ export default function ExpensesPage() {
           </button>
         )}
         {tab === 'settlements' && (
-          <button className="btn-secondary text-sm" onClick={() => { setShowTransferForm(true); setTfFrom(activeTraveller?.id ?? ''); }}>
+          <button className="btn-secondary text-sm" onClick={() => navigate('/expenses/transfers/add')}>
             + Record Transfer
           </button>
         )}
@@ -587,87 +555,6 @@ export default function ExpensesPage() {
       {/* ══ TAB: SETTLEMENTS ═══════════════════════════════════════════════════ */}
       {tab === 'settlements' && (
         <>
-          {/* Transfer form modal */}
-          {showTransferForm && (
-            <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-              <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => setShowTransferForm(false)} />
-              <div className="relative bg-white rounded-t-2xl md:rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-                <h3 className="font-display text-lg font-bold text-ink">{editingTransferId ? 'Edit Transfer' : 'Record Transfer'}</h3>
-                <p className="text-xs text-ink-faint -mt-2">Log a cash payment between two people. This offsets their settlement balance automatically.</p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">From</label>
-                    <select className="vintage-input w-full text-sm" value={tfFrom} onChange={(e) => setTfFrom(e.target.value)}>
-                      <option value="">Select…</option>
-                      {travellers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">To</label>
-                    <select className="vintage-input w-full text-sm" value={tfTo} onChange={(e) => setTfTo(e.target.value)}>
-                      <option value="">Select…</option>
-                      {travellers.filter((t) => t.id !== tfFrom).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount</label>
-                    <input type="number" step="0.01" min="0" className="vintage-input w-full text-sm"
-                      placeholder="0.00" value={tfAmount} onChange={(e) => setTfAmount(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Date</label>
-                    <input type="date" className="vintage-input w-full text-sm" value={tfDate} onChange={(e) => setTfDate(e.target.value)} />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Note (optional)</label>
-                  <input className="vintage-input w-full text-sm" placeholder="e.g. Cash handover at airport"
-                    value={tfNote} onChange={(e) => setTfNote(e.target.value)} />
-                </div>
-
-                <div className="flex gap-3 pt-1">
-                  <button type="button" className="btn-secondary flex-1" onClick={resetTransferForm}>Cancel</button>
-                  <button
-                    type="button"
-                    className="btn-primary flex-1 disabled:opacity-50"
-                    disabled={!tfFrom || !tfTo || !tfAmount || parseFloat(tfAmount) <= 0 || createTransferMutation.isPending || updateTransferMutation.isPending}
-                    onClick={() => {
-                      if (editingTransferId) {
-                        updateTransferMutation.mutate({
-                          id: editingTransferId,
-                          data: {
-                            from_traveller: tfFrom,
-                            to_traveller: tfTo,
-                            amount: parseFloat(tfAmount),
-                            currency: homeCurrency,
-                            note: tfNote || undefined,
-                            transfer_date: tfDate,
-                          },
-                        });
-                      } else {
-                        createTransferMutation.mutate({
-                          from_traveller: tfFrom,
-                          to_traveller: tfTo,
-                          amount: parseFloat(tfAmount),
-                          currency: homeCurrency,
-                          note: tfNote || undefined,
-                          transfer_date: tfDate,
-                        });
-                      }
-                    }}
-                  >
-                    {(createTransferMutation.isPending || updateTransferMutation.isPending) ? 'Saving…' : editingTransferId ? 'Save Changes' : 'Record Transfer'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {Object.keys(balanceMap).length > 0 && (
             <div className="vintage-card p-4">
               <h2 className="text-sm font-semibold text-ink-faint mb-3">Net Balances</h2>
@@ -881,15 +768,7 @@ export default function ExpensesPage() {
                     {(isOrganiser || activeTraveller?.id === tf.from_traveller || activeTraveller?.id === tf.to_traveller) && (
                       <>
                         <button
-                          onClick={() => {
-                            setEditingTransferId(tf.id);
-                            setTfFrom(tf.from_traveller);
-                            setTfTo(tf.to_traveller);
-                            setTfAmount(String(tf.amount));
-                            setTfNote(tf.note ?? '');
-                            setTfDate(tf.transfer_date.split('T')[0]);
-                            setShowTransferForm(true);
-                          }}
+                          onClick={() => navigate(`/expenses/transfers/${tf.id}/edit`)}
                           className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors shrink-0"
                           title="Edit transfer"
                         ><Pencil size={13} strokeWidth={2} /></button>
