@@ -1007,8 +1007,8 @@ export default function ExpensesPage() {
             <div>
               <label className="block text-sm font-display text-ink-light mb-1">{currFrom}</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-ink-faint">{fromSym}</span>
-                <input className="vintage-input pl-8 text-2xl font-display" type="number" min="0" step="0.01"
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-faint select-none">{fromSym}</span>
+                <input className="vintage-input pl-9 text-2xl font-display" type="number" min="0" step="0.01"
                   value={currAmount} onChange={(e) => setCurrAmount(e.target.value)} />
               </div>
             </div>
