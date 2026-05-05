@@ -1021,8 +1021,8 @@ export default function ExpensesPage() {
             <div>
               <label className="block text-sm font-display text-ink-light mb-1">{currTo}</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-ink-faint">{toSym}</span>
-                <div className="vintage-input pl-8 text-2xl font-display bg-parchment-dark/30 min-h-[3rem] flex items-center">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-faint select-none">{toSym}</span>
+                <div className="vintage-input pl-9 text-2xl font-display bg-parchment-dark/30 min-h-[3rem] flex items-center">
                   {conversion ? conversion.converted.toFixed(2) : '0.00'}
                 </div>
               </div>
