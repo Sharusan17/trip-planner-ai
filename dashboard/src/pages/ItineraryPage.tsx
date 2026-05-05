@@ -25,8 +25,9 @@ export default function ItineraryPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [mapShowAll, setMapShowAll] = useState(false);
   const hasInitDays = useRef(false);
-  const [editingTitle, setEditingTitle] = useState<string | null>(null); // dayId being edited
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
 
   const { data: days = [], isLoading } = useQuery({
@@ -286,8 +287,20 @@ export default function ItineraryPage() {
 
           {/* Route Map — synced to selected day */}
           <div>
-            <h3 className="font-display text-base font-semibold text-ink mb-2">Route Map</h3>
-            <TripMap selectedDayId={selectedDayId} days={sortedDays} />
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-display text-base font-semibold text-ink">Route Map</h3>
+              <button
+                onClick={() => setMapShowAll((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  mapShowAll
+                    ? 'bg-navy text-white border-navy'
+                    : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
+                }`}
+              >
+                All Days
+              </button>
+            </div>
+            <TripMap selectedDayId={mapShowAll ? null : selectedDayId} days={sortedDays} />
           </div>
         </>
       )}

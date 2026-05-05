@@ -155,24 +155,60 @@ export default function TripMap({ selectedDayId, days }: TripMapProps) {
 
   return (
     <div className="space-y-2">
-      {/* Search toggle row */}
-      <div className="flex items-center gap-2">
-        {pinnedPlaces.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 flex-1">
-            {pinnedPlaces.map((p) => (
-              <div key={p.id} className="flex items-center gap-1 bg-gold/10 border border-gold/30 text-gold-aged text-xs font-medium px-2 py-0.5 rounded-full">
-                <MapPin size={9} />
-                <span className="max-w-[120px] truncate">{p.name}</span>
-                <button onClick={() => removePin(p.id)} className="text-gold-aged/60 hover:text-gold-aged ml-0.5">
-                  <X size={10} />
-                </button>
+      {/* Pinned place chips */}
+      {pinnedPlaces.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {pinnedPlaces.map((p) => (
+            <div key={p.id} className="flex items-center gap-1 bg-gold/10 border border-gold/30 text-gold-aged text-xs font-medium px-2 py-0.5 rounded-full">
+              <MapPin size={9} />
+              <span className="max-w-[120px] truncate">{p.name}</span>
+              <button onClick={() => removePin(p.id)} className="text-gold-aged/60 hover:text-gold-aged ml-0.5">
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Search row — button + inline expanding input */}
+      <div className="flex items-center justify-end gap-2 relative">
+        {searchOpen && (
+          <div className="relative w-44 sm:w-52">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
+            <input
+              autoFocus
+              className="vintage-input w-full pl-7 pr-7 text-xs py-1.5"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              onFocus={() => searchResults.length > 0 && setShowResults(true)}
+              onBlur={() => setTimeout(() => setShowResults(false), 200)}
+              placeholder="Search landmark…"
+            />
+            {searchQuery && (
+              <button onClick={clearSearch} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink">
+                <X size={11} />
+              </button>
+            )}
+            {showResults && searchResults.length > 0 && (
+              <div className="absolute z-[1000] right-0 top-full mt-1 w-64 bg-white border border-parchment-dark rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                {searchResults.map((r) => (
+                  <button key={r.place_id} type="button"
+                    className="w-full text-left px-3 py-2.5 hover:bg-parchment/60 border-b border-parchment-dark last:border-0 transition-colors flex items-start gap-2"
+                    onMouseDown={() => pinResult(r)}>
+                    <MapPin size={12} className="text-gold mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink truncate">{r.display_name.split(',')[0]}</div>
+                      <div className="text-xs text-ink-faint truncate">{r.display_name}</div>
+                    </div>
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
         <button
           onClick={toggleSearch}
-          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex-shrink-0 ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex-shrink-0 ${
             searchOpen
               ? 'bg-navy text-white border-navy'
               : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
@@ -182,42 +218,6 @@ export default function TripMap({ selectedDayId, days }: TripMapProps) {
           {searchOpen ? 'Close' : 'Search'}
         </button>
       </div>
-
-      {/* Expandable search input */}
-      {searchOpen && (
-        <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
-          <input
-            autoFocus
-            className="vintage-input w-full pl-8 pr-8 text-sm"
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            onFocus={() => searchResults.length > 0 && setShowResults(true)}
-            onBlur={() => setTimeout(() => setShowResults(false), 200)}
-            placeholder="Search for a landmark…"
-          />
-          {searchQuery && (
-            <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink">
-              <X size={13} />
-            </button>
-          )}
-          {showResults && searchResults.length > 0 && (
-            <div className="absolute z-[1000] left-0 right-0 top-full mt-1 bg-white border border-parchment-dark rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
-              {searchResults.map((r) => (
-                <button key={r.place_id} type="button"
-                  className="w-full text-left px-3 py-2.5 hover:bg-parchment/60 border-b border-parchment-dark last:border-0 transition-colors flex items-start gap-2"
-                  onMouseDown={() => pinResult(r)}>
-                  <MapPin size={12} className="text-gold mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-ink truncate">{r.display_name.split(',')[0]}</div>
-                    <div className="text-xs text-ink-faint truncate">{r.display_name}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Map */}
       <div className="h-[38vh] md:h-[45vh] rounded-2xl overflow-hidden border border-parchment-dark shadow-[var(--shadow-card)]">
