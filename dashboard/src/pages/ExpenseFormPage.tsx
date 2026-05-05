@@ -9,7 +9,7 @@ import { travellersApi } from '@/api/travellers';
 import { familiesApi } from '@/api/families';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown } from 'lucide-react';
+import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown, Trash2 } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -553,31 +553,45 @@ export default function ExpenseFormPage() {
             <div className="space-y-3">
               {lineItems.map((item, i) => (
                 <div key={i} className="border border-parchment-dark rounded-xl p-3 space-y-2">
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-1.5 items-center">
+                    {/* Qty — small */}
+                    <input
+                      type="number" step="1" min="1"
+                      className="vintage-input w-10 text-sm text-center flex-shrink-0 px-1"
+                      placeholder="1"
+                      value={item.qty}
+                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, parseInt(e.target.value) || 1) }; return n; })}
+                    />
+                    {/* Description */}
                     <input
                       ref={(el) => { descRefs.current[i] = el; }}
-                      className="vintage-input flex-1 text-sm"
+                      className="vintage-input flex-1 text-sm min-w-0"
                       placeholder="e.g. Pizza, Hotel room"
                       value={item.description}
                       onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })}
                     />
-                    <div className="relative flex-shrink-0">
+                    {/* Currency symbol + amount */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {CURRENCY_SYMBOLS[form.currency] && (
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-faint pointer-events-none">
-                          {CURRENCY_SYMBOLS[form.currency]}
-                        </span>
+                        <span className="text-xs text-ink-faint select-none">{CURRENCY_SYMBOLS[form.currency]}</span>
                       )}
                       <input
                         type="number" step="0.01" min="0"
-                        className={`vintage-input w-24 text-sm text-right ${CURRENCY_SYMBOLS[form.currency] ? 'pl-5' : ''}`}
+                        className="vintage-input w-20 text-sm text-right"
                         placeholder="0.00"
                         value={item.amount}
                         onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!isNaN(v)) setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: v.toFixed(2) }; return n; });
+                        }}
                       />
                     </div>
                     {lineItems.length > 1 && (
                       <button type="button" onClick={() => setLineItems((p) => p.filter((_, idx) => idx !== i))}
-                        className="text-terracotta text-xl leading-none flex-shrink-0 hover:opacity-70">×</button>
+                        className="text-ink-faint hover:text-terracotta transition-colors flex-shrink-0">
+                        <Trash2 size={14} strokeWidth={1.75} />
+                      </button>
                     )}
                   </div>
                   <div>
@@ -591,8 +605,10 @@ export default function ExpenseFormPage() {
                             n[i] = { ...n[i], traveller_ids: ids.includes(t.id) ? ids.filter((x) => x !== t.id) : [...ids, t.id] };
                             return n;
                           })}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
-                            item.traveller_ids.includes(t.id) ? 'bg-navy text-white' : 'bg-parchment-dark/30 text-ink hover:bg-parchment-dark/60'
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
+                            item.traveller_ids.includes(t.id)
+                              ? 'bg-navy text-white border-navy'
+                              : 'bg-white border-parchment-dark text-ink-light hover:border-navy/40 hover:text-ink'
                           }`}>
                           <span className="w-4 h-4 rounded-full inline-flex items-center justify-center text-[10px] text-white font-bold flex-shrink-0"
                             style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
@@ -602,7 +618,9 @@ export default function ExpenseFormPage() {
                     </div>
                     {item.traveller_ids.length > 0 && parseFloat(item.amount) > 0 && (
                       <p className="text-xs text-ink-faint mt-1.5">
-                        {fmt(parseFloat(item.amount) / item.traveller_ids.length, form.currency)} each
+                        {item.traveller_ids.length === 1
+                          ? `${fmt(parseFloat(item.amount), form.currency)} for ${travellers.find((t) => t.id === item.traveller_ids[0])?.name ?? 'them'}`
+                          : `${fmt((parseFloat(item.amount) * item.qty) / item.traveller_ids.length, form.currency)} each`}
                       </p>
                     )}
                   </div>
