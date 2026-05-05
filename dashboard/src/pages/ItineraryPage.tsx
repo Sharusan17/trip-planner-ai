@@ -6,6 +6,7 @@ import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
 import { Plus, Trash2, Pencil, MapPin, CalendarDays, Check } from 'lucide-react';
 import { parseLocalDate } from '@/utils/date';
+import TripMap from '@/components/TripMap';
 
 const ACTIVITY_COLOURS: Record<ActivityType, { bg: string; text: string; border: string }> = {
   flight:        { bg: 'bg-blue-50',   text: 'text-blue-600',   border: '#3B82F6' },
@@ -282,6 +283,12 @@ export default function ItineraryPage() {
               </div>
             </div>
           )}
+
+          {/* Route Map — synced to selected day */}
+          <div>
+            <h3 className="font-display text-base font-semibold text-ink mb-2">Route Map</h3>
+            <TripMap selectedDayId={selectedDayId} days={sortedDays} />
+          </div>
         </>
       )}
 

@@ -1,10 +1,8 @@
 import { useState, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { useQuery } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
-import { itineraryApi } from '@/api/itinerary';
-import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
+import { ACTIVITY_ICONS, type ActivityType, type ItineraryDay } from '@trip-planner-ai/shared';
 import { Search, X, MapPin } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
@@ -19,7 +17,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-const DAY_COLOURS = [
+export const DAY_COLOURS = [
   '#2563EB', '#F97316', '#10B981', '#8B5CF6', '#EC4899',
   '#F59E0B', '#06B6D4', '#EF4444', '#64748B', '#D97706',
 ];
@@ -58,18 +56,20 @@ function createSearchMarker() {
   });
 }
 
-// Helper to fly map to a position
 function FlyTo({ pos }: { pos: [number, number] | null }) {
   const map = useMap();
   if (pos) map.flyTo(pos, 15, { duration: 1.2 });
   return null;
 }
 
-export default function MapPage() {
-  const { currentTrip } = useTrip();
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+interface TripMapProps {
+  selectedDayId: string | null;
+  days: ItineraryDay[];
+}
 
-  // Landmark search
+export default function TripMap({ selectedDayId, days }: TripMapProps) {
+  const { currentTrip } = useTrip();
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -77,24 +77,18 @@ export default function MapPage() {
   const [flyTo, setFlyTo] = useState<[number, number] | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: days = [] } = useQuery({
-    queryKey: ['days', currentTrip?.id],
-    queryFn: () => itineraryApi.getDays(currentTrip!.id),
-    enabled: !!currentTrip,
-  });
-
   const filteredActivities = useMemo(() => {
     return days.flatMap((day) =>
       day.activities
         .filter((a) => a.latitude && a.longitude)
-        .filter(() => selectedDay === null || day.day_number === selectedDay)
+        .filter(() => selectedDayId === null || day.id === selectedDayId)
         .map((a) => ({ ...a, day_number: day.day_number, day_title: day.title }))
     );
-  }, [days, selectedDay]);
+  }, [days, selectedDayId]);
 
   const routeLines = useMemo(() => {
     const lines: { positions: [number, number][]; colour: string }[] = [];
-    const daysToShow = selectedDay !== null ? days.filter((d) => d.day_number === selectedDay) : days;
+    const daysToShow = selectedDayId !== null ? days.filter((d) => d.id === selectedDayId) : days;
     for (const day of daysToShow) {
       const coords = day.activities
         .filter((a) => a.latitude && a.longitude)
@@ -104,7 +98,7 @@ export default function MapPage() {
       }
     }
     return lines;
-  }, [days, selectedDay]);
+  }, [days, selectedDayId]);
 
   function handleSearch(q: string) {
     setSearchQuery(q);
@@ -113,7 +107,7 @@ export default function MapPage() {
     searchTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6`
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=4`
         );
         const data: SearchResult[] = await res.json();
         setSearchResults(data);
@@ -138,7 +132,6 @@ export default function MapPage() {
     setFlyTo([place.lat, place.lon]);
     setSearchQuery(place.name);
     setShowResults(false);
-    // Reset flyTo after animation so it can trigger again if same place clicked
     setTimeout(() => setFlyTo(null), 2000);
   }
 
@@ -152,93 +145,82 @@ export default function MapPage() {
     setShowResults(false);
   }
 
+  function toggleSearch() {
+    if (searchOpen) { clearSearch(); }
+    setSearchOpen(!searchOpen);
+  }
+
   if (!currentTrip) return null;
   const center: [number, number] = [currentTrip.latitude, currentTrip.longitude];
 
   return (
-    <div className="space-y-4">
-      <h2 className="font-display text-2xl font-bold text-navy">Map</h2>
+    <div className="space-y-2">
+      {/* Search toggle row */}
+      <div className="flex items-center gap-2">
+        {pinnedPlaces.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 flex-1">
+            {pinnedPlaces.map((p) => (
+              <div key={p.id} className="flex items-center gap-1 bg-gold/10 border border-gold/30 text-gold-aged text-xs font-medium px-2 py-0.5 rounded-full">
+                <MapPin size={9} />
+                <span className="max-w-[120px] truncate">{p.name}</span>
+                <button onClick={() => removePin(p.id)} className="text-gold-aged/60 hover:text-gold-aged ml-0.5">
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={toggleSearch}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex-shrink-0 ${
+            searchOpen
+              ? 'bg-navy text-white border-navy'
+              : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
+          }`}
+        >
+          <Search size={12} />
+          {searchOpen ? 'Close' : 'Search'}
+        </button>
+      </div>
 
-      {/* Landmark search */}
-      <div className="relative">
+      {/* Expandable search input */}
+      {searchOpen && (
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
           <input
-            className="vintage-input w-full pl-9 pr-9"
+            autoFocus
+            className="vintage-input w-full pl-8 pr-8 text-sm"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             onFocus={() => searchResults.length > 0 && setShowResults(true)}
             onBlur={() => setTimeout(() => setShowResults(false), 200)}
-            placeholder="Search for a landmark or place…"
+            placeholder="Search for a landmark…"
           />
           {searchQuery && (
-            <button onClick={clearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink">
-              <X size={14} />
+            <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink">
+              <X size={13} />
             </button>
           )}
-        </div>
-        {showResults && searchResults.length > 0 && (
-          <div className="absolute z-[1000] left-0 right-0 top-full mt-1 bg-white border border-parchment-dark rounded-xl shadow-lg overflow-hidden max-h-60 overflow-y-auto">
-            {searchResults.map((r) => (
-              <button key={r.place_id} type="button"
-                className="w-full text-left px-4 py-2.5 hover:bg-parchment/60 border-b border-parchment-dark last:border-0 transition-colors flex items-start gap-2"
-                onMouseDown={() => pinResult(r)}>
-                <MapPin size={13} className="text-gold mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-ink truncate">{r.display_name.split(',')[0]}</div>
-                  <div className="text-xs text-ink-faint truncate">{r.display_name}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Pinned places chips */}
-      {pinnedPlaces.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {pinnedPlaces.map((p) => (
-            <div key={p.id} className="flex items-center gap-1.5 bg-gold/10 border border-gold/30 text-gold-aged text-xs font-medium px-2.5 py-1 rounded-full">
-              <MapPin size={10} />
-              <span className="max-w-[160px] truncate">{p.name}</span>
-              <button onClick={() => removePin(p.id)} className="text-gold-aged/60 hover:text-gold-aged ml-0.5">
-                <X size={11} />
-              </button>
+          {showResults && searchResults.length > 0 && (
+            <div className="absolute z-[1000] left-0 right-0 top-full mt-1 bg-white border border-parchment-dark rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+              {searchResults.map((r) => (
+                <button key={r.place_id} type="button"
+                  className="w-full text-left px-3 py-2.5 hover:bg-parchment/60 border-b border-parchment-dark last:border-0 transition-colors flex items-start gap-2"
+                  onMouseDown={() => pinResult(r)}>
+                  <MapPin size={12} className="text-gold mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ink truncate">{r.display_name.split(',')[0]}</div>
+                    <div className="text-xs text-ink-faint truncate">{r.display_name}</div>
+                  </div>
+                </button>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      {/* Day filter pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-        <button
-          onClick={() => setSelectedDay(null)}
-          className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium transition-all border ${
-            selectedDay === null ? 'bg-navy border-navy text-white' : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
-          }`}
-        >
-          All Days
-        </button>
-        {days.map((day) => {
-          const colour = DAY_COLOURS[(day.day_number - 1) % DAY_COLOURS.length];
-          const isActive = selectedDay === day.day_number;
-          return (
-            <button key={day.day_number}
-              onClick={() => setSelectedDay(day.day_number === selectedDay ? null : day.day_number)}
-              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium transition-all border ${
-                isActive ? 'text-white border-transparent' : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
-              }`}
-              style={isActive ? { backgroundColor: colour, borderColor: colour } : {}}
-            >
-              Day {day.day_number}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Map */}
-      <div className="map-viewport rounded-2xl overflow-hidden border border-parchment-dark shadow-[var(--shadow-card)]">
+      <div className="h-[38vh] md:h-[45vh] rounded-2xl overflow-hidden border border-parchment-dark shadow-[var(--shadow-card)]">
         <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -246,10 +228,8 @@ export default function MapPage() {
             subdomains="abcd"
             maxZoom={19}
           />
-
           <FlyTo pos={flyTo} />
 
-          {/* Activity markers */}
           {filteredActivities.map((a, i) => (
             <Marker
               key={a.id}
@@ -268,7 +248,6 @@ export default function MapPage() {
             </Marker>
           ))}
 
-          {/* Searched landmark pins */}
           {pinnedPlaces.map((p) => (
             <Marker key={p.id} position={[p.lat, p.lon]} icon={createSearchMarker()}>
               <Popup>
@@ -280,7 +259,6 @@ export default function MapPage() {
             </Marker>
           ))}
 
-          {/* Route lines */}
           {routeLines.map((line, i) => (
             <Polyline key={i} positions={line.positions}
               pathOptions={{ color: line.colour, weight: 3, opacity: 0.7, dashArray: '8 5' }} />
@@ -289,42 +267,32 @@ export default function MapPage() {
       </div>
 
       {/* Stop list */}
-      {filteredActivities.length > 0 ? (
+      {filteredActivities.length > 0 && (
         <div className="vintage-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-parchment-dark flex items-center justify-between">
-            <h3 className="font-display text-sm font-semibold text-ink">
+          <div className="px-4 py-2.5 border-b border-parchment-dark flex items-center justify-between">
+            <span className="font-display text-sm font-semibold text-ink">
               {filteredActivities.length} Stop{filteredActivities.length !== 1 ? 's' : ''}
-            </h3>
+            </span>
             <span className="text-xs text-ink-faint">Tap a marker for details</span>
           </div>
-          <div className="divide-y divide-parchment-dark max-h-64 overflow-y-auto">
+          <div className="divide-y divide-parchment-dark max-h-48 overflow-y-auto">
             {filteredActivities.map((a, i) => {
               const colour = DAY_COLOURS[(a.day_number - 1) % DAY_COLOURS.length];
               return (
-                <div key={a.id} className="flex items-center gap-3 px-4 py-3 hover:bg-parchment/50 transition-colors">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-parchment/50 transition-colors">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
                     style={{ backgroundColor: colour }}>{i + 1}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-ink truncate">{a.description}</p>
                     <p className="text-xs text-ink-faint">
-                      Day {a.day_number}
-                      {a.time && ` · ${a.time.slice(0, 5)}`}
-                      {a.location_tag && ` · ${a.location_tag}`}
+                      Day {a.day_number}{a.time && ` · ${a.time.slice(0, 5)}`}{a.location_tag && ` · ${a.location_tag}`}
                     </p>
                   </div>
-                  <span className="text-base flex-shrink-0">{ACTIVITY_ICONS[a.type as ActivityType]}</span>
+                  <span className="text-sm flex-shrink-0">{ACTIVITY_ICONS[a.type as ActivityType]}</span>
                 </div>
               );
             })}
           </div>
-        </div>
-      ) : (
-        <div className="vintage-card p-5 sm:p-8 text-center">
-          <MapPin size={32} className="text-ink-faint mx-auto mb-3" strokeWidth={1.5} />
-          <p className="text-sm font-medium text-ink-light">No mapped stops</p>
-          <p className="text-xs text-ink-faint mt-1">
-            Use the search above to explore landmarks, or add locations when creating activities.
-          </p>
         </div>
       )}
     </div>
