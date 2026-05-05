@@ -726,9 +726,9 @@ export default function ExpenseFormPage() {
                           {t.id === fam.lead_traveller_id && (
                             <Crown size={11} className="text-amber-500 flex-shrink-0" strokeWidth={2} />
                           )}
-                          {equalShareMap[t.id] && (
-                            <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
-                          )}
+                          <span className={`text-xs font-semibold ${equalShareMap[t.id] ? 'text-navy' : 'text-ink-faint'}`}>
+                            {equalShareMap[t.id] ?? fmt(0, form.currency)}
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -770,9 +770,9 @@ export default function ExpenseFormPage() {
                             {t.name.charAt(0).toUpperCase()}
                           </span>
                           <span className="text-sm text-ink flex-1">{t.name}</span>
-                          {equalShareMap[t.id] && (
-                            <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
-                          )}
+                          <span className={`text-xs font-semibold ${equalShareMap[t.id] ? 'text-navy' : 'text-ink-faint'}`}>
+                            {equalShareMap[t.id] ?? fmt(0, form.currency)}
+                          </span>
                         </label>
                       ))}
                     </div>
