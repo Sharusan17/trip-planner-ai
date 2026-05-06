@@ -572,8 +572,14 @@ export default function ExpenseFormPage() {
                       className="vintage-input text-xs text-center flex-shrink-0"
                       style={{ width: '2rem', height: '2rem', padding: '0' }}
                       placeholder="1"
-                      value={item.qty}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, parseInt(e.target.value) || 1) }; return n; })}
+                      value={item.qty || ''}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: isNaN(v) ? 0 : v }; return n; });
+                      }}
+                      onBlur={() => {
+                        setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, n[i].qty || 1) }; return n; });
+                      }}
                     />
                     {/* Description */}
                     <input
