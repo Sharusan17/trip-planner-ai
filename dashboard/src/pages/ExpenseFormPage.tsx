@@ -537,7 +537,16 @@ export default function ExpenseFormPage() {
           <div className="grid grid-cols-3 gap-2">
             {SPLIT_MODES.map(({ key, label }) => (
               <button key={key} type="button"
-                onClick={() => setForm({ ...form, split_mode: key })}
+                onClick={() => {
+                  if (key === 'custom' && form.split_mode === 'itemised') {
+                    const computed = computeItemisedSplits();
+                    const cs: Record<string, string> = {};
+                    for (const [tid, amt] of Object.entries(computed)) cs[tid] = String(amt);
+                    setForm({ ...form, split_mode: 'custom', custom_splits: cs });
+                  } else {
+                    setForm({ ...form, split_mode: key });
+                  }
+                }}
                 className={`py-2 rounded-xl text-sm font-medium transition-colors border ${
                   form.split_mode === key
                     ? 'bg-[#1C1917] text-white border-[#1C1917]'
