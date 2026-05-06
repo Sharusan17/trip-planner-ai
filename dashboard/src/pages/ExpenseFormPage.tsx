@@ -552,12 +552,13 @@ export default function ExpenseFormPage() {
             </div>
             <div className="space-y-3">
               {lineItems.map((item, i) => (
-                <div key={i} className="border border-parchment-dark rounded-xl p-3 space-y-2">
+                <div key={i} className="border border-parchment-dark rounded-xl p-2.5 space-y-1.5">
                   <div className="flex gap-1.5 items-center">
-                    {/* Qty — small */}
+                    {/* Qty — small square; inline style overrides vintage-input's width:100% */}
                     <input
                       type="number" step="1" min="1"
-                      className="vintage-input w-10 text-sm text-center flex-shrink-0 px-1"
+                      className="vintage-input text-xs text-center flex-shrink-0"
+                      style={{ width: '2rem', height: '2rem', padding: '0' }}
                       placeholder="1"
                       value={item.qty}
                       onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, parseInt(e.target.value) || 1) }; return n; })}
@@ -566,6 +567,7 @@ export default function ExpenseFormPage() {
                     <input
                       ref={(el) => { descRefs.current[i] = el; }}
                       className="vintage-input flex-1 text-sm min-w-0"
+                      style={{ height: '2rem', padding: '0 0.5rem' }}
                       placeholder="e.g. Pizza, Hotel room"
                       value={item.description}
                       onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })}
@@ -577,7 +579,8 @@ export default function ExpenseFormPage() {
                       )}
                       <input
                         type="number" step="0.01" min="0"
-                        className="vintage-input w-20 text-sm text-right"
+                        className="vintage-input text-sm text-right"
+                        style={{ width: '5rem', height: '2rem', padding: '0 0.5rem' }}
                         placeholder="0.00"
                         value={item.amount}
                         onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })}

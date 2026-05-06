@@ -472,6 +472,13 @@ const migrations = [
 
   // 025: deposits — add created_by so non-organisers can manage their own
   `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+
+  // 026: add 'itemised' to split_mode enum (was missing, caused 500 on itemised expense save)
+  `ALTER TYPE split_mode ADD VALUE IF NOT EXISTS 'itemised';`,
+
+  // 027: backfill split_with_ids on expense_claim_responses (column missing if table pre-dated this field)
+  `ALTER TABLE expense_claim_responses
+     ADD COLUMN IF NOT EXISTS split_with_ids JSONB DEFAULT '[]';`,
 ];
 
 export async function runMigrations() {
