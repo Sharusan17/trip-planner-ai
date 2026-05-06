@@ -168,6 +168,11 @@ export default function ExpenseFormPage() {
       lineItemsData = lineItems
         .filter((li) => parseFloat(li.amount) > 0)
         .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+      const unassigned = (lineItemsData ?? []).filter((li) => li.traveller_ids.length === 0);
+      if (unassigned.length > 0) {
+        alert(`Please assign who had: ${unassigned.map((li) => `"${li.description}"`).join(', ')}`);
+        return;
+      }
       if (lineItemsData.length === 0) lineItemsData = undefined;
     }
     claimMutation.mutate({ lineItemsData });
@@ -242,6 +247,14 @@ export default function ExpenseFormPage() {
       const validLineItems: ExpenseLineItem[] = lineItems
         .filter((li) => parseFloat(li.amount) > 0)
         .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+
+      // Validate: every item with an amount must have at least one person assigned
+      const unassigned = validLineItems.filter((li) => li.traveller_ids.length === 0);
+      if (unassigned.length > 0) {
+        const names = unassigned.map((li) => `"${li.description}"`).join(', ');
+        alert(`Please assign who had: ${names}`);
+        return;
+      }
 
       // Validate: line items must sum to the expense total
       const expenseTotal   = parseFloat(form.amount) || 0;
