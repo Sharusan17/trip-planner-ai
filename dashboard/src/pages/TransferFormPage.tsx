@@ -117,24 +117,19 @@ export default function TransferFormPage() {
     else createMutation.mutate(data);
   }
 
-  // Net balance between selected pair from pending settlements
+  // Net balance hint — only shown when the selected From person genuinely owes the selected To person
   const netHint = (() => {
     if (!from || !to) return null;
     const pending = settlements.filter((s: any) => s.status === 'pending');
-    // Sum what `from` owes `to`
+    // Only sum in the direction from→to
     const owes = pending
       .filter((s: any) => s.from_traveller === from && s.to_traveller === to)
       .reduce((sum: number, s: any) => sum + s.amount, 0);
-    // Sum what `to` owes `from`
-    const owed = pending
-      .filter((s: any) => s.from_traveller === to && s.to_traveller === from)
-      .reduce((sum: number, s: any) => sum + s.amount, 0);
-    const net = Math.round((owes - owed) * 100) / 100;
-    if (Math.abs(net) < 0.01) return null;
+    const net = Math.round(owes * 100) / 100;
+    if (net < 0.01) return null;
     const fromName = travellers.find((t) => t.id === from)?.name ?? 'Sender';
     const toName   = travellers.find((t) => t.id === to)?.name   ?? 'Receiver';
-    if (net > 0) return { label: `${fromName} owes ${toName}`, amount: net };
-    return { label: `${toName} owes ${fromName}`, amount: Math.abs(net) };
+    return { label: `${fromName} owes ${toName}`, amount: net };
   })();
 
   const isPending = createMutation.isPending || updateMutation.isPending;
