@@ -27,6 +27,7 @@ import TripSetupPage from './pages/TripSetupPage';
 import TripSettingsPage from './pages/TripSettingsPage';
 import ProfilePage from './pages/ProfilePage';
 import FamilyFormPage from './pages/FamilyFormPage';
+import ReportPage from './pages/ReportPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { currentTrip, restoring } = useTrip();
@@ -67,6 +68,9 @@ function App() {
         <Route path="/itinerary/days/add"                    element={<DayFormPage />} />
         <Route path="/itinerary/days/:dayId/activities/add"  element={<ActivityFormPage />} />
         <Route path="/itinerary/activities/:id/edit"         element={<ActivityFormPage />} />
+
+        {/* Reports */}
+        <Route path="/reports"                 element={<ReportPage />} />
 
         {/* Expenses / Finance */}
         <Route path="/expenses"                element={<ExpensesPage />} />

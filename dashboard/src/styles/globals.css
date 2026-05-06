@@ -335,3 +335,49 @@ h1, h2, h3, h4, h5, h6 {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ─── Print / PDF export ────────────────────────────────── */
+@media print {
+  @page {
+    margin: 1.5cm;
+    size: A4 portrait;
+  }
+
+  /* Hide all shell chrome */
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Un-stick the sticky header so it doesn't repeat */
+  .sticky {
+    position: static !important;
+  }
+
+  /* Let main fill the page */
+  body {
+    background: white !important;
+  }
+
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* Cards look clean on paper */
+  .vintage-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
+
+  /* Keep the report header from splitting */
+  .report-header {
+    break-inside: avoid;
+  }
+
+  /* Keep each row together */
+  .print-content > * {
+    break-inside: avoid;
+  }
+}
