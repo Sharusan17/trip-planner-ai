@@ -366,8 +366,9 @@ export default function ExpensesPage() {
   }, []);
 
   // ── report banner ──────────────────────────────────────────────────────────
-  const today = new Date().toISOString().slice(0, 10);
-  const tripEnded = !!currentTrip && currentTrip.end_date <= today;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tripEnded = !!currentTrip && parseLocalDate(currentTrip.end_date) <= today;
   const bannerKey = `report-banner-${currentTrip?.id}`;
   const [reportBannerDismissed, setReportBannerDismissed] = useState(
     () => localStorage.getItem(bannerKey) === '1'
