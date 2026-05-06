@@ -14,7 +14,7 @@ router.get('/trips/:tripId/deposits', async (req: Request, res: Response) => {
       query += ` AND status = $2`;
       params.push(status);
     }
-    query += ` ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, due_date NULLS LAST`;
+    query += ` ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'pending' THEN 1 WHEN 'held' THEN 2 ELSE 3 END, due_date NULLS LAST`;
     const result = await pool.query(query, params);
     res.json(result.rows.map((r) => ({
       ...r,
@@ -31,10 +31,10 @@ router.get('/trips/:tripId/deposits/summary', async (req: Request, res: Response
   try {
     const result = await pool.query(
       `SELECT
-         COALESCE(SUM(CASE WHEN status = 'pending' THEN amount_home ELSE 0 END), 0) AS total_pending_home,
-         COALESCE(SUM(CASE WHEN status = 'paid' THEN amount_home ELSE 0 END), 0) AS total_paid_home,
+         COALESCE(SUM(CASE WHEN status IN ('pending','overdue') THEN amount_home ELSE 0 END), 0) AS total_pending_home,
+         COALESCE(SUM(CASE WHEN status = 'held' THEN amount_home ELSE 0 END), 0) AS total_held_home,
          COALESCE(SUM(CASE WHEN status = 'overdue' THEN amount_home ELSE 0 END), 0) AS total_overdue_home,
-         COUNT(CASE WHEN status = 'pending' THEN 1 END) AS count_pending,
+         COUNT(CASE WHEN status IN ('pending','overdue') THEN 1 END) AS count_pending,
          COUNT(CASE WHEN status = 'overdue' THEN 1 END) AS count_overdue
        FROM deposits WHERE trip_id = $1`,
       [req.params.tripId]
@@ -42,7 +42,7 @@ router.get('/trips/:tripId/deposits/summary', async (req: Request, res: Response
     const r = result.rows[0];
     res.json({
       total_pending_home: parseFloat(r.total_pending_home),
-      total_paid_home: parseFloat(r.total_paid_home),
+      total_held_home: parseFloat(r.total_held_home),
       total_overdue_home: parseFloat(r.total_overdue_home),
       count_pending: parseInt(r.count_pending),
       count_overdue: parseInt(r.count_overdue),
@@ -126,7 +126,8 @@ router.put('/deposits/:id', async (req: Request, res: Response) => {
 router.patch('/deposits/:id/status', async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
-    const paidAt = status === 'paid' ? 'NOW()' : 'NULL';
+    // paid_at records when money left your account (held) or came back (refunded/forfeited)
+    const paidAt = ['held', 'refunded', 'forfeited'].includes(status) ? 'NOW()' : 'NULL';
     const result = await pool.query(
       `UPDATE deposits SET status = $1, paid_at = ${paidAt}, updated_at = NOW()
        WHERE id = $2 RETURNING *`,

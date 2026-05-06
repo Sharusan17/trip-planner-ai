@@ -36,10 +36,12 @@ const CATEGORIES: ExpenseCategory[] = [
 ];
 
 const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
-  { key: 'all',     label: 'All'     },
-  { key: 'pending', label: 'Pending' },
-  { key: 'paid',    label: 'Paid'    },
-  { key: 'overdue', label: 'Overdue' },
+  { key: 'all',       label: 'All'       },
+  { key: 'pending',   label: 'Pending'   },
+  { key: 'overdue',   label: 'Overdue'   },
+  { key: 'held',      label: 'Held'      },
+  { key: 'refunded',  label: 'Refunded'  },
+  { key: 'forfeited', label: 'Forfeited' },
 ];
 
 const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
@@ -67,10 +69,20 @@ function groupByDate(expenses: Expense[]): { date: string; items: Expense[] }[] 
 }
 
 function depositStatusBadge(status: DepositStatus) {
-  if (status === 'paid')    return 'status-badge-paid';
-  if (status === 'overdue') return 'status-badge-overdue';
+  if (status === 'held')      return 'status-badge-paid';
+  if (status === 'refunded')  return 'badge badge-green';
+  if (status === 'forfeited') return 'badge badge-terracotta';
+  if (status === 'overdue')   return 'status-badge-overdue';
   return 'status-badge-pending';
 }
+
+const DEPOSIT_STATUS_LABELS: Record<DepositStatus, string> = {
+  pending:   'Pending',
+  overdue:   'Overdue',
+  held:      'Held',
+  refunded:  'Refunded',
+  forfeited: 'Forfeited',
+};
 
 // ─── SettlementRow ────────────────────────────────────────────────────────────
 
@@ -788,8 +800,8 @@ export default function ExpensesPage() {
                 <p className="text-xs text-ink-faint">{depSummary.count_pending} item{depSummary.count_pending !== 1 ? 's' : ''}</p>
               </div>
               <div className="vintage-card text-center p-4">
-                <p className="text-xs text-ink-faint mb-1">Paid</p>
-                <p className="text-lg font-bold text-green-700">{fmt(depSummary.total_paid_home, homeCurrency)}</p>
+                <p className="text-xs text-ink-faint mb-1">Held</p>
+                <p className="text-lg font-bold text-amber-600">{fmt(depSummary.total_held_home, homeCurrency)}</p>
               </div>
               <div className="vintage-card text-center p-4">
                 <p className="text-xs text-ink-faint mb-1">Overdue</p>
@@ -826,7 +838,7 @@ export default function ExpensesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <p className="font-semibold text-ink">{d.description}</p>
-                      <span className={`badge ${depositStatusBadge(d.status)} text-xs px-2 py-0.5 rounded`}>{d.status}</span>
+                      <span className={`${depositStatusBadge(d.status)} text-xs px-2 py-0.5 rounded`}>{DEPOSIT_STATUS_LABELS[d.status]}</span>
                       {d.linked_type && <span className="badge badge-navy text-xs">{d.linked_type}</span>}
                     </div>
                     <p className="text-lg font-bold text-navy">
@@ -844,11 +856,24 @@ export default function ExpensesPage() {
                   </div>
                   {(isOrganiser || d.created_by === activeTraveller?.id) && (
                     <div className="flex flex-col gap-2 shrink-0">
-                      {isOrganiser && d.status !== 'paid' && (
-                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'paid' })} className="btn-secondary text-xs py-1 px-2">✓ Paid</button>
+                      {/* pending/overdue → mark as held (money handed over) */}
+                      {isOrganiser && (d.status === 'pending' || d.status === 'overdue') && (
+                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'held' })}
+                          className="btn-secondary text-xs py-1 px-2">💰 Mark Held</button>
                       )}
+                      {/* pending → overdue */}
                       {isOrganiser && d.status === 'pending' && (
-                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'overdue' })} className="btn-danger text-xs py-1 px-2">Overdue</button>
+                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'overdue' })}
+                          className="btn-danger text-xs py-1 px-2">Overdue</button>
+                      )}
+                      {/* held → refunded or forfeited */}
+                      {isOrganiser && d.status === 'held' && (
+                        <>
+                          <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'refunded' })}
+                            className="btn-secondary text-xs py-1 px-2">✅ Refunded</button>
+                          <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'forfeited' })}
+                            className="btn-danger text-xs py-1 px-2">❌ Forfeited</button>
+                        </>
                       )}
                       <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)} className="btn-secondary text-xs py-1 px-2">Edit</button>
                       <button onClick={() => { if (confirm('Delete?')) deleteDepositMutation.mutate(d.id); }} className="btn-danger text-xs py-1 px-2">Delete</button>

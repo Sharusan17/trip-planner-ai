@@ -479,6 +479,20 @@ const migrations = [
   // 027: backfill split_with_ids on expense_claim_responses (column missing if table pre-dated this field)
   `ALTER TABLE expense_claim_responses
      ADD COLUMN IF NOT EXISTS split_with_ids JSONB DEFAULT '[]';`,
+
+  // 028: replace deposit_status 'paid' with 'held'/'refunded'/'forfeited'
+  // PostgreSQL can't drop enum values, so we recreate the type via VARCHAR cast
+  `DO $$ BEGIN
+    -- Migrate existing 'paid' rows to 'held' before touching the type
+    UPDATE deposits SET status = 'held' WHERE status::TEXT = 'paid';
+
+    -- Rebuild enum: cast column to text, drop old type, create new, cast back
+    ALTER TABLE deposits ALTER COLUMN status TYPE VARCHAR(20);
+    DROP TYPE IF EXISTS deposit_status;
+    CREATE TYPE deposit_status AS ENUM ('pending', 'overdue', 'held', 'refunded', 'forfeited');
+    ALTER TABLE deposits ALTER COLUMN status TYPE deposit_status USING status::deposit_status;
+    ALTER TABLE deposits ALTER COLUMN status SET DEFAULT 'pending';
+  END $$;`,
 ];
 
 export async function runMigrations() {
