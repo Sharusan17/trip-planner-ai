@@ -287,6 +287,8 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
          expense_date = COALESCE($8, expense_date),
          notes = COALESCE($9, notes),
          line_items = COALESCE($10, line_items),
+         flagged = FALSE,
+         flagged_reason = NULL,
          updated_at = NOW()
        WHERE id = $11 RETURNING *`,
       [paid_by ?? null, newAmount, newCurrency, amountHome,

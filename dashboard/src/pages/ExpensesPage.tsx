@@ -560,9 +560,6 @@ export default function ExpensesPage() {
                                       <span className="font-medium" style={{ color: paidBy.avatar_colour }}>{paidBy.name}</span>
                                     </p>
                                   )}
-                                  {exp.flagged && exp.flagged_reason && (
-                                    <p className="text-xs text-terracotta mt-0.5 italic">{exp.flagged_reason}</p>
-                                  )}
                                 </div>
                                 <div className="text-right shrink-0">
                                   {exp.amount_home !== null ? (
@@ -595,17 +592,15 @@ export default function ExpensesPage() {
                           </div>
                           {canAct && (
                             <div className="flex gap-2 mt-3 justify-end">
-                              <button
-                                onClick={() => flagExpenseMutation.mutate({ id: exp.id, flagged: !exp.flagged })}
-                                className={`text-xs py-1 px-3 rounded-lg border transition-colors flex items-center gap-1 ${
-                                  exp.flagged
-                                    ? 'bg-red-50 border-red-200 text-terracotta hover:bg-red-100'
-                                    : 'btn-secondary'
-                                }`}
-                                title={exp.flagged ? 'Remove flag' : 'Flag this expense'}
-                              >
-                                <Flag size={11} /> {exp.flagged ? 'Unflag' : 'Flag'}
-                              </button>
+                              {!exp.flagged && (
+                                <button
+                                  onClick={() => flagExpenseMutation.mutate({ id: exp.id, flagged: true })}
+                                  className="btn-secondary text-xs py-1 px-3 flex items-center gap-1"
+                                  title="Flag this expense for review"
+                                >
+                                  <Flag size={11} /> Flag
+                                </button>
+                              )}
                               <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
                             </div>
