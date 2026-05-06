@@ -16,7 +16,7 @@ import type {
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
-import { Pencil, RotateCcw, FileBarChart2, X, Flag, AlertTriangle } from 'lucide-react';
+import { Pencil, RotateCcw, FileBarChart2, Flag, AlertTriangle } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -387,14 +387,6 @@ export default function ExpensesPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tripEnded = !!currentTrip && parseLocalDate(currentTrip.end_date) <= today;
-  const bannerKey = `report-banner-${currentTrip?.id}`;
-  const [reportBannerDismissed, setReportBannerDismissed] = useState(
-    () => localStorage.getItem(bannerKey) === '1'
-  );
-  function dismissReportBanner() {
-    localStorage.setItem(bannerKey, '1');
-    setReportBannerDismissed(true);
-  }
 
   if (!currentTrip) return null;
 
@@ -403,7 +395,7 @@ export default function ExpensesPage() {
     <div className="max-w-4xl mx-auto space-y-5">
 
       {/* Report-ready banner — last day or after trip */}
-      {tripEnded && !reportBannerDismissed && (
+      {tripEnded && (
         <div className="rounded-2xl overflow-hidden border border-amber-200 bg-amber-50">
           <div className="flex items-center gap-3 px-4 py-3.5">
             <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -415,21 +407,12 @@ export default function ExpensesPage() {
                 Export a full breakdown of all expenses, deposits and transfers.
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => navigate('/reports')}
-                className="text-xs font-semibold bg-amber-900 text-white px-3 py-1.5 rounded-lg hover:bg-amber-800 transition-colors"
-              >
-                Export →
-              </button>
-              <button
-                onClick={dismissReportBanner}
-                className="w-7 h-7 flex items-center justify-center text-amber-600 hover:text-amber-900 rounded-lg hover:bg-amber-100 transition-colors"
-                aria-label="Dismiss"
-              >
-                <X size={14} />
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/reports')}
+              className="text-xs font-semibold bg-amber-900 text-white px-3 py-1.5 rounded-lg hover:bg-amber-800 transition-colors flex-shrink-0"
+            >
+              Export →
+            </button>
           </div>
         </div>
       )}
@@ -577,9 +560,6 @@ export default function ExpensesPage() {
                                       <span className="font-medium" style={{ color: paidBy.avatar_colour }}>{paidBy.name}</span>
                                     </p>
                                   )}
-                                  {exp.flagged && exp.flagged_reason && (
-                                    <p className="text-xs text-terracotta mt-0.5 italic">{exp.flagged_reason}</p>
-                                  )}
                                 </div>
                                 <div className="text-right shrink-0">
                                   {exp.amount_home !== null ? (
@@ -612,17 +592,15 @@ export default function ExpensesPage() {
                           </div>
                           {canAct && (
                             <div className="flex gap-2 mt-3 justify-end">
-                              <button
-                                onClick={() => flagExpenseMutation.mutate({ id: exp.id, flagged: !exp.flagged })}
-                                className={`text-xs py-1 px-3 rounded-lg border transition-colors flex items-center gap-1 ${
-                                  exp.flagged
-                                    ? 'bg-red-50 border-red-200 text-terracotta hover:bg-red-100'
-                                    : 'btn-secondary'
-                                }`}
-                                title={exp.flagged ? 'Remove flag' : 'Flag this expense'}
-                              >
-                                <Flag size={11} /> {exp.flagged ? 'Unflag' : 'Flag'}
-                              </button>
+                              {!exp.flagged && (
+                                <button
+                                  onClick={() => flagExpenseMutation.mutate({ id: exp.id, flagged: true })}
+                                  className="btn-secondary text-xs py-1 px-3 flex items-center gap-1"
+                                  title="Flag this expense for review"
+                                >
+                                  <Flag size={11} /> Flag
+                                </button>
+                              )}
                               <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
                             </div>
