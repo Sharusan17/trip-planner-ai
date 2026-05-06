@@ -481,15 +481,17 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS split_with_ids JSONB DEFAULT '[]';`,
 
   // 028: replace deposit_status 'paid' with 'held'/'refunded'/'forfeited'
-  // PostgreSQL can't drop enum values, so we recreate the type via VARCHAR cast
+  // Order matters: cast to VARCHAR first (freeing enum constraint), then UPDATE, then rebuild enum
   `DO $$ BEGIN
-    -- Migrate existing 'paid' rows to 'held' before touching the type
-    UPDATE deposits SET status = 'held' WHERE status::TEXT = 'paid';
-
-    -- Rebuild enum: cast column to text, drop old type, create new, cast back
+    -- Step 1: Free the column from the old enum so we can UPDATE freely
     ALTER TABLE deposits ALTER COLUMN status TYPE VARCHAR(20);
+    -- Step 2: Drop the old enum
     DROP TYPE IF EXISTS deposit_status;
+    -- Step 3: Create the new enum with the correct values
     CREATE TYPE deposit_status AS ENUM ('pending', 'overdue', 'held', 'refunded', 'forfeited');
+    -- Step 4: Migrate any legacy 'paid' rows to 'held' (safe now that status is VARCHAR)
+    UPDATE deposits SET status = 'held' WHERE status = 'paid';
+    -- Step 5: Cast column back to the new enum type
     ALTER TABLE deposits ALTER COLUMN status TYPE deposit_status USING status::deposit_status;
     ALTER TABLE deposits ALTER COLUMN status SET DEFAULT 'pending';
   END $$;`,
