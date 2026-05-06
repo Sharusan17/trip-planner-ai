@@ -6,11 +6,21 @@ import type { Deposit, DepositStatus, CreateDepositInput } from '@trip-planner-a
 import { parseLocalDate } from '@/utils/date';
 
 const STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'paid', label: 'Paid' },
-  { key: 'overdue', label: 'Overdue' },
+  { key: 'all',       label: 'All'       },
+  { key: 'pending',   label: 'Pending'   },
+  { key: 'overdue',   label: 'Overdue'   },
+  { key: 'held',      label: 'Held'      },
+  { key: 'refunded',  label: 'Refunded'  },
+  { key: 'forfeited', label: 'Forfeited' },
 ];
+
+const STATUS_LABELS: Record<DepositStatus, string> = {
+  pending:   'Pending',
+  overdue:   'Overdue',
+  held:      'Held',
+  refunded:  'Refunded',
+  forfeited: 'Forfeited',
+};
 
 const LINKED_TYPES = ['accommodation', 'transport', 'activity', 'other'] as const;
 
@@ -19,8 +29,10 @@ function formatCurrency(amount: number, currency: string) {
 }
 
 function statusBadgeClass(status: DepositStatus) {
-  if (status === 'paid') return 'status-badge-paid';
-  if (status === 'overdue') return 'status-badge-overdue';
+  if (status === 'held')      return 'status-badge-paid';
+  if (status === 'refunded')  return 'badge badge-green';
+  if (status === 'forfeited') return 'badge badge-terracotta';
+  if (status === 'overdue')   return 'status-badge-overdue';
   return 'status-badge-pending';
 }
 
@@ -151,22 +163,22 @@ export default function DepositsPage() {
           <div className="vintage-card text-center p-4">
             <p className="text-xs text-ink/60 mb-1">Pending</p>
             <p className="text-lg font-bold text-navy">
-              {formatCurrency(summary.total_pending_home, currentTrip.home_currency)}
+              {formatCurrency(summary.total_pending_home ?? 0, currentTrip.home_currency)}
             </p>
-            <p className="text-xs text-ink/50">{summary.count_pending} item{summary.count_pending !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-ink/50">{summary.count_pending ?? 0} item{(summary.count_pending ?? 0) !== 1 ? 's' : ''}</p>
           </div>
           <div className="vintage-card text-center p-4">
-            <p className="text-xs text-ink/60 mb-1">Paid</p>
-            <p className="text-lg font-bold" style={{ color: '#2D6A4F' }}>
-              {formatCurrency(summary.total_paid_home, currentTrip.home_currency)}
+            <p className="text-xs text-ink/60 mb-1">Held</p>
+            <p className="text-lg font-bold text-amber-600">
+              {formatCurrency(summary.total_held_home ?? 0, currentTrip.home_currency)}
             </p>
           </div>
           <div className="vintage-card text-center p-4">
             <p className="text-xs text-ink/60 mb-1">Overdue</p>
             <p className="text-lg font-bold text-terracotta">
-              {formatCurrency(summary.total_overdue_home, currentTrip.home_currency)}
+              {formatCurrency(summary.total_overdue_home ?? 0, currentTrip.home_currency)}
             </p>
-            <p className="text-xs text-ink/50">{summary.count_overdue} item{summary.count_overdue !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-ink/50">{summary.count_overdue ?? 0} item{(summary.count_overdue ?? 0) !== 1 ? 's' : ''}</p>
           </div>
         </div>
       )}
@@ -211,8 +223,8 @@ export default function DepositsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <p className="font-semibold text-ink">{d.description}</p>
-                  <span className={`badge ${statusBadgeClass(d.status)} text-xs px-2 py-0.5 rounded`}>
-                    {d.status}
+                  <span className={`${statusBadgeClass(d.status)} text-xs px-2 py-0.5 rounded`}>
+                    {STATUS_LABELS[d.status]}
                   </span>
                   {d.linked_type && (
                     <span className="badge badge-navy text-xs">{d.linked_type}</span>
@@ -235,23 +247,37 @@ export default function DepositsPage() {
               </div>
               {isOrganiser && (
                 <div className="flex flex-col gap-2 shrink-0">
-                  {d.status !== 'paid' && (
+                  {(d.status === 'pending' || d.status === 'overdue') && (
                     <button
-                      onClick={() => statusMutation.mutate({ id: d.id, status: 'paid' })}
+                      onClick={() => statusMutation.mutate({ id: d.id, status: 'held' })}
                       className="btn-secondary text-xs py-1 px-2"
-                      title="Mark as paid"
                     >
-                      ✓ Paid
+                      💰 Mark Held
                     </button>
                   )}
                   {d.status === 'pending' && (
                     <button
                       onClick={() => statusMutation.mutate({ id: d.id, status: 'overdue' })}
                       className="btn-danger text-xs py-1 px-2"
-                      title="Mark as overdue"
                     >
                       Overdue
                     </button>
+                  )}
+                  {d.status === 'held' && (
+                    <>
+                      <button
+                        onClick={() => statusMutation.mutate({ id: d.id, status: 'refunded' })}
+                        className="btn-secondary text-xs py-1 px-2"
+                      >
+                        ✅ Refunded
+                      </button>
+                      <button
+                        onClick={() => statusMutation.mutate({ id: d.id, status: 'forfeited' })}
+                        className="btn-danger text-xs py-1 px-2"
+                      >
+                        ❌ Forfeited
+                      </button>
+                    </>
                   )}
                   <button onClick={() => openEdit(d)} className="btn-secondary text-xs py-1 px-2">
                     Edit
@@ -290,9 +316,7 @@ export default function DepositsPage() {
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1">Amount *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="number" step="0.01" min="0"
                     className="vintage-input w-full"
                     value={form.amount}
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
@@ -312,8 +336,7 @@ export default function DepositsPage() {
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">Due Date</label>
                 <input
-                  type="date"
-                  className="vintage-input w-full"
+                  type="date" className="vintage-input w-full"
                   value={form.due_date}
                   onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                 />
@@ -334,8 +357,7 @@ export default function DepositsPage() {
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">Notes</label>
                 <textarea
-                  className="vintage-input w-full"
-                  rows={2}
+                  className="vintage-input w-full" rows={2}
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
