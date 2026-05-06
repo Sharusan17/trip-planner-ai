@@ -112,12 +112,6 @@ function SettlementRow({
           </p>
         )}
       </div>
-      {!isPaid && (
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-          style={{ backgroundColor: getColour(settlement.to_traveller) }}>
-          {toName.charAt(0).toUpperCase()}
-        </span>
-      )}
       {!isPaid && canAct && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
@@ -755,10 +749,6 @@ export default function ExpensesPage() {
                         {tf.note && <span className="ml-2 italic">{tf.note}</span>}
                       </p>
                     </div>
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-                      style={{ backgroundColor: tf.to_colour }}>
-                      {tf.to_name.charAt(0).toUpperCase()}
-                    </span>
                     <div className="text-right shrink-0 min-w-[60px]">
                       <p className="font-bold text-green-700">{fmt(tf.amount, tf.currency)}</p>
                       {tf.amount_home !== null && tf.currency !== homeCurrency && (
