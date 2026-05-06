@@ -16,7 +16,7 @@ import type {
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
-import { Pencil, RotateCcw } from 'lucide-react';
+import { Pencil, RotateCcw, FileBarChart2, X } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -377,11 +377,55 @@ export default function ExpensesPage() {
     return `${Math.floor(mins / 60)}h ago`;
   }, []);
 
+  // ── report banner ──────────────────────────────────────────────────────────
+  const today = new Date().toISOString().slice(0, 10);
+  const tripEnded = !!currentTrip && currentTrip.end_date <= today;
+  const bannerKey = `report-banner-${currentTrip?.id}`;
+  const [reportBannerDismissed, setReportBannerDismissed] = useState(
+    () => localStorage.getItem(bannerKey) === '1'
+  );
+  function dismissReportBanner() {
+    localStorage.setItem(bannerKey, '1');
+    setReportBannerDismissed(true);
+  }
+
   if (!currentTrip) return null;
 
   // ═══════════════════════════════════════════════════════════════════════
   return (
     <div className="max-w-4xl mx-auto space-y-5">
+
+      {/* Report-ready banner — last day or after trip */}
+      {tripEnded && !reportBannerDismissed && (
+        <div className="rounded-2xl overflow-hidden border border-amber-200 bg-amber-50">
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <FileBarChart2 size={18} className="text-gold-aged" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-900">Your trip report is ready</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Export a full breakdown of all expenses, deposits and transfers.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => navigate('/reports')}
+                className="text-xs font-semibold bg-amber-900 text-white px-3 py-1.5 rounded-lg hover:bg-amber-800 transition-colors"
+              >
+                Export →
+              </button>
+              <button
+                onClick={dismissReportBanner}
+                className="w-7 h-7 flex items-center justify-center text-amber-600 hover:text-amber-900 rounded-lg hover:bg-amber-100 transition-colors"
+                aria-label="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Page header */}
       <div className="flex items-center justify-between">
