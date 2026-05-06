@@ -45,6 +45,8 @@ export interface Expense {
   notes: string | null;
   line_items: ExpenseLineItem[] | null;
   receipt_filename: string | null;
+  flagged: boolean;
+  flagged_reason: string | null;
   splits: ExpenseSplit[];
   created_at: string;
   updated_at: string;

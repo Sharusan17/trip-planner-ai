@@ -61,4 +61,7 @@ export const expensesApi = {
     fd.append('receipt', file);
     return api.postFile<ReceiptScanResult>('/receipts/scan', fd);
   },
+
+  flag: (id: string, flagged: boolean, flagged_reason?: string) =>
+    api.patch<Expense>(`/expenses/${id}/flag`, { flagged, flagged_reason }),
 };

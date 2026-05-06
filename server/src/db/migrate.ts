@@ -496,6 +496,13 @@ const migrations = [
     ALTER TABLE deposits ALTER COLUMN status TYPE deposit_status USING status::deposit_status;
     ALTER TABLE deposits ALTER COLUMN status SET DEFAULT 'pending';
   END $$;`,
+
+  // expense flags — manual + auto-created from forfeited deposits
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged_reason TEXT;`,
+
+  // link a forfeited deposit back to the expense it spawned
+  `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS forfeited_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
 ];
 
 export async function runMigrations() {
