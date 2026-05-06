@@ -171,7 +171,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
 
       {/* ── Mobile: full-screen overlay (Apple.com style) ────────── */}
       <aside
-        className={`md:hidden fixed inset-0 z-50 flex flex-col bg-[var(--color-sidebar)] transition-opacity duration-300 ease-out ${
+        className={`md:hidden fixed inset-0 z-[1100] flex flex-col bg-[var(--color-sidebar)] transition-opacity duration-300 ease-out ${
           isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
