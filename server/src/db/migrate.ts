@@ -481,17 +481,18 @@ const migrations = [
      ADD COLUMN IF NOT EXISTS split_with_ids JSONB DEFAULT '[]';`,
 
   // 028: replace deposit_status 'paid' with 'held'/'refunded'/'forfeited'
-  // Order matters: cast to VARCHAR first (freeing enum constraint), then UPDATE, then rebuild enum
   `DO $$ BEGIN
-    -- Step 1: Free the column from the old enum so we can UPDATE freely
+    -- Step 1: Drop the column default (it holds a typed reference to the old enum)
+    ALTER TABLE deposits ALTER COLUMN status DROP DEFAULT;
+    -- Step 2: Cast column to plain VARCHAR, freeing the column from the enum
     ALTER TABLE deposits ALTER COLUMN status TYPE VARCHAR(20);
-    -- Step 2: Drop the old enum
+    -- Step 3: Drop the old enum (no dependents remain)
     DROP TYPE IF EXISTS deposit_status;
-    -- Step 3: Create the new enum with the correct values
+    -- Step 4: Create the new enum
     CREATE TYPE deposit_status AS ENUM ('pending', 'overdue', 'held', 'refunded', 'forfeited');
-    -- Step 4: Migrate any legacy 'paid' rows to 'held' (safe now that status is VARCHAR)
+    -- Step 5: Migrate legacy 'paid' rows to 'held'
     UPDATE deposits SET status = 'held' WHERE status = 'paid';
-    -- Step 5: Cast column back to the new enum type
+    -- Step 6: Cast column back and restore default
     ALTER TABLE deposits ALTER COLUMN status TYPE deposit_status USING status::deposit_status;
     ALTER TABLE deposits ALTER COLUMN status SET DEFAULT 'pending';
   END $$;`,
