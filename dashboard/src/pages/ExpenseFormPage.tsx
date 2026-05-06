@@ -109,7 +109,7 @@ export default function ExpenseFormPage() {
     });
     if (exp.split_mode === 'itemised' && exp.line_items?.length) {
       setLineItems(exp.line_items.map((li) => ({
-        description: li.description, qty: (li as any).qty ?? 1, amount: String(li.amount), traveller_ids: li.traveller_ids,
+        description: li.description, qty: (li as any).qty ?? 1, amount: String(li.amount), traveller_ids: Array.isArray(li.traveller_ids) ? li.traveller_ids : [],
       })));
     }
   }, [isEdit, id, expenses]);
@@ -167,7 +167,12 @@ export default function ExpenseFormPage() {
     if (form.split_mode === 'itemised') {
       lineItemsData = lineItems
         .filter((li) => parseFloat(li.amount) > 0)
-        .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+        .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: Array.isArray(li.traveller_ids) ? li.traveller_ids : [] }));
+      const unassigned = lineItemsData.filter((li) => li.traveller_ids.length === 0);
+      if (unassigned.length > 0) {
+        alert(`Please choose who had: ${unassigned.map((li) => `"${li.description}"`).join(', ')}`);
+        return;
+      }
       if (lineItemsData.length === 0) lineItemsData = undefined;
     }
     claimMutation.mutate({ lineItemsData });
@@ -242,6 +247,13 @@ export default function ExpenseFormPage() {
       const validLineItems: ExpenseLineItem[] = lineItems
         .filter((li) => parseFloat(li.amount) > 0)
         .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+
+      // Validate: every item with an amount must have at least one person assigned
+      const unassigned = validLineItems.filter((li) => !li.traveller_ids || li.traveller_ids.length === 0);
+      if (unassigned.length > 0) {
+        alert(`Please choose who had: ${unassigned.map((li) => `"${li.description}"`).join(', ')}`);
+        return;
+      }
 
       // Validate: line items must sum to the expense total
       const expenseTotal   = parseFloat(form.amount) || 0;
