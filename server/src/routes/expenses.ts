@@ -463,4 +463,38 @@ router.put('/trips/:tripId/budgets', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /expenses/:id/flag — toggle manual flag and optional reason
+router.patch('/expenses/:id/flag', async (req: Request, res: Response) => {
+  try {
+    const { flagged, flagged_reason } = req.body as { flagged: boolean; flagged_reason?: string };
+    const result = await pool.query(
+      `UPDATE expenses
+         SET flagged = $1,
+             flagged_reason = $2,
+             updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [flagged, flagged ? (flagged_reason ?? null) : null, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    const e = result.rows[0];
+
+    const splitsResult = await pool.query(
+      `SELECT * FROM expense_splits WHERE expense_id = $1`,
+      [req.params.id]
+    );
+    res.json({
+      ...e,
+      amount: parseFloat(e.amount),
+      amount_home: e.amount_home ? parseFloat(e.amount_home) : null,
+      splits: splitsResult.rows.map((s) => ({
+        ...s,
+        amount: parseFloat(s.amount),
+        amount_home: s.amount_home ? parseFloat(s.amount_home) : null,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 export default router;

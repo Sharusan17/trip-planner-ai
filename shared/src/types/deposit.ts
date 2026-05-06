@@ -15,6 +15,7 @@ export interface Deposit {
   linked_id: string | null;
   notes: string | null;
   created_by: string | null;
+  forfeited_expense_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -16,7 +16,7 @@ import type {
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
-import { Pencil, RotateCcw, FileBarChart2, X } from 'lucide-react';
+import { Pencil, RotateCcw, FileBarChart2, X, Flag, AlertTriangle } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -267,6 +267,12 @@ export default function ExpensesPage() {
   // ── expense mutations
   const deleteExpenseMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+  });
+
+  const flagExpenseMutation = useMutation({
+    mutationFn: ({ id, flagged }: { id: string; flagged: boolean }) =>
+      expensesApi.flag(id, flagged),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
   });
 
@@ -542,19 +548,37 @@ export default function ExpensesPage() {
                     {items.map((exp) => {
                       const paidBy = travellers.find((t) => t.id === exp.paid_by);
                       const mySplit = exp.splits.find((s) => s.traveller_id === activeTraveller?.id);
+                      const splitTotal = exp.splits.reduce((s, sp) => s + sp.amount, 0);
+                      const splitMismatch = exp.splits.length > 0 && Math.abs(splitTotal - exp.amount) > 0.02;
+                      const canAct = isOrganiser || exp.paid_by === activeTraveller?.id;
                       return (
-                        <div key={exp.id} className="vintage-card p-4">
+                        <div key={exp.id} className={`vintage-card p-4 ${exp.flagged ? 'ring-1 ring-terracotta/30' : ''}`}>
                           <div className="flex items-start gap-3">
                             <span className="text-2xl shrink-0 mt-0.5">{EXPENSE_CATEGORY_ICONS[exp.category]}</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                  <p className="font-semibold text-ink">{exp.description}</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-semibold text-ink">{exp.description}</p>
+                                    {exp.flagged && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-red-50 text-terracotta border border-red-200 px-1.5 py-0.5 rounded-full">
+                                        <Flag size={9} /> Flagged
+                                      </span>
+                                    )}
+                                    {splitMismatch && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                        <AlertTriangle size={9} /> Check splits
+                                      </span>
+                                    )}
+                                  </div>
                                   {paidBy && (
                                     <p className="text-xs text-ink-faint mt-0.5">
                                       Paid by{' '}
                                       <span className="font-medium" style={{ color: paidBy.avatar_colour }}>{paidBy.name}</span>
                                     </p>
+                                  )}
+                                  {exp.flagged && exp.flagged_reason && (
+                                    <p className="text-xs text-terracotta mt-0.5 italic">{exp.flagged_reason}</p>
                                   )}
                                 </div>
                                 <div className="text-right shrink-0">
@@ -586,8 +610,19 @@ export default function ExpensesPage() {
                               {exp.notes && <p className="text-xs text-ink-faint mt-1 italic">{exp.notes}</p>}
                             </div>
                           </div>
-                          {(isOrganiser || exp.paid_by === activeTraveller?.id) && (
+                          {canAct && (
                             <div className="flex gap-2 mt-3 justify-end">
+                              <button
+                                onClick={() => flagExpenseMutation.mutate({ id: exp.id, flagged: !exp.flagged })}
+                                className={`text-xs py-1 px-3 rounded-lg border transition-colors flex items-center gap-1 ${
+                                  exp.flagged
+                                    ? 'bg-red-50 border-red-200 text-terracotta hover:bg-red-100'
+                                    : 'btn-secondary'
+                                }`}
+                                title={exp.flagged ? 'Remove flag' : 'Flag this expense'}
+                              >
+                                <Flag size={11} /> {exp.flagged ? 'Unflag' : 'Flag'}
+                              </button>
                               <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
                             </div>
