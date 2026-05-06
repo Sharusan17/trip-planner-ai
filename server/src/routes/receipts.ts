@@ -146,15 +146,23 @@ function formatResult(raw: TabscannerResult) {
 
   // Resolve per-item total: prefer lineTotal, fall back to qty × price
   const withAmounts = rawItems.map((li) => {
-    const lineTotal = toNum(li.lineTotal);
-    const unitPrice = toNum(li.price ?? li.unitPrice);
-    const qty       = Math.max(1, Math.round(toNum(li.qty) || 1));
-    const amount    = lineTotal > 0 ? lineTotal : round2(unitPrice * qty);
-
-    // Try every known Tabscanner description field name
+    // Try every known Tabscanner description field name (needed before qty extraction)
     const rawDesc = (
       li.desc ?? li.lineText ?? li.descr ?? li.text ?? li.name ?? ''
     ).trim();
+
+    // Extract qty: prefer explicit qty field; if missing/zero, parse "2x " prefix from description
+    // (Tabscanner often encodes quantity only as a prefix like "2x Pizza" with qty=0 or absent)
+    let qty = Math.round(toNum(li.qty));
+    if (qty <= 0) {
+      const prefixMatch = rawDesc.match(/^(\d+)[xX]\s+/);
+      qty = prefixMatch ? parseInt(prefixMatch[1], 10) : 1;
+    }
+    qty = Math.max(1, qty);
+
+    const lineTotal = toNum(li.lineTotal);
+    const unitPrice = toNum(li.price ?? li.unitPrice);
+    const amount    = lineTotal > 0 ? lineTotal : round2(unitPrice * qty);
 
     // Strip trailing price/$ symbols (e.g. "Item $ 3.50" or "Item $")
     // and leading qty prefix (e.g. "2x " or "1X ")
@@ -165,6 +173,8 @@ function formatResult(raw: TabscannerResult) {
 
     // If cleaning wiped the name (e.g. the whole string was "$3.50"), fall back to rawDesc minus qty prefix
     const desc = cleaned || rawDesc.replace(/^\d+[xX]\s+/, '').trim();
+
+    log.debug(`line item parsed`, { rawDesc, qty, amount, desc });
 
     return { desc, qty, amount };
   });
