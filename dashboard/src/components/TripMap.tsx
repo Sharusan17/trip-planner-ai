@@ -154,7 +154,7 @@ export default function TripMap({ selectedDayId, days }: TripMapProps) {
   const center: [number, number] = [currentTrip.latitude, currentTrip.longitude];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 isolate">
       {/* Pinned place chips */}
       {pinnedPlaces.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
