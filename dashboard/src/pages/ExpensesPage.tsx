@@ -796,17 +796,17 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="vintage-card text-center p-4">
                 <p className="text-xs text-ink-faint mb-1">Pending</p>
-                <p className="text-lg font-bold text-navy">{fmt(depSummary.total_pending_home, homeCurrency)}</p>
-                <p className="text-xs text-ink-faint">{depSummary.count_pending} item{depSummary.count_pending !== 1 ? 's' : ''}</p>
+                <p className="text-lg font-bold text-navy">{fmt(depSummary.total_pending_home ?? 0, homeCurrency)}</p>
+                <p className="text-xs text-ink-faint">{depSummary.count_pending ?? 0} item{(depSummary.count_pending ?? 0) !== 1 ? 's' : ''}</p>
               </div>
               <div className="vintage-card text-center p-4">
                 <p className="text-xs text-ink-faint mb-1">Held</p>
-                <p className="text-lg font-bold text-amber-600">{fmt(depSummary.total_held_home, homeCurrency)}</p>
+                <p className="text-lg font-bold text-amber-600">{fmt(depSummary.total_held_home ?? 0, homeCurrency)}</p>
               </div>
               <div className="vintage-card text-center p-4">
                 <p className="text-xs text-ink-faint mb-1">Overdue</p>
-                <p className="text-lg font-bold text-terracotta">{fmt(depSummary.total_overdue_home, homeCurrency)}</p>
-                <p className="text-xs text-ink-faint">{depSummary.count_overdue} item{depSummary.count_overdue !== 1 ? 's' : ''}</p>
+                <p className="text-lg font-bold text-terracotta">{fmt(depSummary.total_overdue_home ?? 0, homeCurrency)}</p>
+                <p className="text-xs text-ink-faint">{depSummary.count_overdue ?? 0} item{(depSummary.count_overdue ?? 0) !== 1 ? 's' : ''}</p>
               </div>
             </div>
           )}
