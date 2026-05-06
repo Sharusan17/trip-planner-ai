@@ -42,7 +42,7 @@ function computeSplits(
     return splits;
   }
 
-  if (splitMode === 'custom' && customSplits) {
+  if ((splitMode === 'custom' || splitMode === 'itemised') && customSplits) {
     return travellerIds.map((id) => ({
       traveller_id: id,
       amount: round2(customSplits[id] ?? 0),
