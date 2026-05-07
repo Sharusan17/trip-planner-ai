@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, BedDouble } from 'lucide-react';
+
+const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$', AUD: 'A$', CAD: 'C$', CHF: '₣', JPY: '¥' };
+function sym(code: string) { return CURRENCY_SYMBOLS[code] ?? code; }
 import { accommodationApi } from '@/api/accommodation';
 import { travellersApi } from '@/api/travellers';
 import type { CreateAccommodationInput, CreateRoomInput } from '@trip-planner-ai/shared';
@@ -257,21 +260,26 @@ export default function SetupStepAccommodation({ tripId, homeCurrency, holidayTy
           onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
         />
         <div className="grid grid-cols-3 gap-2">
-          <input
-            type="number" step="0.01" min="0"
-            placeholder="Total price"
-            className="vintage-input col-span-2"
-            value={draft.price}
-            onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-          />
+          <div className="col-span-2 relative flex items-center">
+            <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
+              {sym(draft.currency)}
+            </span>
+            <input
+              type="number" step="0.01" min="0"
+              placeholder="Total price"
+              className="vintage-input w-full pl-7"
+              value={draft.price}
+              onChange={(e) => setDraft({ ...draft, price: e.target.value })}
+            />
+          </div>
           <select
             className="vintage-input"
             value={draft.currency}
             onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
           >
-            <option value="GBP">GBP</option>
-            <option value="EUR">EUR</option>
-            <option value="USD">USD</option>
+            <option value="GBP">GBP £</option>
+            <option value="EUR">EUR €</option>
+            <option value="USD">USD $</option>
           </select>
         </div>
 
@@ -313,21 +321,26 @@ export default function SetupStepAccommodation({ tripId, homeCurrency, holidayTy
                         onChange={(e) => updateRoom(room.key, { name: e.target.value })}
                       />
                       <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number" step="0.01" min="0"
-                          className="vintage-input text-sm"
-                          placeholder="Room price"
-                          value={room.price}
-                          onChange={(e) => updateRoom(room.key, { price: e.target.value })}
-                        />
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3 text-xs font-semibold text-ink-faint pointer-events-none select-none">
+                            {sym(room.currency)}
+                          </span>
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="vintage-input text-sm w-full pl-6"
+                            placeholder="Room price"
+                            value={room.price}
+                            onChange={(e) => updateRoom(room.key, { price: e.target.value })}
+                          />
+                        </div>
                         <select
                           className="vintage-input text-sm"
                           value={room.currency}
                           onChange={(e) => updateRoom(room.key, { currency: e.target.value })}
                         >
-                          <option value="GBP">GBP</option>
-                          <option value="EUR">EUR</option>
-                          <option value="USD">USD</option>
+                          <option value="GBP">GBP £</option>
+                          <option value="EUR">EUR €</option>
+                          <option value="USD">USD $</option>
                         </select>
                       </div>
                       <div>

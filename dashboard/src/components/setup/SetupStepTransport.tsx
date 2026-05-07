@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, ChevronDown, ArrowLeft, Plane, RotateCcw } from 'lucide-react';
+
+const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$', AUD: 'A$', CAD: 'C$', CHF: '₣', JPY: '¥' };
+function sym(code: string) { return CURRENCY_SYMBOLS[code] ?? code; }
 import { transportApi } from '@/api/transport';
 import { travellersApi } from '@/api/travellers';
 import type { CreateTransportInput, TransportType } from '@trip-planner-ai/shared';
@@ -483,18 +486,23 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
               {pricingMode === 'total' ? (
                 <>
                   <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="number" step="0.01" min="0"
-                      placeholder="Total for both legs"
-                      className="vintage-input col-span-2"
-                      value={totalPrice}
-                      onChange={(e) => setTotalPrice(e.target.value)}
-                    />
+                    <div className="col-span-2 relative flex items-center">
+                      <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
+                        {sym(totalCurrency)}
+                      </span>
+                      <input
+                        type="number" step="0.01" min="0"
+                        placeholder="Total for both legs"
+                        className="vintage-input w-full pl-7"
+                        value={totalPrice}
+                        onChange={(e) => setTotalPrice(e.target.value)}
+                      />
+                    </div>
                     <select className="vintage-input" value={totalCurrency}
                       onChange={(e) => setTotalCurrency(e.target.value)}>
-                      <option value="GBP">GBP</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
+                      <option value="GBP">GBP £</option>
+                      <option value="EUR">EUR €</option>
+                      <option value="USD">USD $</option>
                     </select>
                   </div>
                   <p className="text-[10px] text-ink-faint">Covers both outbound &amp; return. Switch to "Per leg" to split.</p>
@@ -503,34 +511,44 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-sm w-6 flex-shrink-0">🛫</span>
-                    <input
-                      type="number" step="0.01" min="0" placeholder="0.00"
-                      className="vintage-input flex-1 text-sm"
-                      value={outbound.price}
-                      onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
-                    />
+                    <div className="relative flex items-center flex-1">
+                      <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
+                        {sym(outbound.currency)}
+                      </span>
+                      <input
+                        type="number" step="0.01" min="0" placeholder="0.00"
+                        className="vintage-input w-full text-sm pl-7"
+                        value={outbound.price}
+                        onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
+                      />
+                    </div>
                     <select className="vintage-input text-sm" style={{ width: 'auto' }}
                       value={outbound.currency}
                       onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
-                      <option value="GBP">GBP</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
+                      <option value="GBP">GBP £</option>
+                      <option value="EUR">EUR €</option>
+                      <option value="USD">USD $</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm w-6 flex-shrink-0">🛬</span>
-                    <input
-                      type="number" step="0.01" min="0" placeholder="0.00"
-                      className="vintage-input flex-1 text-sm"
-                      value={returnLeg.price}
-                      onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
-                    />
+                    <div className="relative flex items-center flex-1">
+                      <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
+                        {sym(returnLeg.currency)}
+                      </span>
+                      <input
+                        type="number" step="0.01" min="0" placeholder="0.00"
+                        className="vintage-input w-full text-sm pl-7"
+                        value={returnLeg.price}
+                        onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
+                      />
+                    </div>
                     <select className="vintage-input text-sm" style={{ width: 'auto' }}
                       value={returnLeg.currency}
                       onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
-                      <option value="GBP">GBP</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
+                      <option value="GBP">GBP £</option>
+                      <option value="EUR">EUR €</option>
+                      <option value="USD">USD $</option>
                     </select>
                   </div>
                 </div>
@@ -599,17 +617,22 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
               onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
             />
             <div className="grid grid-cols-3 gap-2">
-              <input
-                type="number" step="0.01" min="0" placeholder="Price"
-                className="vintage-input col-span-2"
-                value={outbound.price}
-                onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
-              />
+              <div className="col-span-2 relative flex items-center">
+                <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
+                  {sym(outbound.currency)}
+                </span>
+                <input
+                  type="number" step="0.01" min="0" placeholder="Price"
+                  className="vintage-input w-full pl-7"
+                  value={outbound.price}
+                  onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
+                />
+              </div>
               <select className="vintage-input" value={outbound.currency}
                 onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
-                <option value="GBP">GBP</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
+                <option value="GBP">GBP £</option>
+                <option value="EUR">EUR €</option>
+                <option value="USD">USD $</option>
               </select>
             </div>
 
@@ -690,17 +713,22 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                       onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
                     />
                     <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number" step="0.01" min="0" placeholder="Return price"
-                        className="vintage-input col-span-2"
-                        value={returnLeg.price}
-                        onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
-                      />
+                      <div className="col-span-2 relative flex items-center">
+                        <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
+                          {sym(returnLeg.currency)}
+                        </span>
+                        <input
+                          type="number" step="0.01" min="0" placeholder="Return price"
+                          className="vintage-input w-full pl-7"
+                          value={returnLeg.price}
+                          onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
+                        />
+                      </div>
                       <select className="vintage-input" value={returnLeg.currency}
                         onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
-                        <option value="GBP">GBP</option>
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
+                        <option value="GBP">GBP £</option>
+                        <option value="EUR">EUR €</option>
+                        <option value="USD">USD $</option>
                       </select>
                     </div>
                   </div>
