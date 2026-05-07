@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '@/context/TripContext';
 import { tripsApi } from '@/api/trips';
 import { travellersApi } from '@/api/travellers';
@@ -24,6 +24,7 @@ interface NominatimResult {
 }
 
 export default function LandingPage() {
+  const [searchParams] = useSearchParams();
   const [view, setView] = useState<View>('forms');
   const [createError, setCreateError] = useState('');
   const [joinError, setJoinError] = useState('');
@@ -52,6 +53,26 @@ export default function LandingPage() {
   const [groupCode, setGroupCode] = useState('');
   const [foundTrip, setFoundTrip] = useState<Trip | null>(null);
   const [travellers, setTravellers] = useState<Traveller[]>([]);
+
+  // Auto-join when ?code= param is present (e.g. from QR scan or shared link)
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (!code) return;
+    const formatted = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
+    const display = formatted.length > 4 ? formatted.slice(0, 4) + '-' + formatted.slice(4) : formatted;
+    setGroupCode(display);
+    setJoinLoading(true);
+    tripsApi.getByCode(formatted).then((trip) => {
+      setFoundTrip(trip);
+      return travellersApi.list(trip.id).then((travs) => {
+        setTravellers(travs);
+        setView('select-traveller');
+      });
+    }).catch(() => {
+      setJoinError('Trip not found. Check the link and try again.');
+    }).finally(() => setJoinLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Debounced location search
   useEffect(() => {
@@ -192,6 +213,7 @@ export default function LandingPage() {
               <h2 className="font-display text-base font-bold text-ink">Create a Trip</h2>
               <p className="text-xs text-ink-faint font-body mt-0.5">Set up a new group trip and invite others with a code.</p>
             </div>
+
 
             {createError && (
               <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">

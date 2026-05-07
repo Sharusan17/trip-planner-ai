@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, ChevronDown, ArrowLeft, Plane, RotateCcw } from 'lucide-react';
+import PriceField from './PriceField';
 import { transportApi } from '@/api/transport';
 import { travellersApi } from '@/api/travellers';
 import type { CreateTransportInput, TransportType } from '@trip-planner-ai/shared';
@@ -482,56 +483,38 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
 
               {pricingMode === 'total' ? (
                 <>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="number" step="0.01" min="0"
-                      placeholder="Total for both legs"
-                      className="vintage-input col-span-2"
-                      value={totalPrice}
-                      onChange={(e) => setTotalPrice(e.target.value)}
-                    />
-                    <select className="vintage-input" value={totalCurrency}
-                      onChange={(e) => setTotalCurrency(e.target.value)}>
-                      <option value="GBP">GBP</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
-                    </select>
-                  </div>
+                  <PriceField
+                    price={totalPrice}
+                    currency={totalCurrency}
+                    placeholder="Total for both legs"
+                    onPriceChange={setTotalPrice}
+                    onCurrencyChange={setTotalCurrency}
+                  />
                   <p className="text-[10px] text-ink-faint">Covers both outbound &amp; return. Switch to "Per leg" to split.</p>
                 </>
               ) : (
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-sm w-6 flex-shrink-0">🛫</span>
-                    <input
-                      type="number" step="0.01" min="0" placeholder="0.00"
-                      className="vintage-input flex-1 text-sm"
-                      value={outbound.price}
-                      onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
-                    />
-                    <select className="vintage-input text-sm" style={{ width: 'auto' }}
-                      value={outbound.currency}
-                      onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
-                      <option value="GBP">GBP</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
-                    </select>
+                    <div className="flex-1">
+                      <PriceField
+                        price={outbound.price}
+                        currency={outbound.currency}
+                        onPriceChange={(v) => setOutbound({ ...outbound, price: v })}
+                        onCurrencyChange={(v) => setOutbound({ ...outbound, currency: v })}
+                      />
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm w-6 flex-shrink-0">🛬</span>
-                    <input
-                      type="number" step="0.01" min="0" placeholder="0.00"
-                      className="vintage-input flex-1 text-sm"
-                      value={returnLeg.price}
-                      onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
-                    />
-                    <select className="vintage-input text-sm" style={{ width: 'auto' }}
-                      value={returnLeg.currency}
-                      onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
-                      <option value="GBP">GBP</option>
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
-                    </select>
+                    <div className="flex-1">
+                      <PriceField
+                        price={returnLeg.price}
+                        currency={returnLeg.currency}
+                        onPriceChange={(v) => setReturnLeg({ ...returnLeg, price: v })}
+                        onCurrencyChange={(v) => setReturnLeg({ ...returnLeg, currency: v })}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -598,20 +581,13 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
               value={outbound.reference_number}
               onChange={(e) => setOutbound({ ...outbound, reference_number: e.target.value })}
             />
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                type="number" step="0.01" min="0" placeholder="Price"
-                className="vintage-input col-span-2"
-                value={outbound.price}
-                onChange={(e) => setOutbound({ ...outbound, price: e.target.value })}
-              />
-              <select className="vintage-input" value={outbound.currency}
-                onChange={(e) => setOutbound({ ...outbound, currency: e.target.value })}>
-                <option value="GBP">GBP</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-              </select>
-            </div>
+            <PriceField
+              price={outbound.price}
+              currency={outbound.currency}
+              placeholder="Price (optional)"
+              onPriceChange={(v) => setOutbound({ ...outbound, price: v })}
+              onCurrencyChange={(v) => setOutbound({ ...outbound, currency: v })}
+            />
 
             {/* Non-flight return toggle */}
             {HAS_RETURN.includes(transportType) && (
@@ -689,20 +665,13 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
                       value={returnLeg.reference_number}
                       onChange={(e) => setReturnLeg({ ...returnLeg, reference_number: e.target.value })}
                     />
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number" step="0.01" min="0" placeholder="Return price"
-                        className="vintage-input col-span-2"
-                        value={returnLeg.price}
-                        onChange={(e) => setReturnLeg({ ...returnLeg, price: e.target.value })}
-                      />
-                      <select className="vintage-input" value={returnLeg.currency}
-                        onChange={(e) => setReturnLeg({ ...returnLeg, currency: e.target.value })}>
-                        <option value="GBP">GBP</option>
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                      </select>
-                    </div>
+                    <PriceField
+                      price={returnLeg.price}
+                      currency={returnLeg.currency}
+                      placeholder="Return price (optional)"
+                      onPriceChange={(v) => setReturnLeg({ ...returnLeg, price: v })}
+                      onCurrencyChange={(v) => setReturnLeg({ ...returnLeg, currency: v })}
+                    />
                   </div>
                 )}
               </div>

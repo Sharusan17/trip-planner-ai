@@ -7,13 +7,12 @@ import {
   LayoutDashboard,
   Users,
   CalendarDays,
-  Map,
   Wallet,
-  Package,
   MessageSquare,
   LogOut,
   X,
   Plane,
+  BedDouble,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,9 +27,9 @@ const navItems: NavItem[] = [
   { to: '/dashboard',  label: 'Dashboard',  Icon: LayoutDashboard },
   { to: '/travellers', label: 'Travellers', Icon: Users           },
   { to: '/itinerary',  label: 'Itinerary',  Icon: CalendarDays    },
-  { to: '/map',        label: 'Map',        Icon: Map             },
   { to: '/expenses',   label: 'Finance',    Icon: Wallet          },
-  { to: '/logistics',  label: 'Logistics',  Icon: Package         },
+  { to: '/transport',  label: 'Travel',     Icon: Plane           },
+  { to: '/stays',      label: 'Stays',      Icon: BedDouble       },
   { to: '/community',  label: 'Community',  Icon: MessageSquare   },
 ];
 
@@ -99,8 +98,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           );
         })}
 
-        {/* Settings — organiser only */}
-        {isOrganiser && (
+      </nav>
+
+      {/* Settings — organiser only, just above the divider */}
+      {isOrganiser && (
+        <div className="px-3 pb-1">
           <NavLink
             to="/settings"
             onClick={onNav}
@@ -119,8 +121,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
               </>
             )}
           </NavLink>
-        )}
-      </nav>
+        </div>
+      )}
 
       {/* Bottom: My Profile + Leave Trip */}
       <div className="px-3 py-3 border-t border-[var(--color-sidebar-border)] space-y-1">
@@ -128,7 +130,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
         {activeTraveller && (
           <button
             onClick={() => { navigate('/profile'); onNav?.(); }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-ink-faint hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-ink-light hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
           >
             {activeTraveller.has_photo ? (
               <img
@@ -151,7 +153,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
         {/* Leave trip */}
         <button
           onClick={() => { clearSession(); onNav?.(); }}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-ink-faint hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-ink-light hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"
         >
           <LogOut size={15} strokeWidth={1.75} />
           Leave Trip
@@ -169,7 +171,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
 
       {/* ── Mobile: full-screen overlay (Apple.com style) ────────── */}
       <aside
-        className={`md:hidden fixed inset-0 z-50 flex flex-col bg-[var(--color-sidebar)] transition-opacity duration-300 ease-out ${
+        className={`md:hidden fixed inset-0 z-[1100] flex flex-col bg-[var(--color-sidebar)] transition-opacity duration-300 ease-out ${
           isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -230,7 +232,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
             );
           })}
 
-          {isOrganiser && (
+        </nav>
+
+        {/* Settings — just above the divider */}
+        {isOrganiser && (
+          <div className="px-4 pb-1">
             <NavLink
               to="/settings"
               onClick={() => onClose()}
@@ -249,15 +255,15 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
                 </>
               )}
             </NavLink>
-          )}
-        </nav>
+          </div>
+        )}
 
         {/* Bottom: profile + leave trip */}
         <div className="px-4 py-4 border-t border-[var(--color-sidebar-border)] space-y-1">
           {activeTraveller && (
             <button
               onClick={() => { navigate('/profile'); onClose(); }}
-              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-faint hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-light hover:text-ink hover:bg-parchment transition-all duration-150 font-body"
             >
               {activeTraveller.has_photo ? (
                 <img
@@ -278,7 +284,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           )}
           <button
             onClick={() => { clearSession(); onClose(); }}
-            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-faint hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-ink-light hover:text-terracotta hover:bg-red-50 transition-all duration-150 font-body"
           >
             <LogOut size={20} strokeWidth={1.75} />
             <span className="text-base">Leave Trip</span>

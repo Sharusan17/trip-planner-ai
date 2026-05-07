@@ -9,7 +9,7 @@ import { travellersApi } from '@/api/travellers';
 import { familiesApi } from '@/api/families';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
-import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown } from 'lucide-react';
+import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown, Trash2 } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -67,6 +67,15 @@ export default function ExpenseFormPage() {
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
   const [splitError, setSplitError] = useState<string>('');
+  const descRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [focusNewItem, setFocusNewItem] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (focusNewItem !== null) {
+      descRefs.current[focusNewItem]?.focus();
+      setFocusNewItem(null);
+    }
+  }, [focusNewItem]);
 
   const { data: travellers = [] } = useQuery({
     queryKey: ['travellers', currentTrip?.id],
@@ -100,7 +109,7 @@ export default function ExpenseFormPage() {
     });
     if (exp.split_mode === 'itemised' && exp.line_items?.length) {
       setLineItems(exp.line_items.map((li) => ({
-        description: li.description, qty: (li as any).qty ?? 1, amount: String(li.amount), traveller_ids: li.traveller_ids,
+        description: li.description, qty: (li as any).qty ?? 1, amount: String(li.amount), traveller_ids: Array.isArray(li.traveller_ids) ? li.traveller_ids : [],
       })));
     }
   }, [isEdit, id, expenses]);
@@ -112,6 +121,7 @@ export default function ExpenseFormPage() {
       return expense;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); navigate('/expenses'); },
+    onError: () => { alert('Failed to save expense. Please check your connection and try again.'); },
   });
 
   const updateMutation = useMutation({
@@ -121,6 +131,7 @@ export default function ExpenseFormPage() {
       return expense;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); navigate('/expenses'); },
+    onError: () => { alert('Failed to update expense. Please check your connection and try again.'); },
   });
 
   const claimMutation = useMutation({
@@ -143,6 +154,7 @@ export default function ExpenseFormPage() {
       qc.invalidateQueries({ queryKey: ['claims'] });
       navigate('/expenses?tab=claims');
     },
+    onError: () => { alert('Failed to send for review. Please check your connection and try again.'); },
   });
 
   function handleSendForReview() {
@@ -154,8 +166,13 @@ export default function ExpenseFormPage() {
     let lineItemsData: ExpenseLineItem[] | undefined;
     if (form.split_mode === 'itemised') {
       lineItemsData = lineItems
-        .filter((li) => li.description.trim() && parseFloat(li.amount) > 0)
-        .map((li) => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+        .filter((li) => parseFloat(li.amount) > 0)
+        .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: Array.isArray(li.traveller_ids) ? li.traveller_ids : [] }));
+      const unassigned = lineItemsData.filter((li) => li.traveller_ids.length === 0);
+      if (unassigned.length > 0) {
+        alert(`Please choose who had: ${unassigned.map((li) => `"${li.description}"`).join(', ')}`);
+        return;
+      }
       if (lineItemsData.length === 0) lineItemsData = undefined;
     }
     claimMutation.mutate({ lineItemsData });
@@ -228,8 +245,15 @@ export default function ExpenseFormPage() {
 
     if (form.split_mode === 'itemised') {
       const validLineItems: ExpenseLineItem[] = lineItems
-        .filter((li) => li.description.trim() && parseFloat(li.amount) > 0)
-        .map((li) => ({ description: li.description, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+        .filter((li) => parseFloat(li.amount) > 0)
+        .map((li, i) => ({ description: li.description.trim() || `Item ${i + 1}`, amount: parseFloat(li.amount), traveller_ids: li.traveller_ids }));
+
+      // Validate: every item with an amount must have at least one person assigned
+      const unassigned = validLineItems.filter((li) => !li.traveller_ids || li.traveller_ids.length === 0);
+      if (unassigned.length > 0) {
+        alert(`Please choose who had: ${unassigned.map((li) => `"${li.description}"`).join(', ')}`);
+        return;
+      }
 
       // Validate: line items must sum to the expense total
       const expenseTotal   = parseFloat(form.amount) || 0;
@@ -243,6 +267,10 @@ export default function ExpenseFormPage() {
       }
 
       const computedSplits = computeItemisedSplits();
+      if (Object.keys(computedSplits).length === 0) {
+        alert('Please assign at least one person to each line item using the "Who had this?" buttons.');
+        return;
+      }
       const data: CreateExpenseInput = {
         description: form.description, amount: parseFloat(form.amount),
         currency: form.currency, category: form.category,
@@ -315,7 +343,7 @@ export default function ExpenseFormPage() {
   const equalTotal = parseFloat(form.amount) || 0;
   const equalWeightSum = travellers
     .filter((t) => form.traveller_ids.includes(t.id))
-    .reduce((s, t) => s + t.cost_split_weight, 0);
+    .reduce((s, t) => s + Number(t.cost_split_weight), 0);
   const equalShareMap: Record<string, string> = {};
   if (equalTotal > 0 && equalWeightSum > 0) {
     for (const t of travellers) {
@@ -424,10 +452,16 @@ export default function ExpenseFormPage() {
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2">
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount *</label>
-            <input type="number" step="0.01" min="0" className="vintage-input w-full"
-              value={form.amount} required
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="0.00" />
+            <div className="flex items-center border border-parchment-dark rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-navy/30">
+              <span className="px-2.5 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark h-full flex items-center py-2.5 select-none">
+                {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
+              </span>
+              <input type="number" step="0.01" min="0"
+                className="flex-1 px-3 py-2.5 text-sm outline-none bg-white"
+                value={form.amount} required
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                placeholder="0.00" />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Currency</label>
@@ -503,7 +537,16 @@ export default function ExpenseFormPage() {
           <div className="grid grid-cols-3 gap-2">
             {SPLIT_MODES.map(({ key, label }) => (
               <button key={key} type="button"
-                onClick={() => setForm({ ...form, split_mode: key })}
+                onClick={() => {
+                  if (key === 'custom' && form.split_mode === 'itemised') {
+                    const computed = computeItemisedSplits();
+                    const cs: Record<string, string> = {};
+                    for (const [tid, amt] of Object.entries(computed)) cs[tid] = String(amt);
+                    setForm({ ...form, split_mode: 'custom', custom_splits: cs });
+                  } else {
+                    setForm({ ...form, split_mode: key });
+                  }
+                }}
                 className={`py-2 rounded-xl text-sm font-medium transition-colors border ${
                   form.split_mode === key
                     ? 'bg-[#1C1917] text-white border-[#1C1917]'
@@ -521,25 +564,64 @@ export default function ExpenseFormPage() {
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-semibold text-ink-faint uppercase tracking-wider">Line Items</label>
               <button type="button"
-                onClick={() => setLineItems((p) => [...p, { description: '', qty: 1, amount: '', traveller_ids: [] }])}
+                onClick={() => {
+                  const newIdx = lineItems.length;
+                  setLineItems((p) => [...p, { description: '', qty: 1, amount: '', traveller_ids: [] }]);
+                  setFocusNewItem(newIdx);
+                }}
                 className="text-xs text-navy hover:underline font-medium">+ Add item</button>
             </div>
             <div className="space-y-3">
               {lineItems.map((item, i) => (
-                <div key={i} className="border border-parchment-dark rounded-xl p-3 space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <input className="vintage-input flex-1 text-sm" placeholder="Item (e.g. Burger)"
+                <div key={i} className="border border-parchment-dark rounded-xl p-2.5 space-y-1.5">
+                  <div className="flex gap-1.5 items-center">
+                    {/* Qty — small square; inline style overrides vintage-input's width:100% */}
+                    <input
+                      type="number" step="1" min="1"
+                      className="vintage-input text-xs text-center flex-shrink-0"
+                      style={{ width: '2rem', height: '2rem', padding: '0' }}
+                      placeholder="1"
+                      value={item.qty || ''}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: isNaN(v) ? 0 : v }; return n; });
+                      }}
+                      onBlur={() => {
+                        setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, n[i].qty || 1) }; return n; });
+                      }}
+                    />
+                    {/* Description */}
+                    <input
+                      ref={(el) => { descRefs.current[i] = el; }}
+                      className="vintage-input flex-1 text-sm min-w-0"
+                      style={{ height: '2rem', padding: '0 0.5rem' }}
+                      placeholder="e.g. Pizza, Hotel room"
                       value={item.description}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })} />
-                    <input type="number" step="1" min="1" className="vintage-input w-14 text-sm text-center" placeholder="Qty"
-                      value={item.qty}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], qty: Math.max(1, parseInt(e.target.value) || 1) }; return n; })} />
-                    <input type="number" step="0.01" min="0" className="vintage-input w-24 text-sm text-right" placeholder="0.00"
-                      value={item.amount}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })} />
+                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })}
+                    />
+                    {/* Currency symbol + amount */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {CURRENCY_SYMBOLS[form.currency] && (
+                        <span className="text-xs text-ink-faint select-none">{CURRENCY_SYMBOLS[form.currency]}</span>
+                      )}
+                      <input
+                        type="number" step="0.01" min="0"
+                        className="vintage-input text-sm text-right"
+                        style={{ width: '5rem', height: '2rem', padding: '0 0.5rem' }}
+                        placeholder="0.00"
+                        value={item.amount}
+                        onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: e.target.value }; return n; })}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!isNaN(v)) setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], amount: v.toFixed(2) }; return n; });
+                        }}
+                      />
+                    </div>
                     {lineItems.length > 1 && (
                       <button type="button" onClick={() => setLineItems((p) => p.filter((_, idx) => idx !== i))}
-                        className="text-terracotta text-xl leading-none flex-shrink-0 hover:opacity-70">×</button>
+                        className="text-ink-faint hover:text-terracotta transition-colors flex-shrink-0">
+                        <Trash2 size={14} strokeWidth={1.75} />
+                      </button>
                     )}
                   </div>
                   <div>
@@ -553,8 +635,10 @@ export default function ExpenseFormPage() {
                             n[i] = { ...n[i], traveller_ids: ids.includes(t.id) ? ids.filter((x) => x !== t.id) : [...ids, t.id] };
                             return n;
                           })}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
-                            item.traveller_ids.includes(t.id) ? 'bg-navy text-white' : 'bg-parchment-dark/30 text-ink hover:bg-parchment-dark/60'
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
+                            item.traveller_ids.includes(t.id)
+                              ? 'bg-navy text-white border-navy'
+                              : 'bg-white border-parchment-dark text-ink-light hover:border-navy/40 hover:text-ink'
                           }`}>
                           <span className="w-4 h-4 rounded-full inline-flex items-center justify-center text-[10px] text-white font-bold flex-shrink-0"
                             style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
@@ -562,6 +646,13 @@ export default function ExpenseFormPage() {
                         </button>
                       ))}
                     </div>
+                    {item.traveller_ids.length > 0 && parseFloat(item.amount) > 0 && (
+                      <p className="text-xs text-ink-faint mt-1.5">
+                        {item.traveller_ids.length === 1
+                          ? `${fmt(parseFloat(item.amount), form.currency)} for ${travellers.find((t) => t.id === item.traveller_ids[0])?.name ?? 'them'}`
+                          : `${fmt((parseFloat(item.amount) * item.qty) / item.traveller_ids.length, form.currency)} each`}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -614,11 +705,19 @@ export default function ExpenseFormPage() {
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
                     style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</span>
-                  <span className="flex-1 text-sm text-ink">{t.name}</span>
-                  <input type="number" step="0.01" min="0"
-                    className="vintage-input w-28 text-sm text-right" placeholder="0.00"
-                    value={form.custom_splits[t.id] ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))} />
+                  <span className="flex-1 text-sm text-ink truncate">{t.name}</span>
+                  <div className="flex items-center border border-parchment-dark rounded-lg overflow-hidden bg-white shrink-0 focus-within:ring-2 focus-within:ring-navy/30">
+                    <span className="px-2 text-xs font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark h-full flex items-center py-2 select-none">
+                      {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
+                    </span>
+                    <input
+                      type="number" step="0.01" min="0"
+                      className="w-24 text-sm text-right px-2 py-2 outline-none bg-white"
+                      placeholder="0.00"
+                      value={form.custom_splits[t.id] ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, custom_splits: { ...f.custom_splits, [t.id]: e.target.value } }))}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -705,10 +804,9 @@ export default function ExpenseFormPage() {
                           {t.id === fam.lead_traveller_id && (
                             <Crown size={11} className="text-amber-500 flex-shrink-0" strokeWidth={2} />
                           )}
-                          {equalShareMap[t.id]
-                            ? <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
-                            : <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
-                          }
+                          <span className={`text-xs font-semibold ${equalShareMap[t.id] ? 'text-navy' : 'text-ink-faint'}`}>
+                            {equalShareMap[t.id] ?? fmt(0, form.currency)}
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -750,10 +848,9 @@ export default function ExpenseFormPage() {
                             {t.name.charAt(0).toUpperCase()}
                           </span>
                           <span className="text-sm text-ink flex-1">{t.name}</span>
-                          {equalShareMap[t.id]
-                            ? <span className="text-xs font-semibold text-navy">{equalShareMap[t.id]}</span>
-                            : <span className="text-xs text-ink-faint">{t.cost_split_weight}×</span>
-                          }
+                          <span className={`text-xs font-semibold ${equalShareMap[t.id] ? 'text-navy' : 'text-ink-faint'}`}>
+                            {equalShareMap[t.id] ?? fmt(0, form.currency)}
+                          </span>
                         </label>
                       ))}
                     </div>

@@ -12,7 +12,7 @@ export default function LogisticsPage() {
   const [tab, setTab] = useState<Tab>('transport');
   return (
     <div className="space-y-4">
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
         {TABS.map(({ key, label }) => (
           <button
             key={key}

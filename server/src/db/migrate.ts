@@ -454,6 +454,74 @@ const migrations = [
   // 023: line_item_indices on claim responses
   `ALTER TABLE expense_claim_responses
      ADD COLUMN IF NOT EXISTS line_item_indices JSONB DEFAULT '[]';`,
+
+  // 024: transfers table (peer-to-peer cash movements that offset settlement balances)
+  `CREATE TABLE IF NOT EXISTS transfers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    from_traveller UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    to_traveller UUID NOT NULL REFERENCES travellers(id) ON DELETE RESTRICT,
+    amount DECIMAL(12,2) NOT NULL,
+    currency CHAR(3) NOT NULL,
+    amount_home DECIMAL(12,2),
+    note TEXT,
+    transfer_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_transfers_trip ON transfers(trip_id, transfer_date DESC);`,
+
+  // 025: deposits — add created_by so non-organisers can manage their own
+  `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+
+  // 026: add 'itemised' to split_mode enum (was missing, caused 500 on itemised expense save)
+  `ALTER TYPE split_mode ADD VALUE IF NOT EXISTS 'itemised';`,
+
+  // 027: backfill split_with_ids on expense_claim_responses (column missing if table pre-dated this field)
+  `ALTER TABLE expense_claim_responses
+     ADD COLUMN IF NOT EXISTS split_with_ids JSONB DEFAULT '[]';`,
+
+  // 028: replace deposit_status 'paid' with 'held'/'refunded'/'forfeited'
+  `DO $$ BEGIN
+    -- Step 1: Drop the column default (it holds a typed reference to the old enum)
+    ALTER TABLE deposits ALTER COLUMN status DROP DEFAULT;
+    -- Step 2: Cast column to plain VARCHAR, freeing the column from the enum
+    ALTER TABLE deposits ALTER COLUMN status TYPE VARCHAR(20);
+    -- Step 3: Drop the old enum (no dependents remain)
+    DROP TYPE IF EXISTS deposit_status;
+    -- Step 4: Create the new enum
+    CREATE TYPE deposit_status AS ENUM ('pending', 'overdue', 'held', 'refunded', 'forfeited');
+    -- Step 5: Migrate legacy 'paid' rows to 'held'
+    UPDATE deposits SET status = 'held' WHERE status = 'paid';
+    -- Step 6: Cast column back and restore default
+    ALTER TABLE deposits ALTER COLUMN status TYPE deposit_status USING status::deposit_status;
+    ALTER TABLE deposits ALTER COLUMN status SET DEFAULT 'pending';
+  END $$;`,
+
+  // expense flags — manual + auto-created from forfeited deposits
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged_reason TEXT;`,
+
+  // link a forfeited deposit back to the expense it spawned
+  `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS forfeited_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
+
+  // travel checklist — shared items + per-traveller checked state
+  `CREATE TABLE IF NOT EXISTS trip_checklist_items (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id     UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    label       TEXT NOT NULL,
+    is_shared   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by  UUID REFERENCES travellers(id) ON DELETE SET NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_checklist_items_trip ON trip_checklist_items(trip_id);`,
+  `CREATE TABLE IF NOT EXISTS trip_checklist_checks (
+    item_id       UUID NOT NULL REFERENCES trip_checklist_items(id) ON DELETE CASCADE,
+    traveller_id  UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    checked       BOOLEAN NOT NULL DEFAULT FALSE,
+    checked_at    TIMESTAMPTZ,
+    PRIMARY KEY (item_id, traveller_id)
+  );`,
 ];
 
 export async function runMigrations() {

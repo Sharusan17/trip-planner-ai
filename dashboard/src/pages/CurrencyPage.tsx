@@ -73,9 +73,9 @@ export default function CurrencyPage() {
               {from}
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-ink-faint">{fromSymbol}</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-faint select-none">{fromSymbol}</span>
               <input
-                className="vintage-input pl-8 text-2xl font-display"
+                className="vintage-input pl-9 text-2xl font-display"
                 type="number"
                 min="0"
                 step="0.01"
@@ -101,8 +101,8 @@ export default function CurrencyPage() {
               {to}
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-ink-faint">{toSymbol}</span>
-              <div className="vintage-input pl-8 text-2xl font-display bg-parchment-dark/50 min-h-[3rem] flex items-center">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-faint select-none">{toSymbol}</span>
+              <div className="vintage-input pl-9 text-2xl font-display bg-parchment-dark/50 min-h-[3rem] flex items-center">
                 {isLoading ? '...' : conversion ? conversion.converted.toFixed(2) : '0.00'}
               </div>
             </div>

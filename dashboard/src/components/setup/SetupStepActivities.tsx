@@ -198,28 +198,26 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
             />
           </div>
 
-          {/* Description + type on one line */}
-          <div className="flex gap-2">
-            <input
-              className="vintage-input flex-1 min-w-0"
-              placeholder="Description (e.g. Snorkelling trip)"
-              value={draft.description}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
-            />
-            <select
-              className="vintage-input text-sm flex-shrink-0"
-              style={{ width: 'auto' }}
-              value={draft.type}
-              onChange={(e) => setDraft({ ...draft, type: e.target.value as ActivityType })}
-            >
-              {ACTIVITY_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {ACTIVITY_ICONS[t]} {t === 'sightseeing' ? 'Sights' : t === 'entertainment' ? 'Fun' : t.charAt(0).toUpperCase() + t.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Description — full width */}
+          <input
+            className="vintage-input w-full"
+            placeholder="Description (e.g. Snorkelling trip)"
+            value={draft.description}
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
+          />
+          {/* Activity type — full width */}
+          <select
+            className="vintage-input w-full text-sm"
+            value={draft.type}
+            onChange={(e) => setDraft({ ...draft, type: e.target.value as ActivityType })}
+          >
+            {ACTIVITY_TYPE_OPTIONS.map((t) => (
+              <option key={t} value={t}>
+                {ACTIVITY_ICONS[t]} {t === 'sightseeing' ? 'Sights' : t === 'entertainment' ? 'Fun' : t.charAt(0).toUpperCase() + t.slice(1)}
+              </option>
+            ))}
+          </select>
 
           {/* Location */}
           <PlaceAutocomplete

@@ -6,6 +6,7 @@ import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
 import { Plus, Trash2, Pencil, MapPin, CalendarDays, Check } from 'lucide-react';
 import { parseLocalDate } from '@/utils/date';
+import TripMap from '@/components/TripMap';
 
 const ACTIVITY_COLOURS: Record<ActivityType, { bg: string; text: string; border: string }> = {
   flight:        { bg: 'bg-blue-50',   text: 'text-blue-600',   border: '#3B82F6' },
@@ -24,8 +25,9 @@ export default function ItineraryPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [mapShowAll, setMapShowAll] = useState(false);
   const hasInitDays = useRef(false);
-  const [editingTitle, setEditingTitle] = useState<string | null>(null); // dayId being edited
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
 
   const { data: days = [], isLoading } = useQuery({
@@ -123,7 +125,7 @@ export default function ItineraryPage() {
       ) : (
         <>
           {/* Day tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5 hide-scrollbar">
             {sortedDays.map((day, idx) => {
               const isActive = day.id === (selectedDayId ?? sortedDays[0]?.id);
               return (
@@ -282,6 +284,22 @@ export default function ItineraryPage() {
               </div>
             </div>
           )}
+
+          {/* Route Map — synced to selected day */}
+          <div>
+            <h3 className="font-display text-base font-semibold text-ink mb-1.5">Route Map</h3>
+            <button
+              onClick={() => setMapShowAll((v) => !v)}
+              className={`mb-2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                mapShowAll
+                  ? 'bg-navy text-white border-navy'
+                  : 'bg-white border-parchment-dark text-ink-light hover:border-navy/30'
+              }`}
+            >
+              All Days
+            </button>
+            <TripMap selectedDayId={mapShowAll ? null : selectedDayId} days={sortedDays} />
+          </div>
         </>
       )}
 

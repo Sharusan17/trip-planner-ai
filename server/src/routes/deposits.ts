@@ -14,7 +14,7 @@ router.get('/trips/:tripId/deposits', async (req: Request, res: Response) => {
       query += ` AND status = $2`;
       params.push(status);
     }
-    query += ` ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, due_date NULLS LAST`;
+    query += ` ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'pending' THEN 1 WHEN 'held' THEN 2 ELSE 3 END, due_date NULLS LAST`;
     const result = await pool.query(query, params);
     res.json(result.rows.map((r) => ({
       ...r,
@@ -31,10 +31,10 @@ router.get('/trips/:tripId/deposits/summary', async (req: Request, res: Response
   try {
     const result = await pool.query(
       `SELECT
-         COALESCE(SUM(CASE WHEN status = 'pending' THEN amount_home ELSE 0 END), 0) AS total_pending_home,
-         COALESCE(SUM(CASE WHEN status = 'paid' THEN amount_home ELSE 0 END), 0) AS total_paid_home,
+         COALESCE(SUM(CASE WHEN status IN ('pending','overdue') THEN amount_home ELSE 0 END), 0) AS total_pending_home,
+         COALESCE(SUM(CASE WHEN status = 'held' THEN amount_home ELSE 0 END), 0) AS total_held_home,
          COALESCE(SUM(CASE WHEN status = 'overdue' THEN amount_home ELSE 0 END), 0) AS total_overdue_home,
-         COUNT(CASE WHEN status = 'pending' THEN 1 END) AS count_pending,
+         COUNT(CASE WHEN status IN ('pending','overdue') THEN 1 END) AS count_pending,
          COUNT(CASE WHEN status = 'overdue' THEN 1 END) AS count_overdue
        FROM deposits WHERE trip_id = $1`,
       [req.params.tripId]
@@ -42,7 +42,7 @@ router.get('/trips/:tripId/deposits/summary', async (req: Request, res: Response
     const r = result.rows[0];
     res.json({
       total_pending_home: parseFloat(r.total_pending_home),
-      total_paid_home: parseFloat(r.total_paid_home),
+      total_held_home: parseFloat(r.total_held_home),
       total_overdue_home: parseFloat(r.total_overdue_home),
       count_pending: parseInt(r.count_pending),
       count_overdue: parseInt(r.count_overdue),
@@ -70,12 +70,13 @@ router.post('/trips/:tripId/deposits', async (req: Request, res: Response) => {
       }
     } catch { amountHome = null; }
 
+    const { created_by } = req.body;
     const result = await pool.query(
       `INSERT INTO deposits
-         (trip_id, description, amount, currency, amount_home, due_date, linked_type, linked_id, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+         (trip_id, description, amount, currency, amount_home, due_date, linked_type, linked_id, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [tripId, description, amount, currency, amountHome,
-       due_date || null, linked_type || null, linked_id || null, notes || null]
+       due_date || null, linked_type || null, linked_id || null, notes || null, created_by || null]
     );
 
     const r = result.rows[0];
@@ -123,37 +124,118 @@ router.put('/deposits/:id', async (req: Request, res: Response) => {
 
 // PATCH /deposits/:id/status
 router.patch('/deposits/:id/status', async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
     const { status } = req.body;
-    const paidAt = status === 'paid' ? 'NOW()' : 'NULL';
-    const result = await pool.query(
+    const paidAt = ['held', 'refunded', 'forfeited'].includes(status) ? 'NOW()' : 'NULL';
+
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `UPDATE deposits SET status = $1, paid_at = ${paidAt}, updated_at = NOW()
        WHERE id = $2 RETURNING *`,
       [status, req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    const r = result.rows[0];
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const deposit = result.rows[0];
+
+    // Auto-create a flagged expense when a deposit is forfeited
+    if (status === 'forfeited' && !deposit.forfeited_expense_id) {
+      const tripId: string = deposit.trip_id;
+
+      // Get trip home currency
+      const tripRes = await client.query(`SELECT home_currency FROM trips WHERE id = $1`, [tripId]);
+      const homeCurrency: string = tripRes.rows[0]?.home_currency ?? 'GBP';
+
+      let amountHome: number | null = null;
+      try {
+        if (deposit.currency !== homeCurrency) {
+          const { rate } = await getRate(deposit.currency, homeCurrency);
+          amountHome = Math.round(parseFloat(deposit.amount) * rate * 100) / 100;
+        } else {
+          amountHome = parseFloat(deposit.amount);
+        }
+      } catch { amountHome = null; }
+
+      // Pick first adult traveller as paid_by fallback
+      const travRes = await client.query(
+        `SELECT id FROM travellers WHERE trip_id = $1 ORDER BY created_at LIMIT 1`,
+        [tripId]
+      );
+      const paidBy: string | null = travRes.rows[0]?.id ?? null;
+
+      if (paidBy) {
+        const expDate = new Date().toISOString().slice(0, 10);
+        const expRes = await client.query(
+          `INSERT INTO expenses
+             (trip_id, paid_by, amount, currency, amount_home, description, category,
+              split_mode, expense_date, flagged, flagged_reason)
+           VALUES ($1,$2,$3,$4,$5,$6,'other','equal',$7,TRUE,$8)
+           RETURNING id`,
+          [
+            tripId, paidBy,
+            parseFloat(deposit.amount), deposit.currency, amountHome,
+            `Forfeited deposit: ${deposit.description}`,
+            expDate,
+            'Auto-created from forfeited deposit — assign splits',
+          ]
+        );
+        const expenseId: string = expRes.rows[0].id;
+
+        // Back-link the deposit to its expense
+        await client.query(
+          `UPDATE deposits SET forfeited_expense_id = $1 WHERE id = $2`,
+          [expenseId, deposit.id]
+        );
+        deposit.forfeited_expense_id = expenseId;
+      }
+    }
+
+    await client.query('COMMIT');
+
     res.json({
-      ...r,
-      amount: parseFloat(r.amount),
-      amount_home: r.amount_home ? parseFloat(r.amount_home) : null,
+      ...deposit,
+      amount: parseFloat(deposit.amount),
+      amount_home: deposit.amount_home ? parseFloat(deposit.amount_home) : null,
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: (err as Error).message });
+  } finally {
+    client.release();
   }
 });
 
-// DELETE /deposits/:id
+// DELETE /deposits/:id — also removes the linked forfeited expense if present
 router.delete('/deposits/:id', async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      `DELETE FROM deposits WHERE id = $1 RETURNING id`,
+    await client.query('BEGIN');
+
+    const depRes = await client.query(
+      `DELETE FROM deposits WHERE id = $1 RETURNING id, forfeited_expense_id`,
       [req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (depRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const { forfeited_expense_id } = depRes.rows[0];
+    if (forfeited_expense_id) {
+      await client.query(`DELETE FROM expenses WHERE id = $1`, [forfeited_expense_id]);
+    }
+
+    await client.query('COMMIT');
     res.status(204).send();
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: (err as Error).message });
+  } finally {
+    client.release();
   }
 });
 

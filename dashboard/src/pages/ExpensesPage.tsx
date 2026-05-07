@@ -12,10 +12,11 @@ import { expenseClaimsApi } from '../api/expenseClaims';
 import type { ExpenseClaim } from '@trip-planner-ai/shared';
 import { API_BASE } from '../api/client';
 import type {
-  Expense, ExpenseCategory, Settlement, Deposit, DepositStatus,
+  Expense, ExpenseCategory, Settlement, Deposit, DepositStatus, Transfer,
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
+import { Pencil, Trash2, RotateCcw, FileBarChart2, Flag, AlertTriangle } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -35,10 +36,12 @@ const CATEGORIES: ExpenseCategory[] = [
 ];
 
 const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
-  { key: 'all',     label: 'All'     },
-  { key: 'pending', label: 'Pending' },
-  { key: 'paid',    label: 'Paid'    },
-  { key: 'overdue', label: 'Overdue' },
+  { key: 'all',       label: 'All'       },
+  { key: 'pending',   label: 'Pending'   },
+  { key: 'overdue',   label: 'Overdue'   },
+  { key: 'held',      label: 'Held'      },
+  { key: 'refunded',  label: 'Refunded'  },
+  { key: 'forfeited', label: 'Forfeited' },
 ];
 
 const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
@@ -66,28 +69,43 @@ function groupByDate(expenses: Expense[]): { date: string; items: Expense[] }[] 
 }
 
 function depositStatusBadge(status: DepositStatus) {
-  if (status === 'paid')    return 'status-badge-paid';
-  if (status === 'overdue') return 'status-badge-overdue';
+  if (status === 'held')      return 'status-badge-paid';
+  if (status === 'refunded')  return 'badge badge-green';
+  if (status === 'forfeited') return 'badge badge-terracotta';
+  if (status === 'overdue')   return 'status-badge-overdue';
   return 'status-badge-pending';
 }
+
+const DEPOSIT_STATUS_LABELS: Record<DepositStatus, string> = {
+  pending:   'Pending',
+  overdue:   'Overdue',
+  held:      'Held',
+  refunded:  'Refunded',
+  forfeited: 'Forfeited',
+};
 
 // ─── SettlementRow ────────────────────────────────────────────────────────────
 
 function SettlementRow({
-  settlement, getName, getColour, isOrganiser, homeCurrency, onMarkPaid,
+  settlement, getName, getColour, homeCurrency, onMarkPaid, onUnpay,
+  activeTravellerId, isOrganiser,
 }: {
   settlement: Settlement;
   getName: (id: string) => string;
   getColour: (id: string) => string;
-  isOrganiser: boolean;
   homeCurrency: string;
   onMarkPaid: () => void;
+  onUnpay?: () => void;
+  activeTravellerId?: string;
+  isOrganiser?: boolean;
 }) {
   const fromName = getName(settlement.from_traveller);
   const toName   = getName(settlement.to_traveller);
   const isPaid   = settlement.status === 'paid';
+  const isInvolved = activeTravellerId === settlement.from_traveller || activeTravellerId === settlement.to_traveller;
+  const canAct = isOrganiser || isInvolved;
   return (
-    <div className={`vintage-card p-4 flex items-center gap-4 ${isPaid ? 'opacity-50' : ''}`}>
+    <div className={`vintage-card p-4 flex items-center gap-3 ${isPaid ? 'opacity-70' : ''}`}>
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
         style={{ backgroundColor: getColour(settlement.from_traveller) }}>
         {fromName.charAt(0).toUpperCase()}
@@ -99,15 +117,23 @@ function SettlementRow({
           <span className="font-semibold">{toName}</span>
         </p>
         <p className="text-lg font-bold text-navy">{fmt(settlement.amount, homeCurrency)}</p>
+        {isPaid && settlement.paid_at && (
+          <p className="text-[11px] text-ink-faint mt-0.5">
+            Paid {new Date(settlement.paid_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            {' · '}{new Date(settlement.paid_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        )}
       </div>
-      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-        style={{ backgroundColor: getColour(settlement.to_traveller) }}>
-        {toName.charAt(0).toUpperCase()}
-      </span>
-      {isOrganiser && !isPaid && (
+      {!isPaid && canAct && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
-      {isPaid && <span className="badge status-badge-paid text-xs px-2 py-0.5 rounded shrink-0">Paid</span>}
+      {isPaid && canAct && onUnpay && (
+        <button onClick={onUnpay}
+          className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors shrink-0"
+          title="Undo — mark as pending">
+          <RotateCcw size={14} strokeWidth={2} />
+        </button>
+      )}
     </div>
   );
 }
@@ -135,7 +161,6 @@ export default function ExpensesPage() {
   const [savingBudgets, setSavingBudgets] = useState(false);
 
   // ── settlements state
-  const [showCalcConfirm, setShowCalcConfirm] = useState(false);
   const [familyView, setFamilyView] = useState(false);
   const [expandedFamilyGroups, setExpandedFamilyGroups] = useState<Set<string>>(new Set());
 
@@ -169,8 +194,19 @@ export default function ExpensesPage() {
   });
   const { data: settlements = [], isLoading: settLoading } = useQuery({
     queryKey: ['settlements', currentTrip?.id],
-    queryFn: () => settlementsApi.list(currentTrip!.id),
+    // Auto-calculate then fetch so settlements are always current
+    queryFn: async () => {
+      await settlementsApi.calculate(currentTrip!.id);
+      return settlementsApi.list(currentTrip!.id);
+    },
     enabled: !!currentTrip && tab === 'settlements',
+    staleTime: 0,
+  });
+  const { data: transfers = [], isLoading: transfersLoading } = useQuery({
+    queryKey: ['transfers', currentTrip?.id],
+    queryFn: () => settlementsApi.listTransfers(currentTrip!.id),
+    enabled: !!currentTrip && tab === 'settlements',
+    staleTime: 0,
   });
   const { data: families = [] } = useQuery({
     queryKey: ['families', currentTrip?.id],
@@ -235,13 +271,21 @@ export default function ExpensesPage() {
   });
 
   // ── settlement mutations
-  const calculateMutation = useMutation({
-    mutationFn: () => settlementsApi.calculate(currentTrip!.id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settlements'] }); setShowCalcConfirm(false); },
-  });
   const markPaidMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.markPaid(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+  });
+  const markUnpaidMutation = useMutation({
+    mutationFn: (id: string) => settlementsApi.markUnpaid(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+  });
+
+  const deleteTransferMutation = useMutation({
+    mutationFn: (id: string) => settlementsApi.deleteTransfer(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] });
+      qc.invalidateQueries({ queryKey: ['settlements'] });
+    },
   });
 
   // ── deposit mutations
@@ -333,11 +377,39 @@ export default function ExpensesPage() {
     return `${Math.floor(mins / 60)}h ago`;
   }, []);
 
+  // ── report banner ──────────────────────────────────────────────────────────
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tripEnded = !!currentTrip && parseLocalDate(currentTrip.end_date) <= today;
+
   if (!currentTrip) return null;
 
   // ═══════════════════════════════════════════════════════════════════════
   return (
     <div className="max-w-4xl mx-auto space-y-5">
+
+      {/* Report-ready banner — last day or after trip */}
+      {tripEnded && (
+        <div className="rounded-2xl overflow-hidden border border-amber-200 bg-amber-50">
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <FileBarChart2 size={18} className="text-gold-aged" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-900">Your trip report is ready</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Export a full breakdown of all expenses, deposits and transfers.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/reports')}
+              className="text-xs font-semibold bg-amber-900 text-white px-3 py-1.5 rounded-lg hover:bg-amber-800 transition-colors flex-shrink-0"
+            >
+              Export →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -353,13 +425,15 @@ export default function ExpensesPage() {
         {tab === 'expenses' && (
           <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
         )}
-        {tab === 'deposits' && isOrganiser && (
+        {tab === 'deposits' && (
           <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
             + Add Deposit
           </button>
         )}
-        {tab === 'settlements' && isOrganiser && (
-          <button className="btn-primary" onClick={() => setShowCalcConfirm(true)}>⚖️ Calculate</button>
+        {tab === 'settlements' && (
+          <button className="btn-secondary text-sm" onClick={() => navigate('/expenses/transfers/add')}>
+            + Record Transfer
+          </button>
         )}
         {tab === 'claims' && isOrganiser && (
           <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
@@ -369,7 +443,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
         {MAIN_TABS.map(({ key, label }) => (
           <button
             key={key}
@@ -395,7 +469,7 @@ export default function ExpensesPage() {
       {tab === 'expenses' && (
         <>
           {expSummary.length > 0 && (
-            <div className="overflow-x-auto pb-2">
+            <div className="overflow-x-auto pb-2 hide-scrollbar">
               <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
                 <button
                   onClick={() => setExpenseCat('all')}
@@ -451,14 +525,29 @@ export default function ExpensesPage() {
                     {items.map((exp) => {
                       const paidBy = travellers.find((t) => t.id === exp.paid_by);
                       const mySplit = exp.splits.find((s) => s.traveller_id === activeTraveller?.id);
+                      const splitTotal = exp.splits.reduce((s, sp) => s + sp.amount, 0);
+                      const splitMismatch = exp.splits.length > 0 && Math.abs(splitTotal - exp.amount) > 0.02;
+                      const canAct = isOrganiser || exp.paid_by === activeTraveller?.id;
                       return (
-                        <div key={exp.id} className="vintage-card p-4">
+                        <div key={exp.id} className={`vintage-card p-4 ${exp.flagged ? 'ring-1 ring-terracotta/30' : ''}`}>
                           <div className="flex items-start gap-3">
                             <span className="text-2xl shrink-0 mt-0.5">{EXPENSE_CATEGORY_ICONS[exp.category]}</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                  <p className="font-semibold text-ink">{exp.description}</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-semibold text-ink">{exp.description}</p>
+                                    {exp.flagged && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-red-50 text-terracotta border border-red-200 px-1.5 py-0.5 rounded-full">
+                                        <Flag size={9} /> Flagged
+                                      </span>
+                                    )}
+                                    {splitMismatch && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                        <AlertTriangle size={9} /> Check splits
+                                      </span>
+                                    )}
+                                  </div>
                                   {paidBy && (
                                     <p className="text-xs text-ink-faint mt-0.5">
                                       Paid by{' '}
@@ -495,7 +584,7 @@ export default function ExpensesPage() {
                               {exp.notes && <p className="text-xs text-ink-faint mt-1 italic">{exp.notes}</p>}
                             </div>
                           </div>
-                          {isOrganiser && (
+                          {canAct && (
                             <div className="flex gap-2 mt-3 justify-end">
                               <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
@@ -515,12 +604,6 @@ export default function ExpensesPage() {
       {/* ══ TAB: SETTLEMENTS ═══════════════════════════════════════════════════ */}
       {tab === 'settlements' && (
         <>
-          {totalSpent > 0 && (
-            <div className="vintage-card p-4 text-center">
-              <p className="text-sm text-ink-faint">Total Group Spend</p>
-              <p className="text-3xl font-bold text-navy mt-1">{fmt(totalSpent, homeCurrency)}</p>
-            </div>
-          )}
           {Object.keys(balanceMap).length > 0 && (
             <div className="vintage-card p-4">
               <h2 className="text-sm font-semibold text-ink-faint mb-3">Net Balances</h2>
@@ -541,19 +624,34 @@ export default function ExpensesPage() {
               </div>
             </div>
           )}
+
           {settLoading ? (
-            <p className="text-ink-faint text-center py-8">Loading…</p>
-          ) : pendingSettlements.length === 0 && paidSettlements.length === 0 ? (
-            <div className="vintage-card text-center py-12">
-              <p className="text-3xl mb-2">⚖️</p>
-              <p className="text-ink-faint mb-2">No settlements calculated yet.</p>
-              {isOrganiser && (
-                <>
-                  <p className="text-sm text-ink-faint mb-4">Add expenses first, then calculate who owes whom.</p>
-                  <button className="btn-primary" onClick={() => setShowCalcConfirm(true)}>Calculate Settlements</button>
-                </>
+            <p className="text-ink-faint text-center py-8">Calculating settlements…</p>
+          ) : pendingSettlements.length === 0 ? (
+            <>
+              <div className="vintage-card text-center py-10">
+                <p className="text-3xl mb-2">✅</p>
+                <p className="font-semibold text-ink mb-1">All settled up!</p>
+                <p className="text-sm text-ink-faint">
+                  {paidSettlements.length > 0
+                    ? `${paidSettlements.length} payment${paidSettlements.length !== 1 ? 's' : ''} completed.`
+                    : 'No outstanding balances. Add expenses to see who owes whom.'}
+                </p>
+              </div>
+              {paidSettlements.length > 0 && (
+                <div>
+                  <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">Completed ({paidSettlements.length})</h2>
+                  <div className="space-y-2">
+                    {paidSettlements.map((s) => (
+                      <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
+                        homeCurrency={homeCurrency} onMarkPaid={() => {}}
+                        onUnpay={() => markUnpaidMutation.mutate(s.id)}
+                        activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
+                    ))}
+                  </div>
+                </div>
               )}
-            </div>
+            </>
           ) : (
             <div className="space-y-4">
               {/* Family view toggle — only shown when families exist */}
@@ -561,20 +659,12 @@ export default function ExpensesPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-ink-faint font-medium">View:</span>
                   <div className="flex rounded-lg border border-parchment-dark overflow-hidden">
-                    <button
-                      onClick={() => setFamilyView(false)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                        !familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'
-                      }`}
-                    >
+                    <button onClick={() => setFamilyView(false)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${!familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'}`}>
                       Individual
                     </button>
-                    <button
-                      onClick={() => setFamilyView(true)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                        familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'
-                      }`}
-                    >
+                    <button onClick={() => setFamilyView(true)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${familyView ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-parchment/60'}`}>
                       By Family
                     </button>
                   </div>
@@ -586,9 +676,7 @@ export default function ExpensesPage() {
                   <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">
                     Outstanding ({familyView ? familyAggRows.length : pendingSettlements.length})
                   </h2>
-
                   {familyView ? (
-                    /* ── Family-grouped view ── */
                     <div className="space-y-2">
                       {familyAggRows.map((row) => {
                         const aggKey = `${row.fromKey}→${row.toKey}`;
@@ -596,12 +684,9 @@ export default function ExpensesPage() {
                         const allPending = row.settlements.filter((s) => s.status === 'pending');
                         return (
                           <div key={aggKey} className="vintage-card overflow-hidden">
-                            {/* Aggregated row */}
                             <div className="p-4 flex items-center gap-3">
-                              <span
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-                                style={{ backgroundColor: row.fromColour }}
-                              >
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: row.fromColour }}>
                                 {row.fromLabel.charAt(0).toUpperCase()}
                               </span>
                               <div className="flex-1 min-w-0">
@@ -617,20 +702,14 @@ export default function ExpensesPage() {
                                   <p className="text-[11px] text-ink-faint">{allPending.length} individual settlements</p>
                                 )}
                               </div>
-                              <span
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
-                                style={{ backgroundColor: row.toColour }}
-                              >
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                                style={{ backgroundColor: row.toColour }}>
                                 {row.toLabel.charAt(0).toUpperCase()}
                               </span>
                               <div className="flex flex-col gap-1 shrink-0">
                                 {isOrganiser && (
-                                  <button
-                                    onClick={() => allPending.forEach((s) => markPaidMutation.mutate(s.id))}
-                                    className="btn-secondary text-xs py-1 px-2"
-                                  >
-                                    ✓ Mark all paid
-                                  </button>
+                                  <button onClick={() => allPending.forEach((s) => markPaidMutation.mutate(s.id))}
+                                    className="btn-secondary text-xs py-1 px-2">✓ Mark all paid</button>
                                 )}
                                 {allPending.length > 1 && (
                                   <button
@@ -639,23 +718,18 @@ export default function ExpensesPage() {
                                       if (next.has(aggKey)) next.delete(aggKey); else next.add(aggKey);
                                       return next;
                                     })}
-                                    className="text-xs text-ink-faint hover:text-navy text-center"
-                                  >
+                                    className="text-xs text-ink-faint hover:text-navy text-center">
                                     {isExpanded ? '▲ Hide' : '▼ Expand'}
                                   </button>
                                 )}
                               </div>
                             </div>
-
-                            {/* Expanded individual settlements */}
                             {isExpanded && (
                               <div className="border-t border-parchment-dark bg-parchment/40 divide-y divide-parchment-dark">
                                 {allPending.map((s) => (
                                   <div key={s.id} className="px-4 py-2.5 flex items-center gap-3">
-                                    <span
-                                      className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                                      style={{ backgroundColor: getColour(s.from_traveller) }}
-                                    >
+                                    <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                      style={{ backgroundColor: getColour(s.from_traveller) }}>
                                       {getName(s.from_traveller).charAt(0).toUpperCase()}
                                     </span>
                                     <span className="text-xs text-ink flex-1">
@@ -665,12 +739,8 @@ export default function ExpensesPage() {
                                     </span>
                                     <span className="text-xs font-semibold text-navy">{fmt(s.amount, homeCurrency)}</span>
                                     {isOrganiser && (
-                                      <button
-                                        onClick={() => markPaidMutation.mutate(s.id)}
-                                        className="text-xs text-ink-faint hover:text-navy ml-1"
-                                      >
-                                        ✓
-                                      </button>
+                                      <button onClick={() => markPaidMutation.mutate(s.id)}
+                                        className="text-xs text-ink-faint hover:text-navy ml-1">✓</button>
                                     )}
                                   </div>
                                 ))}
@@ -681,11 +751,11 @@ export default function ExpensesPage() {
                       })}
                     </div>
                   ) : (
-                    /* ── Individual view ── */
                     <div className="space-y-2">
                       {pendingSettlements.map((s) => (
                         <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
-                          isOrganiser={isOrganiser} homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)} />
+                          homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)}
+                          activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
                       ))}
                     </div>
                   )}
@@ -698,11 +768,65 @@ export default function ExpensesPage() {
                   <div className="space-y-2">
                     {paidSettlements.map((s) => (
                       <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
-                        isOrganiser={false} homeCurrency={homeCurrency} onMarkPaid={() => {}} />
+                        homeCurrency={homeCurrency} onMarkPaid={() => {}}
+                        onUnpay={() => markUnpaidMutation.mutate(s.id)}
+                        activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
                     ))}
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Transfers section ── */}
+          {!transfersLoading && transfers.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-3">
+                Transfers ({transfers.length})
+              </h2>
+              <div className="space-y-2">
+                {(transfers as (Transfer & { from_name: string; from_colour: string; to_name: string; to_colour: string })[]).map((tf) => (
+                  <div key={tf.id} className="vintage-card p-4 flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                      style={{ backgroundColor: tf.from_colour }}>
+                      {tf.from_name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink">
+                        <span className="font-semibold">{tf.from_name}</span>
+                        <span className="text-ink/50 mx-2">→</span>
+                        <span className="font-semibold">{tf.to_name}</span>
+                      </p>
+                      <p className="text-xs text-ink-faint">
+                        {new Date(tf.transfer_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        {' · '}
+                        {new Date(tf.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        {tf.note && <span className="ml-2 italic">{tf.note}</span>}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 min-w-[60px]">
+                      <p className="font-bold text-green-700">{fmt(tf.amount, tf.currency)}</p>
+                      {tf.amount_home !== null && tf.currency !== homeCurrency && (
+                        <p className="text-[10px] text-ink-faint">~{fmt(tf.amount_home, homeCurrency)}</p>
+                      )}
+                    </div>
+                    {(isOrganiser || activeTraveller?.id === tf.from_traveller || activeTraveller?.id === tf.to_traveller) && (
+                      <>
+                        <button
+                          onClick={() => navigate(`/expenses/transfers/${tf.id}/edit`)}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors shrink-0"
+                          title="Edit transfer"
+                        ><Pencil size={13} strokeWidth={2} /></button>
+                        <button
+                          onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tf.id); }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-terracotta hover:border-terracotta/30 transition-colors shrink-0"
+                          title="Delete transfer"
+                        >×</button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </>
@@ -715,21 +839,21 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="vintage-card text-center p-4">
                 <p className="text-xs text-ink-faint mb-1">Pending</p>
-                <p className="text-lg font-bold text-navy">{fmt(depSummary.total_pending_home, homeCurrency)}</p>
-                <p className="text-xs text-ink-faint">{depSummary.count_pending} item{depSummary.count_pending !== 1 ? 's' : ''}</p>
+                <p className="text-lg font-bold text-navy">{fmt(depSummary.total_pending_home ?? 0, homeCurrency)}</p>
+                <p className="text-xs text-ink-faint">{depSummary.count_pending ?? 0} item{(depSummary.count_pending ?? 0) !== 1 ? 's' : ''}</p>
               </div>
               <div className="vintage-card text-center p-4">
-                <p className="text-xs text-ink-faint mb-1">Paid</p>
-                <p className="text-lg font-bold text-green-700">{fmt(depSummary.total_paid_home, homeCurrency)}</p>
+                <p className="text-xs text-ink-faint mb-1">Held</p>
+                <p className="text-lg font-bold text-amber-600">{fmt(depSummary.total_held_home ?? 0, homeCurrency)}</p>
               </div>
               <div className="vintage-card text-center p-4">
                 <p className="text-xs text-ink-faint mb-1">Overdue</p>
-                <p className="text-lg font-bold text-terracotta">{fmt(depSummary.total_overdue_home, homeCurrency)}</p>
-                <p className="text-xs text-ink-faint">{depSummary.count_overdue} item{depSummary.count_overdue !== 1 ? 's' : ''}</p>
+                <p className="text-lg font-bold text-terracotta">{fmt(depSummary.total_overdue_home ?? 0, homeCurrency)}</p>
+                <p className="text-xs text-ink-faint">{depSummary.count_overdue ?? 0} item{(depSummary.count_overdue ?? 0) !== 1 ? 's' : ''}</p>
               </div>
             </div>
           )}
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
             {DEPOSIT_STATUS_TABS.map(({ key, label }) => (
               <button key={key} onClick={() => setDepositStatusTab(key)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
@@ -757,7 +881,7 @@ export default function ExpensesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <p className="font-semibold text-ink">{d.description}</p>
-                      <span className={`badge ${depositStatusBadge(d.status)} text-xs px-2 py-0.5 rounded`}>{d.status}</span>
+                      <span className={`${depositStatusBadge(d.status)} text-xs px-2 py-0.5 rounded`}>{DEPOSIT_STATUS_LABELS[d.status]}</span>
                       {d.linked_type && <span className="badge badge-navy text-xs">{d.linked_type}</span>}
                     </div>
                     <p className="text-lg font-bold text-navy">
@@ -773,16 +897,32 @@ export default function ExpensesPage() {
                     )}
                     {d.notes && <p className="text-sm text-ink-faint mt-1 italic">{d.notes}</p>}
                   </div>
-                  {isOrganiser && (
-                    <div className="flex flex-col gap-2 shrink-0">
-                      {d.status !== 'paid' && (
-                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'paid' })} className="btn-secondary text-xs py-1 px-2">✓ Paid</button>
+                  {(isOrganiser || d.created_by === activeTraveller?.id) && (
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                      {/* pending/overdue → mark as held */}
+                      {isOrganiser && (d.status === 'pending' || d.status === 'overdue') && (
+                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'held' })}
+                          className="btn-secondary text-xs py-1 px-2">💰 Mark Held</button>
                       )}
-                      {d.status === 'pending' && (
-                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'overdue' })} className="btn-danger text-xs py-1 px-2">Overdue</button>
+                      {/* held → refunded or forfeited */}
+                      {isOrganiser && d.status === 'held' && (
+                        <>
+                          <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'refunded' })}
+                            className="btn-secondary text-xs py-1 px-2">✅ Refunded</button>
+                          <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'forfeited' })}
+                            className="btn-danger text-xs py-1 px-2">❌ Forfeited</button>
+                        </>
                       )}
-                      <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)} className="btn-secondary text-xs py-1 px-2">Edit</button>
-                      <button onClick={() => { if (confirm('Delete?')) deleteDepositMutation.mutate(d.id); }} className="btn-danger text-xs py-1 px-2">Delete</button>
+                      <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors"
+                        title="Edit deposit">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => { if (confirm('Delete this deposit?')) deleteDepositMutation.mutate(d.id); }}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 text-terracotta hover:bg-red-50 transition-colors"
+                        title="Delete deposit">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -809,8 +949,8 @@ export default function ExpensesPage() {
             <div>
               <label className="block text-sm font-display text-ink-light mb-1">{currFrom}</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-ink-faint">{fromSym}</span>
-                <input className="vintage-input pl-8 text-2xl font-display" type="number" min="0" step="0.01"
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-faint select-none">{fromSym}</span>
+                <input className="vintage-input pl-9 text-2xl font-display" type="number" min="0" step="0.01"
                   value={currAmount} onChange={(e) => setCurrAmount(e.target.value)} />
               </div>
             </div>
@@ -823,8 +963,8 @@ export default function ExpensesPage() {
             <div>
               <label className="block text-sm font-display text-ink-light mb-1">{currTo}</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-ink-faint">{toSym}</span>
-                <div className="vintage-input pl-8 text-2xl font-display bg-parchment-dark/30 min-h-[3rem] flex items-center">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-faint select-none">{toSym}</span>
+                <div className="vintage-input pl-9 text-2xl font-display bg-parchment-dark/30 min-h-[3rem] flex items-center">
                   {conversion ? conversion.converted.toFixed(2) : '0.00'}
                 </div>
               </div>
@@ -1021,26 +1161,6 @@ export default function ExpensesPage() {
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Calculate settlements confirmation */}
-      {showCalcConfirm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="vintage-card rounded-t-2xl sm:rounded-xl w-full max-w-sm text-center p-6">
-            <p className="text-3xl mb-3">⚖️</p>
-            <h2 className="text-xl font-display font-bold text-navy mb-2">Recalculate Settlements?</h2>
-            <p className="text-sm text-ink-faint mb-6">
-              Replaces all pending settlements with fresh calculations. Paid settlements are unaffected.
-            </p>
-            <div className="flex gap-3">
-              <button className="btn-primary flex-1" onClick={() => calculateMutation.mutate()}
-                disabled={calculateMutation.isPending}>
-                {calculateMutation.isPending ? 'Calculating…' : 'Calculate'}
-              </button>
-              <button className="btn-secondary flex-1" onClick={() => setShowCalcConfirm(false)}>Cancel</button>
-            </div>
-          </div>
         </div>
       )}
 
