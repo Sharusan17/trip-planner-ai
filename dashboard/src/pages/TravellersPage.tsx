@@ -6,7 +6,7 @@ import { travellersApi } from '@/api/travellers';
 import { familiesApi } from '@/api/families';
 import type { Traveller } from '@trip-planner-ai/shared';
 import { QRCodeSVG } from 'qrcode.react';
-import { Copy, Check, User, Baby, Pencil, Crown, Trash2, Users } from 'lucide-react';
+import { Copy, Check, User, Baby, Pencil, Crown, Trash2, Users, Share2 } from 'lucide-react';
 
 export default function TravellersPage() {
   const { currentTrip, isOrganiser, activeTraveller } = useTrip();
@@ -15,12 +15,41 @@ export default function TravellersPage() {
   const [pinInput, setPinInput] = useState<{ id: string; pin: string } | null>(null);
   const [revealedNotes, setRevealedNotes] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopyLink = () => {
     if (!currentTrip) return;
-    navigator.clipboard.writeText(currentTrip.group_code);
+    const url = `${window.location.origin}/?code=${currentTrip.group_code}`;
+    navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyCode = () => {
+    if (!currentTrip) return;
+    navigator.clipboard.writeText(currentTrip.group_code);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const handleShare = async () => {
+    if (!currentTrip) return;
+    const url = `${window.location.origin}/?code=${currentTrip.group_code}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Join ${currentTrip.name} on Holiday Plan`,
+          text: `Join our trip! Use code ${currentTrip.group_code} or tap the link.`,
+          url,
+        });
+      } catch {
+        // user dismissed — no-op
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const { data: travellers = [] } = useQuery({
@@ -194,29 +223,52 @@ export default function TravellersPage() {
       <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
         <div className="px-5 py-4 border-b border-parchment-dark">
           <h3 className="font-display text-base font-semibold text-ink">Share This Trip</h3>
-          <p className="text-xs text-ink-faint mt-0.5">Invite others to join using the code or QR</p>
+          <p className="text-xs text-ink-faint mt-0.5">Tap the link, scan the QR code, or share the group code</p>
         </div>
         <div className="p-5 flex flex-col md:flex-row items-center gap-6">
+          {/* QR code */}
           <div className="flex-shrink-0 text-center">
             <div className="bg-parchment rounded-xl p-3 inline-block">
               <QRCodeSVG value={shareUrl} size={110} fgColor="#0F172A" bgColor="transparent" />
             </div>
-            <p className="text-xs text-ink-faint mt-1.5">Scan to join</p>
+            <p className="text-xs text-ink-faint mt-1.5">Scan to join instantly</p>
           </div>
-          <div className="flex-1 w-full">
-            <p className="text-sm text-ink-light mb-2">Group code:</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-white text-ink text-xl tracking-[0.3em] font-mono px-4 py-2.5 rounded-xl text-center border-2 border-ink">
-                {currentTrip.group_code}
-              </code>
-              <button onClick={handleCopy} className="flex items-center gap-1.5 btn-secondary py-2.5 px-3 text-sm flex-shrink-0">
-                {copied ? <Check size={14} strokeWidth={2.5} className="text-green-600" /> : <Copy size={14} strokeWidth={2} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
+
+          {/* Link + code */}
+          <div className="flex-1 w-full space-y-3">
+            {/* Share link */}
+            <div>
+              <p className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-1.5">Share link</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-parchment rounded-xl px-3 py-2 text-xs text-ink-light font-mono truncate border border-parchment-dark">
+                  {shareUrl}
+                </div>
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-1.5 btn-primary py-2 px-3 text-sm flex-shrink-0"
+                >
+                  {copied
+                    ? <Check size={14} strokeWidth={2.5} />
+                    : <Share2 size={14} strokeWidth={2} />}
+                  {copied ? 'Copied!' : 'Share'}
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-faint mt-1">Opens the app and auto-joins your trip</p>
             </div>
-            <p className="text-xs text-ink-faint mt-2">
-              Join at <span className="font-mono">{window.location.origin}</span>
-            </p>
+
+            {/* Group code */}
+            <div>
+              <p className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-1.5">Group code</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-white text-ink text-xl tracking-[0.3em] font-mono px-4 py-2 rounded-xl text-center border-2 border-parchment-dark">
+                  {currentTrip.group_code}
+                </code>
+                <button onClick={handleCopyCode} className="flex items-center gap-1.5 btn-secondary py-2 px-3 text-sm flex-shrink-0">
+                  {codeCopied ? <Check size={14} strokeWidth={2.5} className="text-green-600" /> : <Copy size={14} strokeWidth={2} />}
+                  {codeCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

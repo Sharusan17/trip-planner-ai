@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '@/context/TripContext';
 import { tripsApi } from '@/api/trips';
 import { travellersApi } from '@/api/travellers';
@@ -24,6 +24,7 @@ interface NominatimResult {
 }
 
 export default function LandingPage() {
+  const [searchParams] = useSearchParams();
   const [view, setView] = useState<View>('home');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -50,6 +51,27 @@ export default function LandingPage() {
   const [groupCode, setGroupCode] = useState('');
   const [foundTrip, setFoundTrip] = useState<Trip | null>(null);
   const [travellers, setTravellers] = useState<Traveller[]>([]);
+
+  // Auto-join when ?code= param is present (e.g. from QR scan or shared link)
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (!code) return;
+    const formatted = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
+    const display = formatted.length > 4 ? formatted.slice(0, 4) + '-' + formatted.slice(4) : formatted;
+    setGroupCode(display);
+    setView('join');
+    setLoading(true);
+    tripsApi.getByCode(formatted).then((trip) => {
+      setFoundTrip(trip);
+      return travellersApi.list(trip.id).then((travs) => {
+        setTravellers(travs);
+        setView('select-traveller');
+      });
+    }).catch(() => {
+      setError('Trip not found. Check the link and try again.');
+    }).finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Debounced location search
   useEffect(() => {
@@ -189,7 +211,7 @@ export default function LandingPage() {
               <Plane size={28} className="text-[#4E8080]" strokeWidth={1.75} />
             </div>
             <h1 className="font-display text-3xl font-bold text-white mb-1.5 tracking-tight">
-              Trip Planner
+              Holiday Plan
             </h1>
             <p className="text-white/60 text-sm font-body">Plan your group adventure together</p>
           </div>
