@@ -14,3 +14,4 @@ export * from './types/poll';
 export * from './types/photo';
 export * from './types/family';
 export * from './types/expenseClaim';
+export * from './types/checklist';
