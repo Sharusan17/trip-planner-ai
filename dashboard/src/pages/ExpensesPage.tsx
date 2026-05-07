@@ -16,7 +16,7 @@ import type {
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
-import { Pencil, RotateCcw, FileBarChart2, Flag, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, RotateCcw, FileBarChart2, Flag, AlertTriangle } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -267,12 +267,6 @@ export default function ExpensesPage() {
   // ── expense mutations
   const deleteExpenseMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-
-  const flagExpenseMutation = useMutation({
-    mutationFn: ({ id, flagged }: { id: string; flagged: boolean }) =>
-      expensesApi.flag(id, flagged),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
   });
 
@@ -592,15 +586,6 @@ export default function ExpensesPage() {
                           </div>
                           {canAct && (
                             <div className="flex gap-2 mt-3 justify-end">
-                              {!exp.flagged && (
-                                <button
-                                  onClick={() => flagExpenseMutation.mutate({ id: exp.id, flagged: true })}
-                                  className="btn-secondary text-xs py-1 px-3 flex items-center gap-1"
-                                  title="Flag this expense for review"
-                                >
-                                  <Flag size={11} /> Flag
-                                </button>
-                              )}
                               <button onClick={() => navigate(`/expenses/${exp.id}/edit`)} className="btn-secondary text-xs py-1 px-3">Edit</button>
                               <button onClick={() => { if (confirm('Delete this expense?')) deleteExpenseMutation.mutate(exp.id); }} className="btn-danger text-xs py-1 px-3">Delete</button>
                             </div>
@@ -913,16 +898,11 @@ export default function ExpensesPage() {
                     {d.notes && <p className="text-sm text-ink-faint mt-1 italic">{d.notes}</p>}
                   </div>
                   {(isOrganiser || d.created_by === activeTraveller?.id) && (
-                    <div className="flex flex-col gap-2 shrink-0">
-                      {/* pending/overdue → mark as held (money handed over) */}
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                      {/* pending/overdue → mark as held */}
                       {isOrganiser && (d.status === 'pending' || d.status === 'overdue') && (
                         <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'held' })}
                           className="btn-secondary text-xs py-1 px-2">💰 Mark Held</button>
-                      )}
-                      {/* pending → overdue */}
-                      {isOrganiser && d.status === 'pending' && (
-                        <button onClick={() => depositStatusMutation.mutate({ id: d.id, status: 'overdue' })}
-                          className="btn-danger text-xs py-1 px-2">Overdue</button>
                       )}
                       {/* held → refunded or forfeited */}
                       {isOrganiser && d.status === 'held' && (
@@ -933,8 +913,16 @@ export default function ExpensesPage() {
                             className="btn-danger text-xs py-1 px-2">❌ Forfeited</button>
                         </>
                       )}
-                      <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)} className="btn-secondary text-xs py-1 px-2">Edit</button>
-                      <button onClick={() => { if (confirm('Delete?')) deleteDepositMutation.mutate(d.id); }} className="btn-danger text-xs py-1 px-2">Delete</button>
+                      <button onClick={() => navigate(`/expenses/deposits/${d.id}/edit`)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-parchment-dark text-ink-faint hover:text-navy hover:border-navy/30 transition-colors"
+                        title="Edit deposit">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => { if (confirm('Delete this deposit?')) deleteDepositMutation.mutate(d.id); }}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 text-terracotta hover:bg-red-50 transition-colors"
+                        title="Delete deposit">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   )}
                 </div>
