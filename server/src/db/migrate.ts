@@ -503,6 +503,25 @@ const migrations = [
 
   // link a forfeited deposit back to the expense it spawned
   `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS forfeited_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
+
+  // travel checklist — shared items + per-traveller checked state
+  `CREATE TABLE IF NOT EXISTS trip_checklist_items (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id     UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    label       TEXT NOT NULL,
+    is_shared   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by  UUID REFERENCES travellers(id) ON DELETE SET NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_checklist_items_trip ON trip_checklist_items(trip_id);`,
+  `CREATE TABLE IF NOT EXISTS trip_checklist_checks (
+    item_id       UUID NOT NULL REFERENCES trip_checklist_items(id) ON DELETE CASCADE,
+    traveller_id  UUID NOT NULL REFERENCES travellers(id) ON DELETE CASCADE,
+    checked       BOOLEAN NOT NULL DEFAULT FALSE,
+    checked_at    TIMESTAMPTZ,
+    PRIMARY KEY (item_id, traveller_id)
+  );`,
 ];
 
 export async function runMigrations() {

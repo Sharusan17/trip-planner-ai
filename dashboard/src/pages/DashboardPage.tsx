@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import WeatherWidget from '@/components/WeatherWidget';
 import SetupCard from '@/components/dashboard/SetupCard';
+import ChecklistWidget from '@/components/ChecklistWidget';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -234,6 +235,9 @@ export default function DashboardPage() {
           <span className="text-xs text-navy font-body flex-shrink-0 mt-0.5">View →</span>
         </Link>
       )}
+
+      {/* ── Travel Checklist (date-gated widget) ── */}
+      <ChecklistWidget />
 
       {/* ── Today's / Next Plan ── */}
       <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
