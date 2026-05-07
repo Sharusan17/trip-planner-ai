@@ -194,6 +194,7 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
 
       {/* Draft row */}
       <div className="p-3 rounded-xl border-2 border-dashed border-parchment-dark bg-parchment/30 space-y-2.5">
+        {/* Row 1: colour circle + name input */}
         <div className="flex gap-2 items-center">
           <div
             className="w-9 h-9 rounded-full flex-shrink-0 border-2 border-white shadow-sm"
@@ -207,9 +208,11 @@ export default function SetupStepTravellers({ tripId, holidayType }: Props) {
             onKeyDown={(e) => e.key === 'Enter' && saveDraft()}
             autoComplete="off"
           />
+        </div>
+        {/* Row 2: type select + add button — indented to align under the name input */}
+        <div className="flex gap-2 items-center pl-11">
           <select
-            className="vintage-input text-sm flex-shrink-0"
-            style={{ width: 'auto' }}
+            className="vintage-input text-sm flex-1"
             value={draft.type}
             onChange={(e) => setDraft({ ...draft, type: e.target.value as TravellerType })}
           >
