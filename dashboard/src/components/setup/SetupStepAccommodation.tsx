@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Plus, BedDouble } from 'lucide-react';
-
-const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$', AUD: 'A$', CAD: 'C$', CHF: '₣', JPY: '¥' };
-function sym(code: string) { return CURRENCY_SYMBOLS[code] ?? code; }
+import PriceField from './PriceField';
 import { accommodationApi } from '@/api/accommodation';
 import { travellersApi } from '@/api/travellers';
 import type { CreateAccommodationInput, CreateRoomInput } from '@trip-planner-ai/shared';
@@ -259,29 +257,13 @@ export default function SetupStepAccommodation({ tripId, homeCurrency, holidayTy
           value={draft.reference_number}
           onChange={(e) => setDraft({ ...draft, reference_number: e.target.value })}
         />
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-2 relative flex items-center">
-            <span className="absolute left-3 text-sm font-semibold text-ink-faint pointer-events-none select-none">
-              {sym(draft.currency)}
-            </span>
-            <input
-              type="number" step="0.01" min="0"
-              placeholder="Total price"
-              className="vintage-input w-full pl-7"
-              value={draft.price}
-              onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-            />
-          </div>
-          <select
-            className="vintage-input"
-            value={draft.currency}
-            onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
-          >
-            <option value="GBP">GBP £</option>
-            <option value="EUR">EUR €</option>
-            <option value="USD">USD $</option>
-          </select>
-        </div>
+        <PriceField
+          price={draft.price}
+          currency={draft.currency}
+          placeholder="Total price"
+          onPriceChange={(v) => setDraft({ ...draft, price: v })}
+          onCurrencyChange={(v) => setDraft({ ...draft, currency: v })}
+        />
 
         {/* Rooms section */}
         {travellers.length > 0 && (
@@ -320,29 +302,13 @@ export default function SetupStepAccommodation({ tripId, homeCurrency, holidayTy
                         value={room.name}
                         onChange={(e) => updateRoom(room.key, { name: e.target.value })}
                       />
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="relative flex items-center">
-                          <span className="absolute left-3 text-xs font-semibold text-ink-faint pointer-events-none select-none">
-                            {sym(room.currency)}
-                          </span>
-                          <input
-                            type="number" step="0.01" min="0"
-                            className="vintage-input text-sm w-full pl-6"
-                            placeholder="Room price"
-                            value={room.price}
-                            onChange={(e) => updateRoom(room.key, { price: e.target.value })}
-                          />
-                        </div>
-                        <select
-                          className="vintage-input text-sm"
-                          value={room.currency}
-                          onChange={(e) => updateRoom(room.key, { currency: e.target.value })}
-                        >
-                          <option value="GBP">GBP £</option>
-                          <option value="EUR">EUR €</option>
-                          <option value="USD">USD $</option>
-                        </select>
-                      </div>
+                      <PriceField
+                        price={room.price}
+                        currency={room.currency}
+                        placeholder="Room price"
+                        onPriceChange={(v) => updateRoom(room.key, { price: v })}
+                        onCurrencyChange={(v) => updateRoom(room.key, { currency: v })}
+                      />
                       <div>
                         <p className="text-[10px] text-ink-faint font-semibold uppercase tracking-wider mb-1.5">Who's in this room?</p>
                         <div className="flex flex-wrap gap-1.5">
