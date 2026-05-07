@@ -209,17 +209,33 @@ router.patch('/deposits/:id/status', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /deposits/:id
+// DELETE /deposits/:id — also removes the linked forfeited expense if present
 router.delete('/deposits/:id', async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      `DELETE FROM deposits WHERE id = $1 RETURNING id`,
+    await client.query('BEGIN');
+
+    const depRes = await client.query(
+      `DELETE FROM deposits WHERE id = $1 RETURNING id, forfeited_expense_id`,
       [req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (depRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const { forfeited_expense_id } = depRes.rows[0];
+    if (forfeited_expense_id) {
+      await client.query(`DELETE FROM expenses WHERE id = $1`, [forfeited_expense_id]);
+    }
+
+    await client.query('COMMIT');
     res.status(204).send();
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: (err as Error).message });
+  } finally {
+    client.release();
   }
 });
 
