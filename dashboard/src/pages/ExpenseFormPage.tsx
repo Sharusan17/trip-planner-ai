@@ -449,31 +449,31 @@ export default function ExpenseFormPage() {
         </div>
 
         {/* Amount + Currency */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
+        <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+          <div>
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount *</label>
-            <div className="flex items-center border border-parchment-dark rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-navy/30">
-              <span className="px-2.5 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark h-full flex items-center py-2.5 select-none">
+            <div className="flex items-stretch min-h-[40px] border border-parchment-dark rounded-[10px] overflow-hidden bg-white focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/20">
+              <span className="px-3 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark flex items-center select-none flex-shrink-0">
                 {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
               </span>
               <input type="number" step="0.01" min="0"
-                className="flex-1 px-3 py-2.5 text-sm outline-none bg-white"
+                className="flex-1 px-3 py-[0.4375rem] text-sm outline-none bg-white min-w-0"
                 value={form.amount} required
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 placeholder="0.00" />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Currency</label>
-            <select className="vintage-input w-full" value={form.currency}
+            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider whitespace-nowrap">CCY</label>
+            <select className="vintage-input" style={{ width: 'auto', minWidth: '5.5rem' }} value={form.currency}
               onChange={(e) => setForm({ ...form, currency: e.target.value })}>
-              <option value={destCurrency}>{destCurrency} {CURRENCY_SYMBOLS[destCurrency] ?? ''}</option>
+              <option value={destCurrency}>{destCurrency}</option>
               {homeCurrency !== destCurrency && (
-                <option value={homeCurrency}>{homeCurrency} {CURRENCY_SYMBOLS[homeCurrency] ?? ''}</option>
+                <option value={homeCurrency}>{homeCurrency}</option>
               )}
               <option disabled>──────────</option>
               {ALL_CURRENCIES.filter((c) => c !== destCurrency && c !== homeCurrency).map((c) => (
-                <option key={c} value={c}>{c} {CURRENCY_SYMBOLS[c] ?? ''}</option>
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
