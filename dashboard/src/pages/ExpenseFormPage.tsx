@@ -449,8 +449,8 @@ export default function ExpenseFormPage() {
         </div>
 
         {/* Amount + Currency */}
-        <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
-          <div>
+        <div className="flex gap-3 items-end">
+          <div className="flex-1 min-w-0">
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount *</label>
             <div className="flex items-stretch min-h-[40px] border border-parchment-dark rounded-[10px] overflow-hidden bg-white focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/20">
               <span className="px-3 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark flex items-center select-none flex-shrink-0">
@@ -463,9 +463,11 @@ export default function ExpenseFormPage() {
                 placeholder="0.00" />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider whitespace-nowrap">CCY</label>
-            <select className="vintage-input" style={{ width: 'auto', minWidth: '5.5rem' }} value={form.currency}
+          <div className="flex-shrink-0 w-20">
+            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">CCY</label>
+            <select
+              className="w-full h-[40px] border border-parchment-dark rounded-[10px] bg-white px-2 text-sm text-ink focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/20 transition-colors"
+              value={form.currency}
               onChange={(e) => setForm({ ...form, currency: e.target.value })}>
               <option value={destCurrency}>{destCurrency}</option>
               {homeCurrency !== destCurrency && (
