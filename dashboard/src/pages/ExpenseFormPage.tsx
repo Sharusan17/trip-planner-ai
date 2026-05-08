@@ -464,7 +464,7 @@ export default function ExpenseFormPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider whitespace-nowrap">CCY</label>
+            <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Currency</label>
             <select className="vintage-input" style={{ width: 'auto', minWidth: '5.5rem' }} value={form.currency}
               onChange={(e) => setForm({ ...form, currency: e.target.value })}>
               <option value={destCurrency}>{destCurrency}</option>

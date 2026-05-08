@@ -93,9 +93,9 @@ export default function TripHeader({ onMenuOpen }: TripHeaderProps) {
         {countdown && (() => {
           const { Icon } = countdown;
           return (
-            <span className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full font-body ${badgeClass[countdown.state]}`}>
-              <Icon size={11} strokeWidth={2.5} />
-              <span className="hidden sm:inline">{countdown.label}</span>
+            <span className={`flex-shrink-0 flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full font-body ${badgeClass[countdown.state]}`}>
+              <Icon size={10} strokeWidth={2.5} />
+              {countdown.label}
             </span>
           );
         })()}
