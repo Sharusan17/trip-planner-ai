@@ -135,33 +135,82 @@ function ReportContent({
         </div>
       </div>
 
-      {/* Traveller breakdown — group report only */}
-      {reportType === 'group' && travellers.length > 1 && (
-        <div className="vintage-card p-5 mb-4">
-          <h2 className="font-display text-sm font-bold text-ink mb-3 flex items-center gap-2">
-            <Users size={14} className="text-ink-faint" /> Per-Person Breakdown
-          </h2>
-          <div className="space-y-2">
-            {travellers
-              .filter((t: any) => travellerSpend[t.id] > 0)
-              .sort((a: any, b: any) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0))
-              .map((t: any) => {
-                const spent = travellerSpend[t.id] ?? 0;
+      {/* Traveller breakdown — group report: all travellers; family report: members only */}
+      {(reportType === 'group' || reportType === 'family') && travellers.length > 1 && totalExpenses > 0 && (() => {
+        const subjectFam = reportType === 'family' ? families.find((f: any) => f.id === subjectId) : null;
+        const rows: { id: string; name: string; colour: string }[] = subjectFam
+          ? subjectFam.members.map((m: any) => ({ id: m.id, name: m.name, colour: m.avatar_colour }))
+          : travellers.map((t: any) => ({ id: t.id, name: t.name, colour: t.avatar_colour }));
+        const shown = rows.filter((r) => (travellerSpend[r.id] ?? 0) > 0)
+          .sort((a, b) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0));
+        if (shown.length === 0) return null;
+        return (
+          <div className="vintage-card p-5 mb-4">
+            <h2 className="font-display text-sm font-bold text-ink mb-3 flex items-center gap-2">
+              <Users size={14} className="text-ink-faint" />
+              {reportType === 'family' ? 'Per-Member Breakdown' : 'Per-Person Breakdown'}
+            </h2>
+            <div className="space-y-2">
+              {shown.map((r) => {
+                const spent = travellerSpend[r.id] ?? 0;
                 const pct = totalExpenses > 0 ? (spent / totalExpenses) * 100 : 0;
                 return (
-                  <div key={t.id} className="flex items-center gap-3">
-                    <Avatar name={t.name} colour={t.avatar_colour} size={7} />
-                    <span className="text-sm text-ink w-28 truncate">{t.name}</span>
+                  <div key={r.id} className="flex items-center gap-3">
+                    <Avatar name={r.name} colour={r.colour} size={7} />
+                    <span className="text-sm text-ink w-28 truncate">{r.name}</span>
                     <div className="flex-1 h-1.5 bg-parchment-dark rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: t.avatar_colour }} />
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: r.colour }} />
                     </div>
                     <span className="text-sm font-semibold text-ink w-20 text-right">{fmt(spent, homeCurrency)}</span>
                   </div>
                 );
               })}
+              {reportType === 'family' && (
+                <div className="flex items-center gap-3 pt-1 border-t border-parchment-dark mt-1">
+                  <div className="w-7 h-7 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-ink w-28">Family total</span>
+                  <div className="flex-1" />
+                  <span className="text-sm font-bold text-ink w-20 text-right">
+                    {fmt(shown.reduce((s, r) => s + (travellerSpend[r.id] ?? 0), 0), homeCurrency)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Individual report summary */}
+      {reportType === 'individual' && subjectId && totalExpenses > 0 && (() => {
+        const myShare = travellerSpend[subjectId] ?? 0;
+        const iPaid = expenses.reduce((s, e) => e.paid_by === subjectId ? s + (e.amount_home ?? e.amount) : s, 0);
+        const balance = iPaid - myShare;
+        return (
+          <div className="vintage-card p-5 mb-4">
+            <h2 className="font-display text-sm font-bold text-ink mb-3 flex items-center gap-2">
+              <User size={14} className="text-ink-faint" /> {getName(subjectId)}'s Summary
+            </h2>
+            <div className="grid grid-cols-3 divide-x divide-parchment-dark text-center">
+              <div className="px-3 py-1">
+                <p className="text-[10px] text-ink-faint uppercase tracking-wide mb-0.5">My Share</p>
+                <p className="font-display text-base font-bold text-ink">{fmt(myShare, homeCurrency)}</p>
+              </div>
+              <div className="px-3 py-1">
+                <p className="text-[10px] text-ink-faint uppercase tracking-wide mb-0.5">I Paid</p>
+                <p className="font-display text-base font-bold text-ink">{fmt(iPaid, homeCurrency)}</p>
+              </div>
+              <div className="px-3 py-1">
+                <p className="text-[10px] text-ink-faint uppercase tracking-wide mb-0.5">
+                  {balance >= 0 ? 'Owed Back' : 'Still Owe'}
+                </p>
+                <p className={`font-display text-base font-bold ${balance >= 0 ? 'text-emerald-600' : 'text-terracotta'}`}>
+                  {fmt(Math.abs(balance), homeCurrency)}
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Deposits ──────────────────────────────────────────────────────────── */}
       <div className="vintage-card overflow-hidden mb-4">
