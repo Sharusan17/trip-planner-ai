@@ -190,9 +190,6 @@ export default function DashboardPage() {
     const split = exp.splits.find((s) => s.traveller_id === activeTraveller?.id);
     return sum + (split?.amount_home ?? 0);
   }, 0);
-  const todaySpent = expenses
-    .filter((e) => e.expense_date.startsWith(todayStr))
-    .reduce((sum, e) => sum + (e.amount_home ?? 0), 0);
   const todayDay = days?.find((d) => d.date.startsWith(todayStr));
 
   // Next upcoming day if today has no entry
@@ -225,6 +222,10 @@ export default function DashboardPage() {
   // Travellers not in any family
   const familyMemberIds = new Set(families.flatMap((f) => f.members.map((m: { id: string }) => m.id)));
   const ungroupedTravellers = (travellers ?? []).filter((t) => !familyMemberIds.has(t.id));
+
+  // Active traveller's family spend
+  const myFamily = families.find((f) => f.members.some((m: { id: string }) => m.id === activeTraveller?.id));
+  const myFamilySpend = myFamily ? (familySpend[myFamily.id] ?? 0) : 0;
 
   return (
     <div className="space-y-4">
@@ -312,10 +313,10 @@ export default function DashboardPage() {
               iconBg: 'bg-[#EBF4F4]',
             },
             {
-              icon: <CalendarDays size={18} strokeWidth={1.75} className="text-amber-600" />,
-              value: todaySpent > 0 ? fmt(todaySpent) : '—',
-              label: "Today's Spend",
-              iconBg: 'bg-amber-50',
+              icon: <Users size={18} strokeWidth={1.75} className="text-violet-600" />,
+              value: myFamilySpend > 0 ? fmt(myFamilySpend) : '—',
+              label: myFamily ? `${myFamily.name} Total` : 'Family Spend',
+              iconBg: 'bg-violet-50',
             },
           ]}
         />
