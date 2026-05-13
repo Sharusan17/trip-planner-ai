@@ -97,13 +97,16 @@ function ReportContent({
   const totalDeposits = deposits.reduce((s: number, d: any) => s + (d.amount_home ?? d.amount), 0);
   const totalTransfers = transfers.reduce((s: number, t: any) => s + (t.amount_home ?? t.amount), 0);
 
-  // Per-traveller spend breakdown (for group report)
+  // Per-traveller spend breakdown
   const travellerSpend: Record<string, number> = {};
   for (const e of expenses) {
     for (const split of e.splits) {
       travellerSpend[split.traveller_id] = (travellerSpend[split.traveller_id] ?? 0) + (split.amount_home ?? split.amount);
     }
   }
+
+  // For individual report summary: single traveller ID from scopeIds
+  const subjectId = scopeIds && scopeIds.size === 1 ? [...scopeIds][0] : null;
 
   return (
     <div className="print-content space-y-0">
@@ -145,9 +148,8 @@ function ReportContent({
 
       {/* Traveller breakdown — group report: all travellers; family report: members only */}
       {(reportType === 'group' || reportType === 'family') && travellers.length > 1 && totalExpenses > 0 && (() => {
-        const subjectFam = reportType === 'family' ? families.find((f: any) => f.id === subjectId) : null;
-        const rows: { id: string; name: string; colour: string }[] = subjectFam
-          ? subjectFam.members.map((m: any) => ({ id: m.id, name: m.name, colour: m.avatar_colour }))
+        const rows: { id: string; name: string; colour: string }[] = reportType === 'family' && scopeIds
+          ? travellers.filter((t: any) => scopeIds.has(t.id)).map((t: any) => ({ id: t.id, name: t.name, colour: t.avatar_colour }))
           : travellers.map((t: any) => ({ id: t.id, name: t.name, colour: t.avatar_colour }));
         const shown = rows.filter((r) => (travellerSpend[r.id] ?? 0) > 0)
           .sort((a, b) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0));
@@ -508,7 +510,6 @@ export default function ReportPage() {
     return [];
   }, [transfers, reportType, selectedFamilyId, selectedTravellerId, families]);
 
-  // deposits shown for all report types (group = all, family/individual = all as they're trip-level)
   const reportDeposits = deposits;
 
   function pickType(type: ReportType) {
@@ -546,7 +547,6 @@ export default function ReportPage() {
 
   if (!currentTrip) return null;
 
-  // ── Report title ──────────────────────────────────────────────────────────────────
   let reportTitle = `${currentTrip.name} — Full Group Report`;
   let reportSubtitle = `${currentTrip.destination} · ${fmtD(currentTrip.start_date)} – ${fmtD(currentTrip.end_date)}`;
 
@@ -567,7 +567,6 @@ export default function ReportPage() {
     </button>
   );
 
-  // ══ SCREEN 1: Pick type ════════════════════════════════════════════════════════════════════
   if (step === 'pick-type') {
     return (
       <div className="max-w-lg mx-auto space-y-5">
@@ -578,62 +577,35 @@ export default function ReportPage() {
             <p className="text-sm text-ink-faint mt-0.5">Choose what to include in the report</p>
           </div>
         </div>
-
         <div className="space-y-3">
-          {/* Group */}
-          <button
-            onClick={() => pickType('group')}
-            className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-          >
+          <button onClick={() => pickType('group')} className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] flex items-center justify-center flex-shrink-0">
-                <Users size={20} className="text-white" />
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] flex items-center justify-center flex-shrink-0"><Users size={20} className="text-white" /></div>
               <div className="flex-1 min-w-0">
                 <p className="font-display font-bold text-ink text-base">Full Group Report</p>
-                <p className="text-sm text-ink-faint mt-0.5">
-                  Every expense, deposit and transfer — all {travellers.length} travellers
-                </p>
+                <p className="text-sm text-ink-faint mt-0.5">Every expense, deposit and transfer — all {travellers.length} travellers</p>
               </div>
               <ChevronRight size={16} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
-
-          {/* Family — only if families exist */}
           {families.length > 0 && (
-            <button
-              onClick={() => pickType('family')}
-              className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-            >
+            <button onClick={() => pickType('family')} className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Home size={20} className="text-gold-aged" />
-                </div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0"><Home size={20} className="text-gold-aged" /></div>
                 <div className="flex-1 min-w-0">
                   <p className="font-display font-bold text-ink text-base">Family Report</p>
-                  <p className="text-sm text-ink-faint mt-0.5">
-                    Filtered to one family group · {families.length} famil{families.length !== 1 ? 'ies' : 'y'}
-                  </p>
+                  <p className="text-sm text-ink-faint mt-0.5">Filtered to one family group · {families.length} famil{families.length !== 1 ? 'ies' : 'y'}</p>
                 </div>
                 <ChevronRight size={16} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </button>
           )}
-
-          {/* Individual */}
-          <button
-            onClick={() => pickType('individual')}
-            className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-          >
+          <button onClick={() => pickType('individual')} className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
-                <User size={20} className="text-emerald-600" />
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0"><User size={20} className="text-emerald-600" /></div>
               <div className="flex-1 min-w-0">
                 <p className="font-display font-bold text-ink text-base">Individual Report</p>
-                <p className="text-sm text-ink-faint mt-0.5">
-                  One person's expenses, splits and transfers
-                </p>
+                <p className="text-sm text-ink-faint mt-0.5">One person's expenses, splits and transfers</p>
               </div>
               <ChevronRight size={16} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </div>
@@ -643,7 +615,6 @@ export default function ReportPage() {
     );
   }
 
-  // ══ SCREEN 2: Pick subject ══════════════════════════════════════════════════════════════════
   if (step === 'pick-subject') {
     const isFamily = reportType === 'family';
     return (
@@ -651,51 +622,25 @@ export default function ReportPage() {
         <div className="flex items-center gap-3">
           {backBtn}
           <div>
-            <h1 className="font-display text-xl font-bold text-ink">
-              {isFamily ? 'Select Family' : 'Select Person'}
-            </h1>
-            <p className="text-sm text-ink-faint mt-0.5">
-              {isFamily ? "Report will be filtered to this family's activity" : "Report will show this person's activity"}
-            </p>
+            <h1 className="font-display text-xl font-bold text-ink">{isFamily ? 'Select Family' : 'Select Person'}</h1>
+            <p className="text-sm text-ink-faint mt-0.5">{isFamily ? "Report will be filtered to this family's activity" : "Report will show this person's activity"}</p>
           </div>
         </div>
-
         <div className="space-y-2">
           {isFamily
             ? families.map((fam: any) => (
-                <button
-                  key={fam.id}
-                  onClick={() => pickSubject(fam.id)}
-                  className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-bold flex-shrink-0"
-                    style={{ backgroundColor: fam.colour }}
-                  >
-                    {fam.name.charAt(0).toUpperCase()}
-                  </div>
+                <button key={fam.id} onClick={() => pickSubject(fam.id)} className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-bold flex-shrink-0" style={{ backgroundColor: fam.colour }}>{fam.name.charAt(0).toUpperCase()}</div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-ink">{fam.name}</p>
-                    <p className="text-xs text-ink-faint">
-                      {fam.members.length} member{fam.members.length !== 1 ? 's' : ''}
-                      {' · '}{fam.members.map((m: any) => m.name).join(', ')}
-                    </p>
+                    <p className="text-xs text-ink-faint">{fam.members.length} member{fam.members.length !== 1 ? 's' : ''}{' · '}{fam.members.map((m: any) => m.name).join(', ')}</p>
                   </div>
                   <ChevronRight size={15} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
                 </button>
               ))
             : travellers.map((t: any) => (
-                <button
-                  key={t.id}
-                  onClick={() => pickSubject(t.id)}
-                  className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0 text-sm"
-                    style={{ backgroundColor: t.avatar_colour }}
-                  >
-                    {t.name.charAt(0).toUpperCase()}
-                  </div>
+                <button key={t.id} onClick={() => pickSubject(t.id)} className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0 text-sm" style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-ink">{t.name}</p>
                     <p className="text-xs text-ink-faint capitalize">{t.type} · {t.role}</p>
@@ -709,10 +654,8 @@ export default function ReportPage() {
     );
   }
 
-  // ══ SCREEN 3: Report ═══════════════════════════════════════════════════════════════════
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Toolbar — hidden on print */}
       <div className="no-print flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           {backBtn}
@@ -729,15 +672,11 @@ export default function ReportPage() {
             </h1>
           </div>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="btn-primary flex items-center gap-2 text-sm"
-        >
+        <button onClick={() => window.print()} className="btn-primary flex items-center gap-2 text-sm">
           <Printer size={15} />
           Print / PDF
         </button>
       </div>
-
       <ReportContent
         title={reportTitle}
         subtitle={reportSubtitle}
