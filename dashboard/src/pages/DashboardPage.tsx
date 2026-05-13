@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useState, useRef } from 'react';
 import { useTrip } from '@/context/TripContext';
 import { useQuery } from '@tanstack/react-query';
 import { travellersApi } from '@/api/travellers';
@@ -55,6 +56,51 @@ function StatCard({ icon, value, label, iconBg }: StatCardProps) {
       <div className="min-w-0">
         <div className="font-display text-xl font-bold text-ink leading-none">{value}</div>
         <div className="text-xs text-ink-faint font-body mt-0.5">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+interface SpendSlide { icon: React.ReactNode; value: string; label: string; iconBg: string }
+
+function SwipeableSpendCard({ slides }: { slides: SpendSlide[] }) {
+  const [idx, setIdx] = useState(0);
+  const touchX = useRef<number | null>(null);
+  const swiped = useRef(false);
+
+  function next() { setIdx((i) => (i + 1) % slides.length); }
+  function prev() { setIdx((i) => (i - 1 + slides.length) % slides.length); }
+
+  const s = slides[idx];
+  return (
+    <div
+      className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] p-4 flex flex-col gap-2.5 select-none cursor-pointer"
+      onTouchStart={(e) => { touchX.current = e.touches[0].clientX; swiped.current = false; }}
+      onTouchEnd={(e) => {
+        if (touchX.current === null) return;
+        const dx = e.changedTouches[0].clientX - touchX.current;
+        if (Math.abs(dx) > 28) { dx < 0 ? next() : prev(); swiped.current = true; }
+        touchX.current = null;
+      }}
+      onClick={() => { if (!swiped.current) next(); swiped.current = false; }}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${s.iconBg}`}>
+          {s.icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-xl font-bold text-ink leading-none">{s.value}</div>
+          <div className="text-xs text-ink-faint font-body mt-0.5">{s.label}</div>
+        </div>
+      </div>
+      <div className="flex gap-1 justify-center">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? 'bg-ink' : 'bg-ink-faint/25'}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -138,6 +184,15 @@ export default function DashboardPage() {
   const _now = new Date();
   const _pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}`;
+
+  // Spend card derived values
+  const myShare = expenses.reduce((sum, exp) => {
+    const split = exp.splits.find((s) => s.traveller_id === activeTraveller?.id);
+    return sum + (split?.amount_home ?? 0);
+  }, 0);
+  const todaySpent = expenses
+    .filter((e) => e.expense_date.startsWith(todayStr))
+    .reduce((sum, e) => sum + (e.amount_home ?? 0), 0);
   const todayDay = days?.find((d) => d.date.startsWith(todayStr));
 
   // Next upcoming day if today has no entry
@@ -242,11 +297,27 @@ export default function DashboardPage() {
           label="Activities"
           iconBg="bg-orange-50"
         />
-        <StatCard
-          icon={<Receipt size={18} strokeWidth={1.75} className="text-emerald-600" />}
-          value={totalSpent > 0 ? fmt(totalSpent) : '—'}
-          label="Total Spent"
-          iconBg="bg-emerald-50"
+        <SwipeableSpendCard
+          slides={[
+            {
+              icon: <Receipt size={18} strokeWidth={1.75} className="text-emerald-600" />,
+              value: totalSpent > 0 ? fmt(totalSpent) : '—',
+              label: 'Total Spent',
+              iconBg: 'bg-emerald-50',
+            },
+            {
+              icon: <Users size={18} strokeWidth={1.75} className="text-[#3A6666]" />,
+              value: myShare > 0 ? fmt(myShare) : '—',
+              label: 'My Share',
+              iconBg: 'bg-[#EBF4F4]',
+            },
+            {
+              icon: <CalendarDays size={18} strokeWidth={1.75} className="text-amber-600" />,
+              value: todaySpent > 0 ? fmt(todaySpent) : '—',
+              label: "Today's Spend",
+              iconBg: 'bg-amber-50',
+            },
+          ]}
         />
       </div>
 
