@@ -41,7 +41,7 @@ function Avatar({ name, colour, size = 8 }: { name: string; colour: string; size
   );
 }
 
-// ── Section header ─────────────────────────────────────────────────────────────
+// ── Section header ─────────────────────────────────────────────
 function SectionHeader({ emoji, title, count, total, currency }: {
   emoji: string; title: string; count: number; total: number; currency: string;
 }) {
@@ -57,9 +57,9 @@ function SectionHeader({ emoji, title, count, total, currency }: {
   );
 }
 
-// ── The report content (also used for printing) ────────────────────────────────
+// ── The report content (also used for printing) ──────────────────────────────────
 function ReportContent({
-  title, subtitle, expenses, deposits, transfers, travellers, homeCurrency, reportType, subjectId, families,
+  title, subtitle, expenses, deposits, transfers, travellers, homeCurrency, reportType, scopeIds, families,
 }: {
   title: string;
   subtitle: string;
@@ -69,7 +69,7 @@ function ReportContent({
   travellers: any[];
   homeCurrency: string;
   reportType: ReportType;
-  subjectId: string | null;
+  scopeIds: Set<string> | null;
   families: any[];
 }) {
   const getName = (id: string) => travellers.find((t: any) => t.id === id)?.name ?? 'Unknown';
@@ -85,7 +85,15 @@ function ReportContent({
     b.transfer_date.localeCompare(a.transfer_date)
   );
 
-  const totalExpenses = expenses.reduce((s, e) => s + (e.amount_home ?? e.amount), 0);
+  // For scoped reports, total = sum of relevant splits only
+  const scopedExpenseAmount = (e: Expense): number => {
+    if (!scopeIds) return e.amount_home ?? e.amount;
+    return e.splits
+      .filter((s) => scopeIds.has(s.traveller_id))
+      .reduce((sum, s) => sum + (s.amount_home ?? s.amount), 0);
+  };
+
+  const totalExpenses = expenses.reduce((s, e) => s + scopedExpenseAmount(e), 0);
   const totalDeposits = deposits.reduce((s: number, d: any) => s + (d.amount_home ?? d.amount), 0);
   const totalTransfers = transfers.reduce((s: number, t: any) => s + (t.amount_home ?? t.amount), 0);
 
@@ -216,10 +224,10 @@ function ReportContent({
             {sortedExpenses.map((e) => {
               const paidByName = getName(e.paid_by);
               const paidByColour = getColour(e.paid_by);
-              // For individual report, show this person's split amount
-              const myShare = reportType === 'individual' && subjectId
-                ? e.splits.find((s) => s.traveller_id === subjectId)
-                : null;
+              const displayAmount = scopedExpenseAmount(e);
+              const visibleSplits = scopeIds
+                ? e.splits.filter((s) => scopeIds.has(s.traveller_id))
+                : e.splits;
               return (
                 <div key={e.id} className="px-5 py-3.5">
                   <div className="flex items-start gap-3">
@@ -240,10 +248,10 @@ function ReportContent({
                           </>
                         )}
                       </div>
-                      {/* Splits row — compact chips */}
-                      {reportType !== 'individual' && e.splits.length > 0 && (
+                      {/* Splits row — only scoped members for family/individual */}
+                      {visibleSplits.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
-                          {e.splits.map((s) => (
+                          {visibleSplits.map((s) => (
                             <span key={s.traveller_id}
                               className="inline-flex items-center gap-1 text-[10px] bg-parchment px-1.5 py-0.5 rounded-full text-ink-light border border-parchment-dark">
                               <span
@@ -257,12 +265,7 @@ function ReportContent({
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-ink">{fmt(e.amount_home ?? e.amount, homeCurrency)}</p>
-                      {myShare && (
-                        <p className="text-xs text-ink-faint">
-                          your share: {fmt(myShare.amount_home ?? myShare.amount, homeCurrency)}
-                        </p>
-                      )}
+                      <p className="text-sm font-semibold text-ink">{fmt(displayAmount, homeCurrency)}</p>
                     </div>
                   </div>
                 </div>
@@ -272,7 +275,7 @@ function ReportContent({
         )}
       </div>
 
-      {/* ── Receipts Bundle ───────────────────────────────────────────────────── */}
+      {/* ── Receipts Bundle ─────────────────────────────────────────────────────────────── */}
       {(() => {
         const receipts = expenses.filter((e) => e.receipt_filename);
         if (receipts.length === 0) return null;
@@ -312,10 +315,10 @@ function ReportContent({
         );
       })()}
 
-      {/* ── Transfers ─────────────────────────────────────────────────────────── */}
+      {/* ── Transfers ─────────────────────────────────────────────────────────────── */}
       <div className="vintage-card overflow-hidden">
         <div className="px-5 pt-5 pb-0">
-          <SectionHeader emoji="↔️" title="Transfers" count={transfers.length} total={totalTransfers} currency={homeCurrency} />
+          <SectionHeader emoji="⇔️" title="Transfers" count={transfers.length} total={totalTransfers} currency={homeCurrency} />
         </div>
         {sortedTransfers.length === 0 ? (
           <p className="px-5 py-4 text-sm text-ink-faint">No transfers recorded.</p>
@@ -367,7 +370,7 @@ function ReportContent({
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+// ── Main page ───────────────────────────────────────────────────────────────────
 
 export default function ReportPage() {
   const { currentTrip } = useTrip();
@@ -410,7 +413,18 @@ export default function ReportPage() {
 
   const getName = (id: string) => travellers.find((t) => t.id === id)?.name ?? 'Unknown';
 
-  // ── Filtered data based on report type + subject ───────────────────────────
+  const scopeIds = useMemo((): Set<string> | null => {
+    if (reportType === 'family' && selectedFamilyId) {
+      const fam = families.find((f) => f.id === selectedFamilyId);
+      return fam ? new Set(fam.members.map((m: any) => m.id)) : null;
+    }
+    if (reportType === 'individual' && selectedTravellerId) {
+      return new Set([selectedTravellerId]);
+    }
+    return null;
+  }, [reportType, selectedFamilyId, selectedTravellerId, families]);
+
+  // ── Filtered data based on report type + subject ─────────────────────────────────────────
   const filteredExpenses = useMemo(() => {
     if (reportType === 'group') return expenses;
     if (reportType === 'family' && selectedFamilyId) {
@@ -483,10 +497,9 @@ export default function ReportPage() {
 
   if (!currentTrip) return null;
 
-  // ── Report title ───────────────────────────────────────────────────────────
+  // ── Report title ──────────────────────────────────────────────────────────────────
   let reportTitle = `${currentTrip.name} — Full Group Report`;
   let reportSubtitle = `${currentTrip.destination} · ${fmtD(currentTrip.start_date)} – ${fmtD(currentTrip.end_date)}`;
-  const subjectId = reportType === 'family' ? selectedFamilyId : selectedTravellerId;
 
   if (reportType === 'family' && selectedFamilyId) {
     const fam = families.find((f) => f.id === selectedFamilyId);
@@ -505,7 +518,7 @@ export default function ReportPage() {
     </button>
   );
 
-  // ══ SCREEN 1: Pick type ════════════════════════════════════════════════════
+  // ══ SCREEN 1: Pick type ════════════════════════════════════════════════════════════════════
   if (step === 'pick-type') {
     return (
       <div className="max-w-lg mx-auto space-y-5">
@@ -581,7 +594,7 @@ export default function ReportPage() {
     );
   }
 
-  // ══ SCREEN 2: Pick subject ═════════════════════════════════════════════════
+  // ══ SCREEN 2: Pick subject ══════════════════════════════════════════════════════════════════
   if (step === 'pick-subject') {
     const isFamily = reportType === 'family';
     return (
@@ -647,7 +660,7 @@ export default function ReportPage() {
     );
   }
 
-  // ══ SCREEN 3: Report ═══════════════════════════════════════════════════════
+  // ══ SCREEN 3: Report ═══════════════════════════════════════════════════════════════════
   return (
     <div className="max-w-3xl mx-auto">
       {/* Toolbar — hidden on print */}
@@ -685,7 +698,7 @@ export default function ReportPage() {
         travellers={travellers}
         homeCurrency={homeCurrency}
         reportType={reportType!}
-        subjectId={subjectId}
+        scopeIds={scopeIds}
         families={families}
       />
     </div>
