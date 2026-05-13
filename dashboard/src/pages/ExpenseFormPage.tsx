@@ -58,7 +58,7 @@ export default function ExpenseFormPage() {
     paid_by: activeTraveller?.id ?? '', split_mode: 'equal',
     traveller_ids: [], custom_splits: {}, notes: '',
   });
-  const [lineItems, setLineItems] = useState<Array<{ description: string; qty: number; amount: string; traveller_ids: string[] }]>([
+  const [lineItems, setLineItems] = useState<Array<{ description: string; qty: number; amount: string; traveller_ids: string[] }>>([
     { description: '', qty: 1, amount: '', traveller_ids: [] },
   ]);
   const receiptInputRef = useRef<HTMLInputElement>(null);
