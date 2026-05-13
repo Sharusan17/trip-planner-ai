@@ -3,6 +3,7 @@ import { useState, useRef } from 'react';
 import { useTrip } from '@/context/TripContext';
 import { useQuery } from '@tanstack/react-query';
 import { travellersApi } from '@/api/travellers';
+import { familiesApi } from '@/api/families';
 import { itineraryApi } from '@/api/itinerary';
 import { expensesApi } from '@/api/expenses';
 import { depositsApi } from '@/api/deposits';
@@ -156,6 +157,13 @@ export default function DashboardPage() {
     staleTime: 0,
   });
 
+  const { data: families = [] } = useQuery({
+    queryKey: ['families', currentTrip?.id],
+    queryFn: () => familiesApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
   const { data: expenses = [] } = useQuery({
     queryKey: ['expenses', currentTrip?.id],
     queryFn: () => expensesApi.list(currentTrip!.id),
@@ -199,6 +207,24 @@ export default function DashboardPage() {
     new Intl.NumberFormat('en-GB', { style: 'currency', currency: currentTrip.home_currency }).format(n);
 
   const showFinance = totalSpent > 0 || depositsOutstanding > 0 || pendingSettlements > 0;
+
+  // Per-traveller spend (from splits)
+  const travellerSpend: Record<string, number> = {};
+  for (const exp of expenses) {
+    for (const split of exp.splits) {
+      travellerSpend[split.traveller_id] = (travellerSpend[split.traveller_id] ?? 0) + (split.amount_home ?? 0);
+    }
+  }
+
+  // Per-family spend = sum of member totals
+  const familySpend: Record<string, number> = {};
+  for (const fam of families) {
+    familySpend[fam.id] = fam.members.reduce((s: number, m: { id: string }) => s + (travellerSpend[m.id] ?? 0), 0);
+  }
+
+  // Travellers not in any family
+  const familyMemberIds = new Set(families.flatMap((f) => f.members.map((m: { id: string }) => m.id)));
+  const ungroupedTravellers = (travellers ?? []).filter((t) => !familyMemberIds.has(t.id));
 
   return (
     <div className="space-y-4">
@@ -404,6 +430,80 @@ export default function DashboardPage() {
               <span className="font-display text-sm font-bold text-ink">{pendingSettlements}</span>
               <span className="text-xs text-ink-faint font-body">Pending</span>
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── Spend breakdown by person / family ── */}
+      {totalSpent > 0 && (travellers?.length ?? 0) > 1 && (
+        <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
+          <div className="px-5 py-3 border-b border-parchment-dark flex items-center justify-between">
+            <h3 className="font-display text-sm font-semibold text-ink flex items-center gap-1.5">
+              <Users size={13} strokeWidth={2} className="text-ink-faint" />
+              Spend Breakdown
+            </h3>
+            <Link to="/expenses" className="text-xs text-navy hover:underline font-body">Details →</Link>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            {/* Family groups */}
+            {families.map((fam) => {
+              const famTotal = familySpend[fam.id] ?? 0;
+              if (famTotal === 0) return null;
+              const famPct = totalSpent > 0 ? (famTotal / totalSpent) * 100 : 0;
+              return (
+                <div key={fam.id} className="space-y-1.5">
+                  {/* Family row */}
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fam.colour }} />
+                    <span className="text-xs font-semibold text-ink flex-1 truncate">{fam.name}</span>
+                    <div className="flex-1 h-1.5 bg-parchment-dark rounded-full overflow-hidden mx-2">
+                      <div className="h-full rounded-full" style={{ width: `${famPct}%`, backgroundColor: fam.colour }} />
+                    </div>
+                    <span className="text-xs font-bold text-ink w-20 text-right flex-shrink-0">{fmt(famTotal)}</span>
+                  </div>
+                  {/* Members */}
+                  {fam.members.map((m: { id: string; name: string; avatar_colour: string }) => {
+                    const mSpend = travellerSpend[m.id] ?? 0;
+                    if (mSpend === 0) return null;
+                    const mPct = famTotal > 0 ? (mSpend / famTotal) * 100 : 0;
+                    return (
+                      <div key={m.id} className="flex items-center gap-2.5 pl-5">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                          style={{ backgroundColor: m.avatar_colour }}>
+                          {m.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-xs text-ink-light flex-1 truncate">{m.name}</span>
+                        <div className="flex-1 h-1 bg-parchment-dark rounded-full overflow-hidden mx-2">
+                          <div className="h-full rounded-full" style={{ width: `${mPct}%`, backgroundColor: m.avatar_colour }} />
+                        </div>
+                        <span className="text-xs text-ink-faint w-20 text-right flex-shrink-0">{fmt(mSpend)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {/* Ungrouped travellers */}
+            {ungroupedTravellers
+              .filter((t) => (travellerSpend[t.id] ?? 0) > 0)
+              .sort((a, b) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0))
+              .map((t) => {
+                const spent = travellerSpend[t.id] ?? 0;
+                const pct = totalSpent > 0 ? (spent / totalSpent) * 100 : 0;
+                return (
+                  <div key={t.id} className="flex items-center gap-2.5">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: t.avatar_colour }}>
+                      {t.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-xs text-ink flex-1 truncate">{t.name}</span>
+                    <div className="flex-1 h-1.5 bg-parchment-dark rounded-full overflow-hidden mx-2">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: t.avatar_colour }} />
+                    </div>
+                    <span className="text-xs font-semibold text-ink w-20 text-right flex-shrink-0">{fmt(spent)}</span>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
