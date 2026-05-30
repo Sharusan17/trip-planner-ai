@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { getRate } from '../services/currencyService';
 import { createLogger } from '../utils/logger';
+import { createLinkedExpense, syncLinkedExpense } from '../utils/autoExpense';
 
 const router = Router();
 const log = createLogger('accommodation');
@@ -93,7 +94,7 @@ router.post('/trips/:tripId/accommodation', async (req: Request, res: Response) 
       name, address, check_in_date, check_out_date,
       check_in_time, check_out_time,
       reference_number, price, currency, notes, traveller_ids,
-      rooms = [],
+      rooms = [], created_by,
     } = req.body;
 
     const tripResult = await client.query(`SELECT home_currency FROM trips WHERE id = $1`, [tripId]);
@@ -110,16 +111,26 @@ router.post('/trips/:tripId/accommodation', async (req: Request, res: Response) 
       } catch { priceHome = null; }
     }
 
+    // Resolve paid_by
+    let paidBy: string = created_by || '';
+    if (!paidBy) {
+      const orgResult = await client.query(
+        `SELECT id FROM travellers WHERE trip_id=$1 AND role='organiser' LIMIT 1`, [tripId]
+      );
+      paidBy = orgResult.rows[0]?.id ?? '';
+    }
+
     await client.query('BEGIN');
 
     const bookingResult = await client.query(
       `INSERT INTO accommodation_bookings
          (trip_id, name, address, check_in_date, check_out_date, check_in_time, check_out_time,
-          reference_number, price, currency, price_home, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+          reference_number, price, currency, price_home, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [tripId, name, address || null, check_in_date, check_out_date,
        check_in_time || null, check_out_time || null,
-       reference_number || null, price || null, currency || null, priceHome, notes || null]
+       reference_number || null, price || null, currency || null, priceHome, notes || null,
+       paidBy || null]
     );
     const booking = bookingResult.rows[0];
 
@@ -156,6 +167,23 @@ router.post('/trips/:tripId/accommodation', async (req: Request, res: Response) 
         currency: r.currency,
         traveller_ids: roomTravIds,
       });
+    }
+
+    // Auto-create flagged expense if booking has a price and travellers
+    if (price && currency && paidBy && (traveller_ids?.length ?? 0) > 0) {
+      const nights = Math.round((new Date(check_out_date).getTime() - new Date(check_in_date).getTime()) / 86400000);
+      const expDesc = `${name}${reference_number ? ` (${reference_number})` : ''} — ${nights} night${nights !== 1 ? 's' : ''}`;
+      const expenseId = await createLinkedExpense(client, {
+        tripId, paidBy, amount: parseFloat(price), currency, homeCurrency,
+        description: expDesc, category: 'accommodation', expenseDate: check_in_date,
+        travellerIds: traveller_ids,
+      });
+      if (expenseId) {
+        await client.query(
+          `UPDATE accommodation_bookings SET linked_expense_id=$1 WHERE id=$2`,
+          [expenseId, booking.id]
+        );
+      }
     }
 
     await client.query('COMMIT');
@@ -306,6 +334,34 @@ router.put('/accommodation/:id', async (req: Request, res: Response) => {
         currency: r.currency,
         traveller_ids: tMap[r.id] || [],
       }));
+    }
+
+    // Sync or create linked expense when price/travellers changed
+    const finalTravellerIds: string[] = traveller_ids ?? (
+      await client.query(`SELECT traveller_id FROM accommodation_travellers WHERE accommodation_id=$1`, [req.params.id])
+    ).rows.map((r: any) => r.traveller_id);
+
+    const paidBy: string = prev.created_by ?? '';
+    if (newPrice && newCurrency && paidBy && finalTravellerIds.length > 0) {
+      const checkIn = booking.check_in_date as string;
+      const checkOut = booking.check_out_date as string;
+      const nights = Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000);
+      const expDesc = `${booking.name}${booking.reference_number ? ` (${booking.reference_number})` : ''} — ${nights} night${nights !== 1 ? 's' : ''}`;
+      if (prev.linked_expense_id) {
+        await syncLinkedExpense(client, {
+          expenseId: prev.linked_expense_id, amount: newPrice, currency: newCurrency,
+          homeCurrency, description: expDesc, travellerIds: finalTravellerIds,
+        });
+      } else {
+        const expenseId = await createLinkedExpense(client, {
+          tripId: prev.trip_id, paidBy, amount: newPrice, currency: newCurrency, homeCurrency,
+          description: expDesc, category: 'accommodation', expenseDate: checkIn,
+          travellerIds: finalTravellerIds,
+        });
+        if (expenseId) {
+          await client.query(`UPDATE accommodation_bookings SET linked_expense_id=$1 WHERE id=$2`, [expenseId, req.params.id]);
+        }
+      }
     }
 
     await client.query('COMMIT');

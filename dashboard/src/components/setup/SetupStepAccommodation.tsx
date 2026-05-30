@@ -46,6 +46,7 @@ interface Props {
   tripId: string;
   homeCurrency: string;
   holidayType: string;
+  activeTravellerId: string;
 }
 
 function blankDraft(currency: string): Draft {
@@ -57,7 +58,7 @@ function blankDraft(currency: string): Draft {
   };
 }
 
-export default function SetupStepAccommodation({ tripId, homeCurrency, holidayType }: Props) {
+export default function SetupStepAccommodation({ tripId, homeCurrency, holidayType, activeTravellerId }: Props) {
   const qc = useQueryClient();
   const { data: stays = [] } = useQuery({
     queryKey: ['accommodation', tripId],
@@ -148,6 +149,7 @@ export default function SetupStepAccommodation({ tripId, homeCurrency, holidayTy
       currency: draft.price ? draft.currency : undefined,
       traveller_ids: travellers.map((t) => t.id),
       rooms,
+      created_by: activeTravellerId || undefined,
     });
   };
 

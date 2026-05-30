@@ -3,6 +3,7 @@ import pool from '../db/pool';
 import { getRate } from '../services/currencyService';
 import { createLogger } from '../utils/logger';
 import type { PoolClient } from 'pg';
+import { createLinkedExpense, syncLinkedExpense } from '../utils/autoExpense';
 
 const log = createLogger('transport');
 
@@ -99,7 +100,7 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       transport_type, from_location, to_location, departure_time, arrival_time,
       reference_number, price, currency, notes, traveller_ids,
       airline, departure_terminal, arrival_terminal, aircraft_type,
-      linked_journey, // optional return leg
+      linked_journey, created_by,
     } = req.body;
 
     const tripResult = await client.query(`SELECT home_currency FROM trips WHERE id = $1`, [tripId]);
@@ -122,16 +123,26 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
 
     await client.query('BEGIN');
 
+    // Resolve paid_by: use created_by if provided, else fall back to trip organiser
+    let paidBy: string = created_by || '';
+    if (!paidBy) {
+      const orgResult = await client.query(
+        `SELECT id FROM travellers WHERE trip_id=$1 AND role='organiser' LIMIT 1`, [tripId]
+      );
+      paidBy = orgResult.rows[0]?.id ?? '';
+    }
+
     const bookingResult = await client.query(
       `INSERT INTO transport_bookings
          (trip_id, transport_type, from_location, to_location, departure_time, arrival_time,
           reference_number, price, currency, price_home, notes,
-          airline, departure_terminal, arrival_terminal, aircraft_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+          airline, departure_terminal, arrival_terminal, aircraft_type, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [tripId, transport_type, from_location, to_location, departure_time,
        arrival_time || null, reference_number || null,
        price || null, currency || null, priceHome, notes || null,
-       airline || null, departure_terminal || null, arrival_terminal || null, aircraft_type || null]
+       airline || null, departure_terminal || null, arrival_terminal || null, aircraft_type || null,
+       paidBy || null]
     );
     const booking = bookingResult.rows[0];
 
@@ -145,6 +156,23 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       }
     }
 
+    // Auto-create a flagged expense if this booking has a price
+    if (price && currency && paidBy && (traveller_ids?.length ?? 0) > 0) {
+      const expDesc = `${transport_type.charAt(0).toUpperCase() + transport_type.slice(1)}: ${from_location} → ${to_location}${reference_number ? ` (${reference_number})` : ''}`;
+      const expDate = departure_time.slice(0, 10);
+      const expenseId = await createLinkedExpense(client, {
+        tripId, paidBy, amount: parseFloat(price), currency, homeCurrency,
+        description: expDesc, category: 'transport', expenseDate: expDate,
+        travellerIds: traveller_ids,
+      });
+      if (expenseId) {
+        await client.query(
+          `UPDATE transport_bookings SET linked_expense_id = $1 WHERE id = $2`,
+          [expenseId, booking.id]
+        );
+      }
+    }
+
     // If a return leg is provided, create it and link both
     let returnBooking: Record<string, unknown> | null = null;
     if (linked_journey?.from_location && linked_journey?.to_location && linked_journey?.departure_time) {
@@ -154,12 +182,12 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
         `INSERT INTO transport_bookings
            (trip_id, transport_type, from_location, to_location, departure_time, arrival_time,
             reference_number, price, currency, price_home, notes,
-            airline, linked_booking_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+            airline, linked_booking_id, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [tripId, transport_type, lj.from_location, lj.to_location, lj.departure_time,
          lj.arrival_time || null, lj.reference_number || null,
          lj.price || null, lj.currency ?? currency ?? null, returnPriceHome, notes || null,
-         airline || null, booking.id]
+         airline || null, booking.id, paidBy || null]
       );
       returnBooking = retResult.rows[0];
       const retId = returnBooking!.id as string;
@@ -169,6 +197,23 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
           await client.query(
             `INSERT INTO transport_travellers (transport_id, traveller_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
             [retId, tid]
+          );
+        }
+      }
+
+      // Auto-create expense for return leg if it has its own price
+      if (lj.price && (lj.currency ?? currency) && paidBy && (traveller_ids?.length ?? 0) > 0) {
+        const retDesc = `${transport_type.charAt(0).toUpperCase() + transport_type.slice(1)}: ${lj.from_location} → ${lj.to_location}${lj.reference_number ? ` (${lj.reference_number})` : ''}`;
+        const retDate = lj.departure_time.slice(0, 10);
+        const retExpenseId = await createLinkedExpense(client, {
+          tripId, paidBy, amount: parseFloat(lj.price), currency: lj.currency ?? currency, homeCurrency,
+          description: retDesc, category: 'transport', expenseDate: retDate,
+          travellerIds: traveller_ids,
+        });
+        if (retExpenseId) {
+          await client.query(
+            `UPDATE transport_bookings SET linked_expense_id = $1 WHERE id = $2`,
+            [retExpenseId, retId]
           );
         }
       }
@@ -273,6 +318,10 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
     );
     const booking = updResult.rows[0];
 
+    const finalTravellerIds: string[] = traveller_ids ?? (
+      await client.query(`SELECT traveller_id FROM transport_travellers WHERE transport_id=$1`, [req.params.id])
+    ).rows.map((r: any) => r.traveller_id);
+
     if (traveller_ids !== undefined) {
       await client.query(`DELETE FROM transport_travellers WHERE transport_id = $1`, [req.params.id]);
       for (const tid of traveller_ids) {
@@ -280,6 +329,28 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
           `INSERT INTO transport_travellers (transport_id, traveller_id) VALUES ($1,$2)`,
           [req.params.id, tid]
         );
+      }
+    }
+
+    // Sync or create linked expense when price/travellers changed
+    const paidBy: string = prev.created_by ?? '';
+    if (newPrice && newCurrency && paidBy && finalTravellerIds.length > 0) {
+      const expDesc = `${(booking.transport_type as string).charAt(0).toUpperCase() + (booking.transport_type as string).slice(1)}: ${booking.from_location} → ${booking.to_location}${booking.reference_number ? ` (${booking.reference_number})` : ''}`;
+      const expDate = (booking.departure_time as string).slice(0, 10);
+      if (prev.linked_expense_id) {
+        await syncLinkedExpense(client, {
+          expenseId: prev.linked_expense_id, amount: newPrice, currency: newCurrency,
+          homeCurrency, description: expDesc, travellerIds: finalTravellerIds,
+        });
+      } else {
+        const expenseId = await createLinkedExpense(client, {
+          tripId: prev.trip_id, paidBy, amount: newPrice, currency: newCurrency, homeCurrency,
+          description: expDesc, category: 'transport', expenseDate: expDate,
+          travellerIds: finalTravellerIds,
+        });
+        if (expenseId) {
+          await client.query(`UPDATE transport_bookings SET linked_expense_id=$1 WHERE id=$2`, [expenseId, req.params.id]);
+        }
       }
     }
 

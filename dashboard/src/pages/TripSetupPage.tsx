@@ -22,7 +22,7 @@ const STEP_DESCRIPTIONS = [
 export default function TripSetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentTrip, isOrganiser } = useTrip();
+  const { currentTrip, isOrganiser, activeTraveller } = useTrip();
   const progress = useSetupProgress();
 
   const [holidayType, setHolidayType] = useState<string>('');
@@ -118,6 +118,7 @@ export default function TripSetupPage() {
             tripId={currentTrip.id}
             homeCurrency={currentTrip.home_currency}
             holidayType={holidayType}
+            activeTravellerId={activeTraveller?.id ?? ''}
           />
         )}
         {step === 3 && (
@@ -125,6 +126,7 @@ export default function TripSetupPage() {
             tripId={currentTrip.id}
             homeCurrency={currentTrip.home_currency}
             holidayType={holidayType}
+            activeTravellerId={activeTraveller?.id ?? ''}
           />
         )}
         {step === 4 && (
@@ -133,6 +135,7 @@ export default function TripSetupPage() {
             startDate={currentTrip.start_date}
             endDate={currentTrip.end_date}
             holidayType={holidayType}
+            activeTravellerId={activeTraveller?.id ?? ''}
           />
         )}
       </div>

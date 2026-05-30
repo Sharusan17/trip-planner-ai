@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
+import { createLinkedExpense, syncLinkedExpense } from '../utils/autoExpense';
 
 const router = Router();
 
@@ -97,47 +98,154 @@ router.delete('/days/:dayId', async (req: Request, res: Response) => {
 
 // POST /api/v1/days/:dayId/activities
 router.post('/days/:dayId/activities', async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
-    const { time, type, description, notes, location_tag, latitude, longitude, kid_friendly } = req.body;
+    const { time, type, description, notes, location_tag, latitude, longitude, kid_friendly, price, currency, created_by } = req.body;
 
-    const maxOrder = await pool.query(
+    // Look up trip_id + date from the day, and home_currency from the trip
+    const dayResult = await client.query(
+      `SELECT d.id, d.date, d.trip_id, t.home_currency
+       FROM itinerary_days d JOIN trips t ON t.id = d.trip_id
+       WHERE d.id = $1`,
+      [req.params.dayId]
+    );
+    if (dayResult.rows.length === 0) return res.status(404).json({ error: 'Day not found' });
+    const day = dayResult.rows[0];
+    const homeCurrency: string = day.home_currency;
+    const tripId: string = day.trip_id;
+
+    // Resolve paid_by
+    let paidBy: string = created_by || '';
+    if (!paidBy && price) {
+      const orgResult = await client.query(
+        `SELECT id FROM travellers WHERE trip_id=$1 AND role='organiser' LIMIT 1`, [tripId]
+      );
+      paidBy = orgResult.rows[0]?.id ?? '';
+    }
+
+    const maxOrder = await client.query(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 as next_order FROM activities WHERE day_id = $1',
       [req.params.dayId]
     );
 
-    const result = await pool.query(
-      `INSERT INTO activities (day_id, time, type, description, notes, location_tag, latitude, longitude, kid_friendly, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `INSERT INTO activities (day_id, time, type, description, notes, location_tag, latitude, longitude, kid_friendly, sort_order, price, currency, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
       [
         req.params.dayId, time || null, type || 'custom', description,
         notes || null, location_tag || null, latitude || null, longitude || null,
-        kid_friendly ?? true, maxOrder.rows[0].next_order
+        kid_friendly ?? true, maxOrder.rows[0].next_order,
+        price ? parseFloat(price) : null, currency || null, paidBy || null,
       ]
     );
-    res.status(201).json(result.rows[0]);
+    const activity = result.rows[0];
+
+    // Auto-create flagged expense if activity has a price
+    if (price && currency && paidBy) {
+      const allTravellers = await client.query(
+        `SELECT id FROM travellers WHERE trip_id=$1`, [tripId]
+      );
+      const travellerIds: string[] = allTravellers.rows.map((r: any) => r.id);
+      if (travellerIds.length > 0) {
+        const expenseId = await createLinkedExpense(client, {
+          tripId, paidBy, amount: parseFloat(price), currency, homeCurrency,
+          description: description, category: 'activities', expenseDate: day.date,
+          travellerIds,
+        });
+        if (expenseId) {
+          await client.query(`UPDATE activities SET linked_expense_id=$1 WHERE id=$2`, [expenseId, activity.id]);
+          activity.linked_expense_id = expenseId;
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({
+      ...activity,
+      price: activity.price ? parseFloat(activity.price) : null,
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: (err as Error).message });
+  } finally {
+    client.release();
   }
 });
 
 // PUT /api/v1/activities/:id
 router.put('/activities/:id', async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
-    const { time, type, description, notes, location_tag, latitude, longitude, kid_friendly } = req.body;
-    const result = await pool.query(
+    const { time, type, description, notes, location_tag, latitude, longitude, kid_friendly, price, currency } = req.body;
+
+    // Fetch existing activity + day + trip
+    const existingResult = await client.query(
+      `SELECT a.*, d.date, d.trip_id, t.home_currency
+       FROM activities a
+       JOIN itinerary_days d ON d.id = a.day_id
+       JOIN trips t ON t.id = d.trip_id
+       WHERE a.id = $1`,
+      [req.params.id]
+    );
+    if (existingResult.rows.length === 0) return res.status(404).json({ error: 'Activity not found' });
+    const prev = existingResult.rows[0];
+    const homeCurrency: string = prev.home_currency;
+    const tripId: string = prev.trip_id;
+
+    const newPrice = price !== undefined ? (price ? parseFloat(price) : null) : (prev.price ? parseFloat(prev.price) : null);
+    const newCurrency = currency ?? prev.currency;
+
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `UPDATE activities SET time = COALESCE($1, time), type = COALESCE($2, type),
        description = COALESCE($3, description), notes = $4,
        location_tag = COALESCE($5, location_tag),
        latitude = COALESCE($6, latitude), longitude = COALESCE($7, longitude),
-       kid_friendly = COALESCE($8, kid_friendly) WHERE id = $9 RETURNING *`,
-      [time, type, description, notes || null, location_tag, latitude, longitude, kid_friendly, req.params.id]
+       kid_friendly = COALESCE($8, kid_friendly),
+       price = $9, currency = $10
+       WHERE id = $11 RETURNING *`,
+      [time, type, description, notes || null, location_tag, latitude, longitude, kid_friendly,
+       newPrice, newCurrency || null, req.params.id]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Activity not found' });
+    const activity = result.rows[0];
+
+    // Sync linked expense if price provided and paid_by known
+    const paidBy: string = prev.created_by ?? '';
+    if (newPrice && newCurrency && paidBy) {
+      const allTravellers = await client.query(`SELECT id FROM travellers WHERE trip_id=$1`, [tripId]);
+      const travellerIds: string[] = allTravellers.rows.map((r: any) => r.id);
+      if (travellerIds.length > 0) {
+        if (prev.linked_expense_id) {
+          await syncLinkedExpense(client, {
+            expenseId: prev.linked_expense_id, amount: newPrice, currency: newCurrency,
+            homeCurrency, description: activity.description, travellerIds,
+          });
+        } else {
+          const expenseId = await createLinkedExpense(client, {
+            tripId, paidBy, amount: newPrice, currency: newCurrency, homeCurrency,
+            description: activity.description, category: 'activities', expenseDate: prev.date,
+            travellerIds,
+          });
+          if (expenseId) {
+            await client.query(`UPDATE activities SET linked_expense_id=$1 WHERE id=$2`, [expenseId, req.params.id]);
+          }
+        }
+      }
     }
-    res.json(result.rows[0]);
+
+    await client.query('COMMIT');
+    res.json({
+      ...activity,
+      price: activity.price ? parseFloat(activity.price) : null,
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: (err as Error).message });
+  } finally {
+    client.release();
   }
 });
 

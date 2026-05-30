@@ -504,6 +504,16 @@ const migrations = [
   // link a forfeited deposit back to the expense it spawned
   `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS forfeited_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
 
+  // 029: link transport/accommodation/activity bookings to auto-created expenses
+  `ALTER TABLE transport_bookings    ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+  `ALTER TABLE transport_bookings    ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
+  `ALTER TABLE accommodation_bookings ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+  `ALTER TABLE accommodation_bookings ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS price             DECIMAL(12,2);`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS currency          CHAR(3);`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
+
   // travel checklist — shared items + per-traveller checked state
   `CREATE TABLE IF NOT EXISTS trip_checklist_items (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

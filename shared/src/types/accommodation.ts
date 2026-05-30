@@ -37,6 +37,8 @@ export interface CreateRoomInput {
 export interface CreateAccommodationInput {
   name: string;
   address?: string;
+  /** Traveller ID of whoever logged this booking — used as paid_by on the auto-expense */
+  created_by?: string;
   check_in_date: string;
   check_out_date: string;
   check_in_time?: string;

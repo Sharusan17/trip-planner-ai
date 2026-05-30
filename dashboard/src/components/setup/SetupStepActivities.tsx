@@ -5,6 +5,7 @@ import { itineraryApi } from '@/api/itinerary';
 import type { CreateActivityInput, ActivityType } from '@trip-planner-ai/shared';
 import { ACTIVITY_ICONS } from '@trip-planner-ai/shared';
 import SetupTip from './SetupTip';
+import PriceField from './PriceField';
 import PlaceAutocomplete from './PlaceAutocomplete';
 import { parseLocalDate } from '@/utils/date';
 
@@ -29,6 +30,8 @@ interface Draft {
   description: string;
   location_tag: string;
   kid_friendly: boolean;
+  price: string;
+  currency: string;
 }
 
 interface Props {
@@ -36,6 +39,7 @@ interface Props {
   startDate: string;
   endDate: string;
   holidayType: string;
+  activeTravellerId: string;
 }
 
 function datesBetween(start: string, end: string): string[] {
@@ -51,7 +55,7 @@ function datesBetween(start: string, end: string): string[] {
   return out;
 }
 
-export default function SetupStepActivities({ tripId, startDate, endDate, holidayType }: Props) {
+export default function SetupStepActivities({ tripId, startDate, endDate, holidayType, activeTravellerId }: Props) {
   const qc = useQueryClient();
   const { data: days = [], isLoading } = useQuery({
     queryKey: ['days', tripId],
@@ -84,6 +88,8 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
     description: '',
     location_tag: '',
     kid_friendly: false,
+    price: '',
+    currency: 'EUR',
   });
   const [rowError, setRowError] = useState<string | null>(null);
 
@@ -99,7 +105,7 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
       itineraryApi.createActivity(dayId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['days', tripId] });
-      setDraft((d) => ({ ...d, time: '', description: '', location_tag: '', kid_friendly: false }));
+      setDraft((d) => ({ ...d, time: '', description: '', location_tag: '', kid_friendly: false, price: '' }));
       setRowError(null);
     },
     onError: (err: Error) => setRowError(err.message || 'Failed to add activity'),
@@ -112,6 +118,7 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
 
   const saveDraft = () => {
     if (!draft.day_id || !draft.description.trim()) return;
+    const priceNum = parseFloat(draft.price);
     createMutation.mutate({
       dayId: draft.day_id,
       data: {
@@ -120,6 +127,9 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
         description: draft.description.trim(),
         location_tag: draft.location_tag.trim() || undefined,
         kid_friendly: draft.kid_friendly || undefined,
+        price: draft.price && !isNaN(priceNum) ? priceNum : undefined,
+        currency: draft.price ? draft.currency : undefined,
+        created_by: activeTravellerId || undefined,
       },
     });
   };
@@ -226,6 +236,15 @@ export default function SetupStepActivities({ tripId, startDate, endDate, holida
             value={draft.location_tag}
             onChange={(val) => setDraft({ ...draft, location_tag: val })}
             onSelect={(s) => setDraft((d) => ({ ...d, location_tag: s.name }))}
+          />
+
+          {/* Price (optional) */}
+          <PriceField
+            price={draft.price}
+            currency={draft.currency}
+            placeholder="Price (optional)"
+            onPriceChange={(v) => setDraft({ ...draft, price: v })}
+            onCurrencyChange={(v) => setDraft({ ...draft, currency: v })}
           />
 
           {/* Kid-friendly toggle — only for family trips */}

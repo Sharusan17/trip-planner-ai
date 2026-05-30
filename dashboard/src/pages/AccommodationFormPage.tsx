@@ -46,7 +46,7 @@ export default function AccommodationFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
   const qc = useQueryClient();
 
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -122,6 +122,7 @@ export default function AccommodationFormPage() {
       notes: form.notes || undefined,
       traveller_ids: form.traveller_ids,
       rooms,
+      created_by: activeTraveller?.id || undefined,
     };
     if (isEdit && id) updateMutation.mutate({ id, data });
     else createMutation.mutate(data);

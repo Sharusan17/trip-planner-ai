@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
+import PriceField from '@/components/setup/PriceField';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
 import { ArrowLeft, MapPin, Search, X } from 'lucide-react';
 
@@ -27,7 +28,7 @@ export default function ActivityFormPage() {
   const { dayId, id } = useParams<{ dayId?: string; id?: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
   const qc = useQueryClient();
 
   const [actTime, setActTime] = useState('');
@@ -37,6 +38,8 @@ export default function ActivityFormPage() {
   const [actLocation, setActLocation] = useState('');
   const [actLat, setActLat] = useState('');
   const [actLng, setActLng] = useState('');
+  const [actPrice, setActPrice] = useState('');
+  const [actCurrency, setActCurrency] = useState('EUR');
 
   // Location search
   const [locationSearch, setLocationSearch] = useState('');
@@ -64,6 +67,8 @@ export default function ActivityFormPage() {
         setLocationSearch(activity.location_tag || '');
         setActLat(activity.latitude?.toString() || '');
         setActLng(activity.longitude?.toString() || '');
+        setActPrice(activity.price != null ? String(activity.price) : '');
+        setActCurrency(activity.currency ?? 'EUR');
         break;
       }
     }
@@ -115,6 +120,9 @@ export default function ActivityFormPage() {
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
+      price: actPrice ? parseFloat(actPrice) : undefined,
+      currency: actPrice ? actCurrency : undefined,
+      created_by: activeTraveller?.id || undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['days'] }); navigate('/itinerary'); },
   });
@@ -128,6 +136,8 @@ export default function ActivityFormPage() {
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
+      price: actPrice ? parseFloat(actPrice) : undefined,
+      currency: actPrice ? actCurrency : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['days'] }); navigate('/itinerary'); },
   });
@@ -248,6 +258,20 @@ export default function ActivityFormPage() {
             placeholder="Any extra details — opening hours, booking ref, what to bring…"
             value={actNotes}
             onChange={(e) => setActNotes(e.target.value)}
+          />
+        </div>
+
+        {/* Price */}
+        <div>
+          <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+            Price <span className="normal-case font-normal">(optional — auto-creates expense)</span>
+          </label>
+          <PriceField
+            price={actPrice}
+            currency={actCurrency}
+            placeholder="0.00"
+            onPriceChange={setActPrice}
+            onCurrencyChange={setActCurrency}
           />
         </div>
 

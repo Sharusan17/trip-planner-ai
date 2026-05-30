@@ -38,6 +38,7 @@ interface Props {
   tripId: string;
   homeCurrency: string;
   holidayType: string;
+  activeTravellerId: string;
 }
 
 const TYPE_OPTIONS: TransportType[] = ['flight', 'train', 'bus', 'car', 'ferry', 'other'];
@@ -52,7 +53,7 @@ function blankLeg(currency: string): LegDraft {
   };
 }
 
-export default function SetupStepTransport({ tripId, homeCurrency, holidayType }: Props) {
+export default function SetupStepTransport({ tripId, homeCurrency, holidayType, activeTravellerId }: Props) {
   const qc = useQueryClient();
   const { data: bookings = [] } = useQuery({
     queryKey: ['transport', tripId],
@@ -135,6 +136,7 @@ export default function SetupStepTransport({ tripId, homeCurrency, holidayType }
     }
 
     const payload: CreateTransportInput = {
+      created_by: activeTravellerId || undefined,
       transport_type: transportType,
       from_location: outbound.from_location.trim(),
       to_location: outbound.to_location.trim(),
