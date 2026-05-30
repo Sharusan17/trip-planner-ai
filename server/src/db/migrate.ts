@@ -514,6 +514,13 @@ const migrations = [
   `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
   `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
 
+  // 030: freeze settlement home-currency value at payment time (pence/cents, integer)
+  // This is used for the paid-settlement ledger adjustment — the rate at which money
+  // actually changed hands, never retroactively recalculated.
+  `ALTER TABLE settlements ADD COLUMN IF NOT EXISTS paid_home_pence BIGINT;`,
+  // Backfill existing paid rows so history is consistent
+  `UPDATE settlements SET paid_home_pence = ROUND(amount * 100)::BIGINT WHERE status = 'paid' AND paid_home_pence IS NULL;`,
+
   // travel checklist — shared items + per-traveller checked state
   `CREATE TABLE IF NOT EXISTS trip_checklist_items (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

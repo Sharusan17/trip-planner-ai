@@ -4,42 +4,66 @@ import { getRate } from '../services/currencyService';
 
 const router = Router();
 
+// ── Sign convention (used throughout this file) ──────────────────────────────
+//   net > 0  →  traveller is OWED money (creditor)
+//   net < 0  →  traveller OWES money  (debtor)
+//
+// All internal calculations use INTEGER MINOR UNITS (pence / cents).
+// Values are only converted to/from major units at the DB boundary.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convert a decimal major-unit amount to integer minor units (pence). */
+const toPence = (majorUnits: number): number => Math.round(majorUnits * 100);
+
+/** Convert integer minor units back to a 2-decimal major-unit string for DB storage. */
+const penceToDecimal = (pence: number): string => (pence / 100).toFixed(2);
+
 interface Balance {
   traveller_id: string;
-  net: number;
+  net: number; // in pence (integer)
 }
 
-function simplifyDebts(balances: Balance[]): { from: string; to: string; amount: number }[] {
+/**
+ * Greedy debt-simplification algorithm.
+ * Input balances are in integer pence.
+ * Returns settlements with amounts in integer pence.
+ * Uses strict === 0 termination — no floating-point tolerance needed.
+ */
+function simplifyDebts(balances: Balance[]): { from: string; to: string; pence: number }[] {
+  // creditors: net > 0 (owed money), sorted descending
   const creditors = balances
-    .filter((b) => b.net > 0.005)
+    .filter((b) => b.net > 0)
     .sort((a, b) => b.net - a.net)
     .map((b) => ({ ...b }));
+
+  // debtors: net < 0 (owe money), sorted ascending (most negative first)
   const debtors = balances
-    .filter((b) => b.net < -0.005)
+    .filter((b) => b.net < 0)
     .sort((a, b) => a.net - b.net)
     .map((b) => ({ ...b }));
 
-  const settlements: { from: string; to: string; amount: number }[] = [];
+  const results: { from: string; to: string; pence: number }[] = [];
 
   while (creditors.length > 0 && debtors.length > 0) {
     const creditor = creditors[0];
-    const debtor = debtors[0];
+    const debtor   = debtors[0];
 
-    const amount = Math.min(creditor.net, Math.abs(debtor.net));
-    const rounded = Math.round(amount * 100) / 100;
+    // Integer min — no rounding needed, no accumulated error
+    const pence = Math.min(creditor.net, Math.abs(debtor.net));
 
-    if (rounded >= 0.01) {
-      settlements.push({ from: debtor.traveller_id, to: creditor.traveller_id, amount: rounded });
+    if (pence >= 1) { // at least 1p / 1¢ is worth recording
+      results.push({ from: debtor.traveller_id, to: creditor.traveller_id, pence });
     }
 
-    creditor.net = Math.round((creditor.net - amount) * 100) / 100;
-    debtor.net = Math.round((debtor.net + amount) * 100) / 100;
+    creditor.net -= pence;
+    debtor.net   += pence;
 
-    if (creditor.net < 0.005) creditors.shift();
-    if (debtor.net > -0.005) debtors.shift();
+    // Exact zero check — integers never drift
+    if (creditor.net === 0) creditors.shift();
+    if (debtor.net   === 0) debtors.shift();
   }
 
-  return settlements;
+  return results;
 }
 
 // GET /trips/:tripId/settlements
@@ -56,9 +80,28 @@ router.get('/trips/:tripId/settlements', async (req: Request, res: Response) => 
 });
 
 // POST /trips/:tripId/settlements/calculate
-// Computes net balances from expenses + transfers, then produces minimal settlement set.
-// Handles null amount_home (currency API failures) by resolving rates on-the-fly.
-// Uses proportional split recomputation so rounding drift can't cause phantom debt.
+// ─────────────────────────────────────────────────────────────────────────────
+// Algorithm (all arithmetic in integer pence):
+//
+// 1. EXPENSES
+//    For every expense:  payer net += expense_pence
+//                        each split person net -= their proportional pence share
+//    Split shares recomputed proportionally from the resolved home amount so that
+//    rounding errors in stored splits are healed on every recalculate.
+//
+// 2. LEDGER ADJUSTMENTS
+//    Both transfers and paid settlements are treated identically as ledger entries:
+//      from_party net += pence  (they paid out → their debt reduced)
+//      to_party   net -= pence  (they received → their credit reduced)
+//
+//    Transfers use stored amount_home (live rate fallback if null).
+//    Paid settlements use paid_home_pence — the value frozen at payment time,
+//    so exchange rate changes after the fact never retroactively alter history.
+//
+// 3. SIMPLIFY
+//    Greedy pairing of largest creditor with largest debtor.
+//    Integer pence throughout → exact === 0 termination, no tolerance hack.
+// ─────────────────────────────────────────────────────────────────────────────
 router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
@@ -68,28 +111,34 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
     if (tripResult.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
     const homeCurrency: string = tripResult.rows[0].home_currency;
 
-    // Rate cache — avoid duplicate API calls for the same currency pair
+    // Rate cache — one API call per currency pair per recalculate
     const rateCache: Record<string, number> = {};
-    async function toHome(amount: number, currency: string, storedHome: number | null): Promise<number> {
-      if (storedHome !== null) return storedHome;
-      if (currency === homeCurrency) return amount;
+    async function toHomePence(amount: number, currency: string, storedHome: number | null): Promise<number> {
+      // Always prefer stored home value — it was captured at transaction time
+      if (storedHome !== null) return toPence(storedHome);
+      if (currency === homeCurrency) return toPence(amount);
       const key = `${currency}:${homeCurrency}`;
       if (rateCache[key] === undefined) {
         try {
           const { rate } = await getRate(currency, homeCurrency);
           rateCache[key] = rate;
         } catch {
-          // If rate still unavailable, fall back to 1:1 so the expense is at least counted.
-          // This is incorrect in absolute terms but far better than silently dropping the debt.
+          // Rate unavailable — use 1:1 so the debt isn't silently dropped.
+          // These expenses are flagged so the organiser can spot them.
           rateCache[key] = 1;
         }
       }
-      return Math.round(amount * rateCache[key] * 100) / 100;
+      return toPence(amount * rateCache[key]);
     }
 
-    // Fetch ALL expenses with their splits (including those with null amount_home)
+    // net values in integer pence
+    // positive = owed money (creditor), negative = owes money (debtor)
+    const netPence: Record<string, number> = {};
+
+    // ── 1. EXPENSES ──────────────────────────────────────────────────────────
     const expensesResult = await client.query(
-      `SELECT e.id, e.paid_by, e.amount::float AS amount, e.currency, e.amount_home::float AS amount_home,
+      `SELECT e.id, e.paid_by, e.amount::float AS amount, e.currency,
+              e.amount_home::float AS amount_home,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -106,66 +155,69 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
       [tripId]
     );
 
-    const netMap: Record<string, number> = {};
-
     for (const row of expensesResult.rows) {
-      const expAmount: number = row.amount;
-      const expHome = await toHome(expAmount, row.currency, row.amount_home);
+      const expPence = await toHomePence(row.amount, row.currency, row.amount_home);
 
-      // Credit: payer paid expHome in home currency
-      netMap[row.paid_by] = (netMap[row.paid_by] ?? 0) + expHome;
+      // Credit: payer is owed the full amount
+      netPence[row.paid_by] = (netPence[row.paid_by] ?? 0) + expPence;
 
-      // Debit: each split person owes their proportional share of expHome.
-      // We recompute proportionally from the resolved expHome rather than trusting
-      // stored split.amount_home so that rounding drift and past null values are healed.
+      // Debit: each split person owes their proportional share.
+      // Proportional recomputation heals any past rounding drift in stored splits.
       const splits: Array<{ traveller_id: string; amount: number }> = row.splits;
       if (splits.length > 0) {
         const splitTotal = splits.reduce((s, sp) => s + sp.amount, 0);
-        let debitedSoFar = 0;
+        let debitedPence = 0;
         for (let i = 0; i < splits.length; i++) {
           const sp = splits[i];
-          let debit: number;
-          if (i === splits.length - 1) {
-            // Last split absorbs any floating-point remainder
-            debit = Math.round((expHome - debitedSoFar) * 100) / 100;
-          } else {
-            debit = splitTotal > 0
-              ? Math.round(sp.amount / splitTotal * expHome * 100) / 100
+          const debit = i === splits.length - 1
+            ? expPence - debitedPence                               // last person absorbs remainder
+            : splitTotal > 0
+              ? Math.round(sp.amount / splitTotal * expPence)       // proportional integer pence
               : 0;
-            debitedSoFar += debit;
-          }
-          netMap[sp.traveller_id] = (netMap[sp.traveller_id] ?? 0) - debit;
+          netPence[sp.traveller_id] = (netPence[sp.traveller_id] ?? 0) - debit;
+          debitedPence += debit;
         }
       }
     }
 
-    // Adjust for transfers: payer gains credit, receiver loses credit
+    // ── 2. LEDGER ADJUSTMENTS ─────────────────────────────────────────────────
+    // Transfers and paid settlements are treated identically:
+    //   from_party paid → from_party net increases (debt reduced)
+    //   to_party received → to_party net decreases (credit reduced)
+
+    // Transfers — use stored amount_home, fall back to live rate only if null
     const transfersResult = await client.query(
-      `SELECT from_traveller, to_traveller, amount::float, currency, amount_home::float AS amount_home
+      `SELECT from_traveller, to_traveller,
+              amount::float, currency, amount_home::float AS amount_home
        FROM transfers WHERE trip_id = $1`,
       [tripId]
     );
     for (const row of transfersResult.rows) {
-      const amt = await toHome(row.amount, row.currency, row.amount_home);
-      netMap[row.from_traveller] = (netMap[row.from_traveller] ?? 0) + amt;
-      netMap[row.to_traveller]   = (netMap[row.to_traveller]   ?? 0) - amt;
+      const adjPence = await toHomePence(row.amount, row.currency, row.amount_home);
+      netPence[row.from_traveller] = (netPence[row.from_traveller] ?? 0) + adjPence;
+      netPence[row.to_traveller]   = (netPence[row.to_traveller]   ?? 0) - adjPence;
     }
 
-    // Adjust for already-paid settlements (money that has already physically moved)
+    // Paid settlements — use paid_home_pence frozen at payment time.
+    // This ensures the adjustment always reflects the exact rate when money moved.
+    // Falls back to ROUND(amount*100) if paid_home_pence is null (legacy rows).
     const paidResult = await client.query(
-      `SELECT from_traveller, to_traveller, amount::float FROM settlements
+      `SELECT from_traveller, to_traveller,
+              COALESCE(paid_home_pence, ROUND(amount * 100)::BIGINT) AS adj_pence
+       FROM settlements
        WHERE trip_id = $1 AND status = 'paid'`,
       [tripId]
     );
     for (const row of paidResult.rows) {
-      const amt: number = row.amount;
-      netMap[row.from_traveller] = (netMap[row.from_traveller] ?? 0) + amt;
-      netMap[row.to_traveller]   = (netMap[row.to_traveller]   ?? 0) - amt;
+      const adjPence: number = Number(row.adj_pence);
+      netPence[row.from_traveller] = (netPence[row.from_traveller] ?? 0) + adjPence;
+      netPence[row.to_traveller]   = (netPence[row.to_traveller]   ?? 0) - adjPence;
     }
 
-    const balances: Balance[] = Object.entries(netMap).map(([traveller_id, net]) => ({
+    // ── 3. SIMPLIFY & STORE ───────────────────────────────────────────────────
+    const balances: Balance[] = Object.entries(netPence).map(([traveller_id, net]) => ({
       traveller_id,
-      net: Math.round(net * 100) / 100,
+      net, // already integer pence
     }));
 
     const newSettlements = simplifyDebts(balances);
@@ -181,7 +233,7 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
       const r = await client.query(
         `INSERT INTO settlements (trip_id, from_traveller, to_traveller, amount, currency)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [tripId, s.from, s.to, s.amount, homeCurrency]
+        [tripId, s.from, s.to, penceToDecimal(s.pence), homeCurrency]
       );
       results.push({ ...r.rows[0], amount: parseFloat(r.rows[0].amount) });
     }
@@ -197,10 +249,16 @@ router.post('/trips/:tripId/settlements/calculate', async (req: Request, res: Re
 });
 
 // PATCH /settlements/:id/pay
+// Freeze paid_home_pence at the moment of payment — this is the integer pence value
+// used for future ledger adjustments, ensuring exchange rate changes don't retroactively
+// alter how much was "already settled".
 router.patch('/settlements/:id/pay', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `UPDATE settlements SET status = 'paid', paid_at = NOW()
+      `UPDATE settlements
+       SET status = 'paid',
+           paid_at = NOW(),
+           paid_home_pence = ROUND(amount * 100)::BIGINT
        WHERE id = $1 RETURNING *`,
       [req.params.id]
     );
