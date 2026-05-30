@@ -205,11 +205,22 @@ router.post('/trips/:tripId/expenses', async (req: Request, res: Response) => {
     );
     const expense = expResult.rows[0];
 
+    // Compute split amount_homes and apply rounding correction to the last split
+    // so that sum(splits.amount_home) === expense.amount_home exactly.
+    let splitHomeRunning = 0;
     const splitRows = [];
-    for (const split of splits) {
+    for (let i = 0; i < splits.length; i++) {
+      const split = splits[i];
+      const isLast = i === splits.length - 1;
       let splitHome: number | null = null;
       if (amountHome !== null) {
-        splitHome = Math.round(split.amount * (amountHome / parseFloat(amount)) * 100) / 100;
+        if (isLast) {
+          // Last split absorbs any rounding remainder
+          splitHome = Math.round((amountHome - splitHomeRunning) * 100) / 100;
+        } else {
+          splitHome = Math.round(split.amount * (amountHome / parseFloat(amount)) * 100) / 100;
+          splitHomeRunning += splitHome;
+        }
       }
       const splitResult = await client.query(
         `INSERT INTO expense_splits (expense_id, traveller_id, amount, amount_home)
@@ -312,11 +323,19 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
 
       await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [req.params.id]);
 
+      let splitHomeRunning2 = 0;
       const splitRows = [];
-      for (const split of splits) {
+      for (let i = 0; i < splits.length; i++) {
+        const split = splits[i];
+        const isLast = i === splits.length - 1;
         let splitHome: number | null = null;
         if (amountHome !== null) {
-          splitHome = Math.round(split.amount * (amountHome / newAmount) * 100) / 100;
+          if (isLast) {
+            splitHome = Math.round((amountHome - splitHomeRunning2) * 100) / 100;
+          } else {
+            splitHome = Math.round(split.amount * (amountHome / newAmount) * 100) / 100;
+            splitHomeRunning2 += splitHome;
+          }
         }
         const splitResult = await client.query(
           `INSERT INTO expense_splits (expense_id, traveller_id, amount, amount_home)
