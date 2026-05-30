@@ -40,7 +40,7 @@ export default function ActivityFormPage() {
 
   // Location search
   const [locationSearch, setLocationSearch] = useState('');
-  const [locationResults, setLocationResults] = useState<Array<{ place_id: number; display_name: string; lat: string; lon: string }>>([]);
+  const [locationResults, setLocationResults] = useState<{ place_id: number; display_name: string; lat: string; lon: string }[]>([]);
   const [showLocResults, setShowLocResults] = useState(false);
   const locSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 

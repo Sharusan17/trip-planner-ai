@@ -8,6 +8,14 @@ import { expenseClaimsApi } from '@/api/expenseClaims';
 import { travellersApi } from '@/api/travellers';
 import { familiesApi } from '@/api/families';
 import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } from '@trip-planner-ai/shared';
+
+// Form-local line item (amount kept as string for input control)
+interface FormLineItem {
+  description: string;
+  qty: number;
+  amount: string;
+  traveller_ids: string[];
+}
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown, Trash2 } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
@@ -58,7 +66,7 @@ export default function ExpenseFormPage() {
     paid_by: activeTraveller?.id ?? '', split_mode: 'equal',
     traveller_ids: [], custom_splits: {}, notes: '',
   });
-  const [lineItems, setLineItems] = useState<Array<{ description: string; qty: number; amount: string; traveller_ids: string[] }]>([
+  const [lineItems, setLineItems] = useState<FormLineItem[]>([
     { description: '', qty: 1, amount: '', traveller_ids: [] },
   ]);
   const receiptInputRef = useRef<HTMLInputElement>(null);

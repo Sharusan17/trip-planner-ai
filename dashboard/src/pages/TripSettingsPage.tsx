@@ -29,7 +29,7 @@ export default function TripSettingsPage() {
 
   // Location search
   const [locSearch, setLocSearch] = useState('');
-  const [locResults, setLocResults] = useState<Array<{ place_id: number; display_name: string; lat: string; lon: string }>>([]);
+  const [locResults, setLocResults] = useState<{ place_id: number; display_name: string; lat: string; lon: string }[]>([]);
   const [showLocResults, setShowLocResults] = useState(false);
   const locTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
