@@ -159,10 +159,10 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
     // Auto-create a flagged expense if this booking has a price
     if (price && currency && paidBy && (traveller_ids?.length ?? 0) > 0) {
       const expDesc = `${transport_type.charAt(0).toUpperCase() + transport_type.slice(1)}: ${from_location} → ${to_location}${reference_number ? ` (${reference_number})` : ''}`;
-      const expDate = departure_time.slice(0, 10);
       const expenseId = await createLinkedExpense(client, {
         tripId: tripId as string, paidBy, amount: parseFloat(price), currency, homeCurrency,
-        description: expDesc, category: 'transport', expenseDate: expDate,
+        description: expDesc, category: 'transport',
+        expenseDate: new Date().toISOString().split('T')[0],
         travellerIds: traveller_ids,
       });
       if (expenseId) {
@@ -204,10 +204,10 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       // Auto-create expense for return leg if it has its own price
       if (lj.price && (lj.currency ?? currency) && paidBy && (traveller_ids?.length ?? 0) > 0) {
         const retDesc = `${transport_type.charAt(0).toUpperCase() + transport_type.slice(1)}: ${lj.from_location} → ${lj.to_location}${lj.reference_number ? ` (${lj.reference_number})` : ''}`;
-        const retDate = lj.departure_time.slice(0, 10);
         const retExpenseId = await createLinkedExpense(client, {
           tripId: tripId as string, paidBy, amount: parseFloat(lj.price), currency: lj.currency ?? currency, homeCurrency,
-          description: retDesc, category: 'transport', expenseDate: retDate,
+          description: retDesc, category: 'transport',
+          expenseDate: new Date().toISOString().split('T')[0],
           travellerIds: traveller_ids,
         });
         if (retExpenseId) {
@@ -377,11 +377,18 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
 // DELETE /transport/:id
 router.delete('/transport/:id', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `DELETE FROM transport_bookings WHERE id = $1 RETURNING id`,
-      [req.params.id]
+    const existing = await pool.query(
+      `SELECT id, linked_expense_id FROM transport_bookings WHERE id = $1`, [req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+
+    const { linked_expense_id } = existing.rows[0];
+    if (linked_expense_id) {
+      await pool.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [linked_expense_id]);
+      await pool.query(`DELETE FROM expenses WHERE id = $1`, [linked_expense_id]);
+    }
+
+    await pool.query(`DELETE FROM transport_bookings WHERE id = $1`, [req.params.id]);
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

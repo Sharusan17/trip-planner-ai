@@ -151,7 +151,8 @@ router.post('/days/:dayId/activities', async (req: Request, res: Response) => {
       if (travellerIds.length > 0) {
         const expenseId = await createLinkedExpense(client, {
           tripId, paidBy, amount: parseFloat(price), currency, homeCurrency,
-          description: description, category: 'activities', expenseDate: day.date,
+          description: description, category: 'activities',
+          expenseDate: new Date().toISOString().split('T')[0],
           travellerIds,
         });
         if (expenseId) {
@@ -226,7 +227,8 @@ router.put('/activities/:id', async (req: Request, res: Response) => {
         } else {
           const expenseId = await createLinkedExpense(client, {
             tripId, paidBy, amount: newPrice, currency: newCurrency, homeCurrency,
-            description: activity.description, category: 'activities', expenseDate: prev.date,
+            description: activity.description, category: 'activities',
+            expenseDate: new Date().toISOString().split('T')[0],
             travellerIds,
           });
           if (expenseId) {
@@ -252,10 +254,21 @@ router.put('/activities/:id', async (req: Request, res: Response) => {
 // DELETE /api/v1/activities/:id
 router.delete('/activities/:id', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('DELETE FROM activities WHERE id = $1 RETURNING id', [req.params.id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Activity not found' });
+    // Fetch the activity first so we can delete any linked expense
+    const existing = await pool.query(
+      `SELECT id, linked_expense_id FROM activities WHERE id = $1`, [req.params.id]
+    );
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Activity not found' });
+
+    const { linked_expense_id } = existing.rows[0];
+
+    // Delete linked expense (and its splits, via FK cascade) before deleting the activity
+    if (linked_expense_id) {
+      await pool.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [linked_expense_id]);
+      await pool.query(`DELETE FROM expenses WHERE id = $1`, [linked_expense_id]);
     }
+
+    await pool.query('DELETE FROM activities WHERE id = $1', [req.params.id]);
     res.json({ deleted: true });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

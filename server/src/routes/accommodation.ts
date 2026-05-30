@@ -175,7 +175,8 @@ router.post('/trips/:tripId/accommodation', async (req: Request, res: Response) 
       const expDesc = `${name}${reference_number ? ` (${reference_number})` : ''} — ${nights} night${nights !== 1 ? 's' : ''}`;
       const expenseId = await createLinkedExpense(client, {
         tripId: tripId as string, paidBy, amount: parseFloat(price), currency, homeCurrency,
-        description: expDesc, category: 'accommodation', expenseDate: check_in_date,
+        description: expDesc, category: 'accommodation',
+        expenseDate: new Date().toISOString().split('T')[0],
         travellerIds: traveller_ids,
       });
       if (expenseId) {
@@ -387,11 +388,18 @@ router.put('/accommodation/:id', async (req: Request, res: Response) => {
 // DELETE /accommodation/:id
 router.delete('/accommodation/:id', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `DELETE FROM accommodation_bookings WHERE id = $1 RETURNING id`,
-      [req.params.id]
+    const existing = await pool.query(
+      `SELECT id, linked_expense_id FROM accommodation_bookings WHERE id = $1`, [req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+
+    const { linked_expense_id } = existing.rows[0];
+    if (linked_expense_id) {
+      await pool.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [linked_expense_id]);
+      await pool.query(`DELETE FROM expenses WHERE id = $1`, [linked_expense_id]);
+    }
+
+    await pool.query(`DELETE FROM accommodation_bookings WHERE id = $1`, [req.params.id]);
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
