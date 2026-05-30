@@ -174,7 +174,7 @@ router.post('/trips/:tripId/accommodation', async (req: Request, res: Response) 
       const nights = Math.round((new Date(check_out_date).getTime() - new Date(check_in_date).getTime()) / 86400000);
       const expDesc = `${name}${reference_number ? ` (${reference_number})` : ''} — ${nights} night${nights !== 1 ? 's' : ''}`;
       const expenseId = await createLinkedExpense(client, {
-        tripId, paidBy, amount: parseFloat(price), currency, homeCurrency,
+        tripId: tripId as string, paidBy, amount: parseFloat(price), currency, homeCurrency,
         description: expDesc, category: 'accommodation', expenseDate: check_in_date,
         travellerIds: traveller_ids,
       });

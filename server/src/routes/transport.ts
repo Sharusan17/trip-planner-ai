@@ -161,7 +161,7 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
       const expDesc = `${transport_type.charAt(0).toUpperCase() + transport_type.slice(1)}: ${from_location} → ${to_location}${reference_number ? ` (${reference_number})` : ''}`;
       const expDate = departure_time.slice(0, 10);
       const expenseId = await createLinkedExpense(client, {
-        tripId, paidBy, amount: parseFloat(price), currency, homeCurrency,
+        tripId: tripId as string, paidBy, amount: parseFloat(price), currency, homeCurrency,
         description: expDesc, category: 'transport', expenseDate: expDate,
         travellerIds: traveller_ids,
       });
@@ -206,7 +206,7 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
         const retDesc = `${transport_type.charAt(0).toUpperCase() + transport_type.slice(1)}: ${lj.from_location} → ${lj.to_location}${lj.reference_number ? ` (${lj.reference_number})` : ''}`;
         const retDate = lj.departure_time.slice(0, 10);
         const retExpenseId = await createLinkedExpense(client, {
-          tripId, paidBy, amount: parseFloat(lj.price), currency: lj.currency ?? currency, homeCurrency,
+          tripId: tripId as string, paidBy, amount: parseFloat(lj.price), currency: lj.currency ?? currency, homeCurrency,
           description: retDesc, category: 'transport', expenseDate: retDate,
           travellerIds: traveller_ids,
         });
