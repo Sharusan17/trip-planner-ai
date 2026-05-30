@@ -194,14 +194,22 @@ export default function ExpensesPage() {
   });
   const { data: settlements = [], isLoading: settLoading } = useQuery({
     queryKey: ['settlements', currentTrip?.id],
-    // Auto-calculate then fetch so settlements are always current
-    queryFn: async () => {
-      await settlementsApi.calculate(currentTrip!.id);
-      return settlementsApi.list(currentTrip!.id);
-    },
+    // Just list — recalculation is triggered separately so marking paid never causes a re-run
+    queryFn: () => settlementsApi.list(currentTrip!.id),
     enabled: !!currentTrip && tab === 'settlements',
-    staleTime: 0,
+    staleTime: 60_000,
   });
+
+  // Recalculate once whenever the user opens the settlements tab.
+  // We intentionally do NOT recalculate on markPaid / markUnpaid — those only
+  // change a settlement's status, not the underlying expense data.
+  useEffect(() => {
+    if (tab !== 'settlements' || !currentTrip) return;
+    settlementsApi.calculate(currentTrip.id).then(() => {
+      qc.invalidateQueries({ queryKey: ['settlements', currentTrip.id] });
+    }).catch(() => {}); // best-effort
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, currentTrip?.id]);
   const { data: transfers = [], isLoading: transfersLoading } = useQuery({
     queryKey: ['transfers', currentTrip?.id],
     queryFn: () => settlementsApi.listTransfers(currentTrip!.id),
@@ -267,24 +275,48 @@ export default function ExpensesPage() {
   // ── expense mutations
   const deleteExpenseMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      // Expense deleted → debts changed → recalculate settlements
+      if (currentTrip) {
+        settlementsApi.calculate(currentTrip.id).then(() => {
+          qc.invalidateQueries({ queryKey: ['settlements', currentTrip.id] });
+        }).catch(() => {});
+      }
+    },
   });
 
   // ── settlement mutations
+  // markPaid / markUnpaid only flip the status — they do NOT recalculate.
+  // Updating the cache directly prevents a spurious recalculate that could
+  // regenerate the same settlement at a slightly different exchange rate.
   const markPaidMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.markPaid(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+    onSuccess: (updated) => {
+      qc.setQueryData(
+        ['settlements', currentTrip?.id],
+        (old: any[]) => old?.map((s) => (s.id === updated.id ? updated : s)) ?? [],
+      );
+    },
   });
   const markUnpaidMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.markUnpaid(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+    onSuccess: (updated) => {
+      qc.setQueryData(
+        ['settlements', currentTrip?.id],
+        (old: any[]) => old?.map((s) => (s.id === updated.id ? updated : s)) ?? [],
+      );
+    },
   });
 
   const deleteTransferMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.deleteTransfer(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transfers'] });
-      qc.invalidateQueries({ queryKey: ['settlements'] });
+      // Transfer deleted → underlying debts changed → recalculate
+      settlementsApi.calculate(currentTrip!.id).then(() => {
+        qc.invalidateQueries({ queryKey: ['settlements', currentTrip?.id] });
+      }).catch(() => {});
     },
   });
 
