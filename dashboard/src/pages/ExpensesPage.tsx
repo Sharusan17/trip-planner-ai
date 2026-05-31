@@ -650,7 +650,13 @@ export default function ExpensesPage() {
                               <div className="flex items-center gap-2 mt-2 flex-wrap">
                                 <span className="badge badge-gold text-xs capitalize">{exp.split_mode}</span>
                                 {mySplit && viewMode === 'total' && (
-                                  <span className="text-xs text-ink-faint">Your share: <strong>{fmt(mySplit.amount, exp.currency)}</strong></span>
+                                  <span className="text-xs text-ink-faint">Your share: <strong>
+                                    {exp.split_mode === 'equal' && exp.splits.length > 0
+                                      ? (exp.amount_home != null
+                                          ? fmt(exp.amount_home / exp.splits.length, homeCurrency)
+                                          : fmt(exp.amount / exp.splits.length, exp.currency))
+                                      : fmt(mySplit.amount, exp.currency)}
+                                  </strong></span>
                                 )}
                                 <span className="text-xs text-ink-faint">{exp.splits.length} {exp.splits.length === 1 ? 'person' : 'people'}</span>
                                 {exp.receipt_filename && (
