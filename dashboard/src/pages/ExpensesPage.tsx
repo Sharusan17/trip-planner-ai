@@ -125,7 +125,7 @@ function SettlementRow({
           </p>
         )}
       </div>
-      {!isPaid && activeTravellerId === settlement.from_traveller && onViewBreakdown && (
+      {!isPaid && (activeTravellerId === settlement.from_traveller || isOrganiser) && onViewBreakdown && (
         <button onClick={onViewBreakdown} className="btn-secondary text-xs py-1 px-3 shrink-0">
           View
         </button>
