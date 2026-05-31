@@ -336,7 +336,7 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
     const paidBy: string = prev.created_by ?? '';
     if (newPrice && newCurrency && paidBy && finalTravellerIds.length > 0) {
       const expDesc = `${(booking.transport_type as string).charAt(0).toUpperCase() + (booking.transport_type as string).slice(1)}: ${booking.from_location} → ${booking.to_location}${booking.reference_number ? ` (${booking.reference_number})` : ''}`;
-      const expDate = (booking.departure_time as string).slice(0, 10);
+      const expDate = new Date(booking.departure_time as string | Date).toISOString().slice(0, 10);
       if (prev.linked_expense_id) {
         await syncLinkedExpense(client, {
           expenseId: prev.linked_expense_id, amount: newPrice, currency: newCurrency,
