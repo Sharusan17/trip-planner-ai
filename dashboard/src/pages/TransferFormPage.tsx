@@ -6,14 +6,7 @@ import { settlementsApi } from '@/api/settlements';
 import { travellersApi } from '@/api/travellers';
 import { currencyApi } from '@/api/currency';
 import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
-
-const ALL_CURRENCIES = [
-  'AED','AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP',
-  'HKD','HUF','INR','JPY','KRW','MXN','NOK','NZD','PLN','SAR',
-  'SEK','SGD','THB','TRY','USD','ZAR',
-];
-
-const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 const QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500];
 
 function fmt(amount: number, currency: string) {
@@ -133,7 +126,7 @@ export default function TransferFormPage() {
   })();
 
   const isPending = createMutation.isPending || updateMutation.isPending;
-  const sym = CURRENCY_SYMBOLS[currency] ?? currency;
+  const sym = getCurrencySymbol(currency);
 
   if (!currentTrip) return null;
 
@@ -304,7 +297,7 @@ export default function TransferFormPage() {
                       : 'bg-white border-parchment-dark text-ink hover:bg-parchment/60'
                   }`}
                 >
-                  {CURRENCY_SYMBOLS[c] ?? ''} {c}
+                  {getCurrencySymbol(c)} {c}
                 </button>
               ))}
               <select

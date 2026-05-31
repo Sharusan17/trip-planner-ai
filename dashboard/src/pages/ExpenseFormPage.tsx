@@ -11,6 +11,7 @@ import type { ExpenseCategory, SplitMode, CreateExpenseInput, ExpenseLineItem } 
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2, Crown, Trash2 } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 
 const CATEGORIES: ExpenseCategory[] = [
   'accommodation', 'food', 'transport', 'activities', 'shopping', 'other',
@@ -22,13 +23,6 @@ const SPLIT_MODES: { key: SplitMode; label: string }[] = [
   { key: 'itemised', label: 'Itemised' },
 ];
 
-const ALL_CURRENCIES = [
-  'AED','AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP',
-  'HKD','HUF','INR','JPY','KRW','MXN','NOK','NZD','PLN','SAR',
-  'SEK','SGD','THB','TRY','USD','ZAR',
-];
-
-const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
 
 function fmt(amount: number, currency: string) {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount);
@@ -454,7 +448,7 @@ export default function ExpenseFormPage() {
             <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Amount *</label>
             <div className="flex items-stretch min-h-[40px] border border-parchment-dark rounded-[10px] overflow-hidden bg-white focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/20">
               <span className="px-3 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark flex items-center select-none flex-shrink-0">
-                {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
+                {getCurrencySymbol(form.currency)}
               </span>
               <input type="number" step="0.01" min="0"
                 className="flex-1 px-3 py-[0.4375rem] text-sm outline-none bg-white min-w-0"
@@ -603,9 +597,7 @@ export default function ExpenseFormPage() {
                     />
                     {/* Currency symbol + amount */}
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {CURRENCY_SYMBOLS[form.currency] && (
-                        <span className="text-xs text-ink-faint select-none">{CURRENCY_SYMBOLS[form.currency]}</span>
-                      )}
+                      <span className="text-xs text-ink-faint select-none">{getCurrencySymbol(form.currency)}</span>
                       <input
                         type="number" step="0.01" min="0"
                         className="vintage-input text-sm text-right"
@@ -710,7 +702,7 @@ export default function ExpenseFormPage() {
                   <span className="flex-1 text-sm text-ink truncate">{t.name}</span>
                   <div className="flex items-center border border-parchment-dark rounded-lg overflow-hidden bg-white shrink-0 focus-within:ring-2 focus-within:ring-navy/30">
                     <span className="px-2 text-xs font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark h-full flex items-center py-2 select-none">
-                      {CURRENCY_SYMBOLS[form.currency] ?? form.currency}
+                      {getCurrencySymbol(form.currency)}
                     </span>
                     <input
                       type="number" step="0.01" min="0"

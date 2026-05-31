@@ -9,18 +9,11 @@ import type { ExpenseCategory } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { ArrowLeft, ScanLine, Paperclip, CheckCircle2, Loader2 } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 
 const CATEGORIES: ExpenseCategory[] = [
   'accommodation', 'food', 'transport', 'activities', 'shopping', 'other',
 ];
-
-const ALL_CURRENCIES = [
-  'AED', 'AUD', 'BRL', 'CAD', 'CHF', 'CNY', 'CZK', 'DKK', 'EUR', 'GBP',
-  'HKD', 'HUF', 'INR', 'JPY', 'KRW', 'MXN', 'NOK', 'NZD', 'PLN', 'SAR',
-  'SEK', 'SGD', 'THB', 'TRY', 'USD', 'ZAR',
-];
-
-const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
 
 interface ClaimFormData {
   description: string;
@@ -293,17 +286,17 @@ export default function ExpenseClaimFormPage() {
               onChange={(e) => setForm({ ...form, currency: e.target.value })}
             >
               <option value={destCurrency}>
-                {destCurrency} {CURRENCY_SYMBOLS[destCurrency] ?? ''}
+                {destCurrency} {getCurrencySymbol(destCurrency)}
               </option>
               {homeCurrency !== destCurrency && (
                 <option value={homeCurrency}>
-                  {homeCurrency} {CURRENCY_SYMBOLS[homeCurrency] ?? ''}
+                  {homeCurrency} {getCurrencySymbol(homeCurrency)}
                 </option>
               )}
               <option disabled>──────────</option>
               {ALL_CURRENCIES.filter((c) => c !== destCurrency && c !== homeCurrency).map((c) => (
                 <option key={c} value={c}>
-                  {c} {CURRENCY_SYMBOLS[c] ?? ''}
+                  {c} {getCurrencySymbol(c)}
                 </option>
               ))}
             </select>

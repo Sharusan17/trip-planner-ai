@@ -6,14 +6,7 @@ import { depositsApi } from '@/api/deposits';
 import type { CreateDepositInput } from '@trip-planner-ai/shared';
 import { ArrowLeft } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
-
-const ALL_CURRENCIES = [
-  'AED','AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP',
-  'HKD','HUF','INR','JPY','KRW','MXN','NOK','NZD','PLN','SAR',
-  'SEK','SGD','THB','TRY','USD','ZAR',
-];
-
-const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000, 2000];
 
 const CATEGORY_OPTIONS = [
@@ -100,7 +93,7 @@ export default function DepositFormPage() {
   }
 
   const isPending = createMutation.isPending || updateMutation.isPending;
-  const sym = CURRENCY_SYMBOLS[form.currency] ?? form.currency;
+  const sym = getCurrencySymbol(form.currency);
 
   if (!currentTrip) return null;
 
@@ -213,7 +206,7 @@ export default function DepositFormPage() {
                         : 'bg-white border-parchment-dark text-ink hover:bg-parchment/60'
                     }`}
                   >
-                    {CURRENCY_SYMBOLS[c] ?? ''} {c}
+                    {getCurrencySymbol(c)} {c}
                   </button>
                 ))}
               <select
