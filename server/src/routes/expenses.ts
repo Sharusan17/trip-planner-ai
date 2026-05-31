@@ -329,16 +329,26 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
     );
     const expense = updResult.rows[0];
 
-    if (traveller_ids && traveller_ids.length > 0) {
+    // If traveller_ids not provided but amount/currency/split_mode changed, refetch existing split participants
+    let tIdsToRecalc: string[] | undefined = traveller_ids?.length ? traveller_ids : undefined;
+    if (!tIdsToRecalc && (amount !== undefined || currency !== undefined || split_mode !== undefined)) {
+      const existRes = await client.query(
+        `SELECT traveller_id FROM expense_splits WHERE expense_id = $1`,
+        [req.params.id]
+      );
+      if (existRes.rows.length > 0) tIdsToRecalc = existRes.rows.map((r: any) => r.traveller_id);
+    }
+
+    if (tIdsToRecalc && tIdsToRecalc.length > 0) {
       const travellersResult = await client.query(
         `SELECT id, cost_split_weight FROM travellers WHERE id = ANY($1)`,
-        [newTravellerIds]
+        [tIdsToRecalc]
       );
       const weights: Record<string, number> = {};
       for (const t of travellersResult.rows) {
         weights[t.id] = parseFloat(t.cost_split_weight);
       }
-      const splits = computeSplits(newAmount, newSplitMode, newTravellerIds, weights, custom_splits);
+      const splits = computeSplits(newAmount, newSplitMode, tIdsToRecalc, weights, custom_splits);
 
       await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [req.params.id]);
 
