@@ -14,6 +14,11 @@ function syncLinkedSource(expenseId: string, newAmount: number, newCurrency: str
     [newAmount, newCurrency, expenseId]
   ).catch(() => {});
   pool.query(
+    `UPDATE accommodation_bookings SET price = $1, currency = $2, updated_at = NOW()
+     WHERE linked_expense_id = $3`,
+    [newAmount, newCurrency, expenseId]
+  ).catch(() => {});
+  pool.query(
     `UPDATE activities SET price = $1, currency = $2
      WHERE linked_expense_id = $3`,
     [newAmount, newCurrency, expenseId]
