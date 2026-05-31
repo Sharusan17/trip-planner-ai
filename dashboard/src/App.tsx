@@ -12,6 +12,7 @@ import ExpensesPage from './pages/ExpensesPage';
 import ExpenseFormPage from './pages/ExpenseFormPage';
 import ExpenseClaimFormPage   from './pages/ExpenseClaimFormPage';
 import ExpenseClaimReviewPage from './pages/ExpenseClaimReviewPage';
+import SettlementDetailPage from './pages/SettlementDetailPage';
 import DepositFormPage from './pages/DepositFormPage';
 import TransferFormPage from './pages/TransferFormPage';
 import TransportPage from './pages/TransportPage';
@@ -83,6 +84,7 @@ function App() {
         <Route path="/expenses/claims/new"  element={<ExpenseClaimFormPage />} />
         <Route path="/expenses/claims"      element={<ExpenseClaimReviewPage />} />
         <Route path="/expenses/claims/:id"  element={<ExpenseClaimReviewPage />} />
+        <Route path="/expenses/settlements/:id" element={<SettlementDetailPage />} />
 
         {/* Travel (transport) + Stays (accommodation) */}
         <Route path="/transport"                         element={<TransportPage />} />
