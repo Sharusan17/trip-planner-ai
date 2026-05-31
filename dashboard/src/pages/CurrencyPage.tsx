@@ -2,10 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { currencyApi } from '@/api/currency';
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  GBP: '£', EUR: '€', USD: '$',
-};
+import { getCurrencySymbol } from '@/utils/currency';
 
 export default function CurrencyPage() {
   const { currentTrip } = useTrip();
@@ -45,8 +42,8 @@ export default function CurrencyPage() {
 
   if (!currentTrip) return null;
 
-  const fromSymbol = CURRENCY_SYMBOLS[from] || from;
-  const toSymbol = CURRENCY_SYMBOLS[to] || to;
+  const fromSymbol = getCurrencySymbol(from);
+  const toSymbol = getCurrencySymbol(to);
 
   return (
     <div className="space-y-6 max-w-lg mx-auto">
@@ -56,7 +53,7 @@ export default function CurrencyPage() {
       {rateInfo && (
         <div className="vintage-card p-4 text-center">
           <div className="font-display text-lg">
-            1 {CURRENCY_SYMBOLS[homeCurrency]} = <span className="font-bold text-navy">{rateInfo.rate.toFixed(4)}</span> {CURRENCY_SYMBOLS[destCurrency]}
+            1 {getCurrencySymbol(homeCurrency)} = <span className="font-bold text-navy">{rateInfo.rate.toFixed(4)}</span> {getCurrencySymbol(destCurrency)}
           </div>
           <div className="text-xs text-ink-faint mt-1">
             Updated {timeSince(rateInfo.fetched_at)}
@@ -138,9 +135,9 @@ export default function CurrencyPage() {
             const rate = rateInfo?.rate || 0;
             return (
               <div key={amt} className="flex justify-between text-sm py-1 border-b border-gold/10 last:border-0">
-                <span>{CURRENCY_SYMBOLS[homeCurrency]}{amt}</span>
+                <span>{getCurrencySymbol(homeCurrency)}{amt}</span>
                 <span className="font-mono text-ink-light">
-                  {CURRENCY_SYMBOLS[destCurrency]}{(amt * rate).toFixed(2)}
+                  {getCurrencySymbol(destCurrency)}{(amt * rate).toFixed(2)}
                 </span>
               </div>
             );
