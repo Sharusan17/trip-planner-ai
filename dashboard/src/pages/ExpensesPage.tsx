@@ -154,6 +154,7 @@ export default function ExpensesPage() {
 
   // ── expenses state
   const [expenseCat, setExpenseCat] = useState<ExpenseCategory | 'all'>('all');
+  const [viewMode, setViewMode] = useState<'total' | 'me'>('total');
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
   const [budgetInputs, setBudgetInputs] = useState<Record<ExpenseCategory, string>>({
     accommodation: '', food: '', transport: '', activities: '', shopping: '', other: '',
@@ -384,12 +385,28 @@ export default function ExpensesPage() {
   }
 
   // ── derived data
-  const filteredExpenses = expenseCat === 'all' ? expenses : expenses.filter((e) => e.category === expenseCat);
+  const baseExpenses = viewMode === 'me'
+    ? expenses.filter((e) => (e.splits.find((s) => s.traveller_id === activeTraveller?.id)?.amount ?? 0) > 0)
+    : expenses;
+  const filteredExpenses = expenseCat === 'all' ? baseExpenses : baseExpenses.filter((e) => e.category === expenseCat);
   const groupedExpenses  = groupByDate(filteredExpenses);
   const summaryMap: Record<string, { total_home: number; budget_amount: number | null; count: number }> = {};
   for (const s of expSummary) summaryMap[s.category] = { total_home: s.total_home, budget_amount: s.budget_amount, count: s.count };
   const totalSpent  = expSummary.reduce((s, r) => s + r.total_home, 0);
   const totalBudget = budgets.reduce((s, b) => s + b.amount, 0);
+
+  // My personal spend per expense (for "Just Me" mode)
+  const mySpendTotal = expenses.reduce((sum, exp) => {
+    const s = exp.splits.find((sp) => sp.traveller_id === activeTraveller?.id);
+    return sum + (s?.amount_home ?? 0);
+  }, 0);
+
+  // My per-category spend (for "Just Me" category chips)
+  const myCategorySpend: Record<string, number> = {};
+  for (const exp of expenses) {
+    const s = exp.splits.find((sp) => sp.traveller_id === activeTraveller?.id);
+    if (s) myCategorySpend[exp.category] = (myCategorySpend[exp.category] ?? 0) + (s.amount_home ?? 0);
+  }
   const pendingSettlements = settlements.filter((s) => s.status === 'pending');
   const paidSettlements    = settlements.filter((s) => s.status === 'paid');
   const filteredDeposits   = depositStatusTab === 'all' ? deposits : deposits.filter((d) => d.status === depositStatusTab);
@@ -449,29 +466,47 @@ export default function ExpensesPage() {
           <h1 className="font-display text-2xl font-bold text-navy">Finance</h1>
           {totalSpent > 0 && (
             <p className="text-sm text-ink-faint">
-              {fmt(totalSpent, homeCurrency)} spent
-              {totalBudget > 0 && ` · ${fmt(totalBudget, homeCurrency)} budget`}
+              {fmt(viewMode === 'me' ? mySpendTotal : totalSpent, homeCurrency)} spent
+              {viewMode === 'total' && totalBudget > 0 && ` · ${fmt(totalBudget, homeCurrency)} budget`}
             </p>
           )}
         </div>
-        {tab === 'expenses' && (
-          <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
-        )}
-        {tab === 'deposits' && (
-          <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
-            + Add Deposit
-          </button>
-        )}
-        {tab === 'settlements' && (
-          <button className="btn-secondary text-sm" onClick={() => navigate('/expenses/transfers/add')}>
-            + Record Transfer
-          </button>
-        )}
-        {tab === 'claims' && isOrganiser && (
-          <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
-            + Send for Group Review
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {tab === 'expenses' && (
+            <div className="flex items-center bg-parchment-dark/30 rounded-full p-0.5 text-xs font-medium">
+              <button
+                onClick={() => setViewMode('total')}
+                className={`px-3 py-1 rounded-full transition-colors ${viewMode === 'total' ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
+              >
+                Total
+              </button>
+              <button
+                onClick={() => setViewMode('me')}
+                className={`px-3 py-1 rounded-full transition-colors ${viewMode === 'me' ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
+              >
+                Just Me
+              </button>
+            </div>
+          )}
+          {tab === 'expenses' && (
+            <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
+          )}
+          {tab === 'deposits' && (
+            <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
+              + Add Deposit
+            </button>
+          )}
+          {tab === 'settlements' && (
+            <button className="btn-secondary text-sm" onClick={() => navigate('/expenses/transfers/add')}>
+              + Record Transfer
+            </button>
+          )}
+          {tab === 'claims' && isOrganiser && (
+            <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
+              + Send for Group Review
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -511,7 +546,7 @@ export default function ExpensesPage() {
                 >
                   <span className="text-xl">📋</span>
                   <span className="text-xs mt-1 font-medium">All</span>
-                  <span className="text-xs opacity-70">{fmt(totalSpent, homeCurrency)}</span>
+                  <span className="text-xs opacity-70">{fmt(viewMode === 'me' ? mySpendTotal : totalSpent, homeCurrency)}</span>
                 </button>
                 {CATEGORIES.filter((c) => summaryMap[c]).map((cat) => {
                   const s = summaryMap[cat];
@@ -527,7 +562,7 @@ export default function ExpensesPage() {
                     >
                       <span className="text-xl">{EXPENSE_CATEGORY_ICONS[cat]}</span>
                       <span className="text-xs mt-1 font-medium capitalize">{cat}</span>
-                      <span className="text-xs opacity-70">{fmt(s.total_home, homeCurrency)}</span>
+                      <span className="text-xs opacity-70">{fmt(viewMode === 'me' ? (myCategorySpend[cat] ?? 0) : s.total_home, homeCurrency)}</span>
                       {pct !== null && (
                         <div className="progress-bar-track w-16 mt-1">
                           <div className="progress-bar-fill" style={{ width: `${pct}%`, backgroundColor: over ? '#EF4444' : undefined }} />
@@ -588,7 +623,13 @@ export default function ExpensesPage() {
                                   )}
                                 </div>
                                 <div className="text-right shrink-0">
-                                  {exp.amount_home !== null ? (
+                                  {viewMode === 'me' ? (
+                                    <p className="font-bold text-ink text-lg">
+                                      {mySplit?.amount_home != null
+                                        ? fmt(mySplit.amount_home, homeCurrency)
+                                        : fmt(mySplit?.amount ?? 0, exp.currency)}
+                                    </p>
+                                  ) : exp.amount_home !== null ? (
                                     <>
                                       <p className="font-bold text-ink text-lg">{fmt(exp.amount_home, homeCurrency)}</p>
                                       {exp.currency !== homeCurrency && (
@@ -602,7 +643,7 @@ export default function ExpensesPage() {
                               </div>
                               <div className="flex items-center gap-2 mt-2 flex-wrap">
                                 <span className="badge badge-gold text-xs capitalize">{exp.split_mode}</span>
-                                {mySplit && (
+                                {mySplit && viewMode === 'total' && (
                                   <span className="text-xs text-ink-faint">Your share: <strong>{fmt(mySplit.amount, exp.currency)}</strong></span>
                                 )}
                                 <span className="text-xs text-ink-faint">{exp.splits.length} {exp.splits.length === 1 ? 'person' : 'people'}</span>

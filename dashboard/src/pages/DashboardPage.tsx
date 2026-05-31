@@ -301,16 +301,16 @@ export default function DashboardPage() {
         <SwipeableSpendCard
           slides={[
             {
+              icon: <Users size={18} strokeWidth={1.75} className="text-[#3A6666]" />,
+              value: myShare > 0 ? fmt(myShare) : '—',
+              label: 'My Spent',
+              iconBg: 'bg-[#EBF4F4]',
+            },
+            {
               icon: <Receipt size={18} strokeWidth={1.75} className="text-emerald-600" />,
               value: totalSpent > 0 ? fmt(totalSpent) : '—',
               label: 'Total Spent',
               iconBg: 'bg-emerald-50',
-            },
-            {
-              icon: <Users size={18} strokeWidth={1.75} className="text-[#3A6666]" />,
-              value: myShare > 0 ? fmt(myShare) : '—',
-              label: 'My Share',
-              iconBg: 'bg-[#EBF4F4]',
             },
             {
               icon: <Users size={18} strokeWidth={1.75} className="text-violet-600" />,
