@@ -110,12 +110,14 @@ export default function TransportBookingFormPage() {
   const createMutation = useMutation({
     mutationFn: (data: CreateTransportInput) => transportApi.create(currentTrip!.id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['transport'] }); navigate('/logistics'); },
+    onError: (err) => alert(`Failed to save booking: ${err.message}`),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id: bid, data }: { id: string; data: Partial<CreateTransportInput> }) =>
       transportApi.update(bid, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['transport'] }); navigate('/logistics'); },
+    onError: (err) => alert(`Failed to update booking: ${err.message}`),
   });
 
   function handleSubmit(e: React.FormEvent) {
@@ -130,12 +132,14 @@ export default function TransportBookingFormPage() {
       outCurrency = totalCurrency || undefined;
     }
 
+    const toISO = (v: string) => v ? new Date(v).toISOString() : v;
+
     const data: CreateTransportInput = {
       transport_type: form.transport_type,
       from_location: form.from_location,
       to_location: form.to_location,
-      departure_time: form.departure_time,
-      arrival_time: form.arrival_time || undefined,
+      departure_time: toISO(form.departure_time),
+      arrival_time: form.arrival_time ? toISO(form.arrival_time) : undefined,
       reference_number: form.reference_number || undefined,
       price: outPrice,
       currency: outCurrency,
@@ -154,8 +158,8 @@ export default function TransportBookingFormPage() {
       data.linked_journey = {
         from_location: returnDraft.from_location,
         to_location: returnDraft.to_location,
-        departure_time: returnDraft.departure_time,
-        arrival_time: returnDraft.arrival_time || undefined,
+        departure_time: toISO(returnDraft.departure_time),
+        arrival_time: returnDraft.arrival_time ? toISO(returnDraft.arrival_time) : undefined,
         reference_number: returnDraft.reference_number || undefined,
         price: rPrice,
         currency: isFlightReturn && pricingMode === 'per-leg' ? (form.currency || undefined) : undefined,

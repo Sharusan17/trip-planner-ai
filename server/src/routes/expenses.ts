@@ -6,6 +6,20 @@ import type { SplitMode, ExpenseCategory } from '@trip-planner-ai/shared';
 
 const router = Router();
 
+// When an expense is edited, push the new amount/currency back to any linked source booking/activity
+function syncLinkedSource(expenseId: string, newAmount: number, newCurrency: string): void {
+  pool.query(
+    `UPDATE transport_bookings SET price = $1, currency = $2, updated_at = NOW()
+     WHERE linked_expense_id = $3`,
+    [newAmount, newCurrency, expenseId]
+  ).catch(() => {});
+  pool.query(
+    `UPDATE activities SET price = $1, currency = $2
+     WHERE linked_expense_id = $3`,
+    [newAmount, newCurrency, expenseId]
+  ).catch(() => {});
+}
+
 interface SplitRow {
   traveller_id: string;
   amount: number;
@@ -346,6 +360,7 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
       }
 
       await client.query('COMMIT');
+      syncLinkedSource(String(req.params.id), newAmount, newCurrency);
 
       return res.json({
         ...expense,
@@ -360,6 +375,7 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
+    syncLinkedSource(String(req.params.id), newAmount, newCurrency);
 
     const splitsResult = await client.query(
       `SELECT * FROM expense_splits WHERE expense_id = $1`,
