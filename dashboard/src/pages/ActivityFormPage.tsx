@@ -124,7 +124,8 @@ export default function ActivityFormPage() {
       currency: actPrice ? actCurrency : undefined,
       created_by: activeTraveller?.id || undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days'] }); navigate('/itinerary'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days', 'expenses'] }); navigate('/itinerary'); },
+    onError: (err) => alert(`Failed to save activity: ${err.message}`),
   });
 
   const updateMutation = useMutation({
@@ -139,7 +140,8 @@ export default function ActivityFormPage() {
       price: actPrice ? parseFloat(actPrice) : undefined,
       currency: actPrice ? actCurrency : undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days'] }); navigate('/itinerary'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days', 'expenses'] }); navigate('/itinerary'); },
+    onError: (err) => alert(`Failed to update activity: ${err.message}`),
   });
 
   function handleSubmit(e: React.FormEvent) {
