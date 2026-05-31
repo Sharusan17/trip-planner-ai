@@ -88,7 +88,7 @@ const DEPOSIT_STATUS_LABELS: Record<DepositStatus, string> = {
 
 function SettlementRow({
   settlement, getName, getColour, homeCurrency, onMarkPaid, onUnpay,
-  activeTravellerId, isOrganiser,
+  activeTravellerId, isOrganiser, onViewBreakdown,
 }: {
   settlement: Settlement;
   getName: (id: string) => string;
@@ -98,6 +98,7 @@ function SettlementRow({
   onUnpay?: () => void;
   activeTravellerId?: string;
   isOrganiser?: boolean;
+  onViewBreakdown?: () => void;
 }) {
   const fromName = getName(settlement.from_traveller);
   const toName   = getName(settlement.to_traveller);
@@ -124,6 +125,11 @@ function SettlementRow({
           </p>
         )}
       </div>
+      {!isPaid && activeTravellerId === settlement.from_traveller && onViewBreakdown && (
+        <button onClick={onViewBreakdown} className="btn-secondary text-xs py-1 px-3 shrink-0">
+          View
+        </button>
+      )}
       {!isPaid && canAct && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
@@ -828,7 +834,8 @@ export default function ExpensesPage() {
                       {pendingSettlements.map((s) => (
                         <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
                           homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)}
-                          activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
+                          activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser}
+                          onViewBreakdown={() => navigate(`/expenses/settlements/${s.id}`)} />
                       ))}
                     </div>
                   )}
