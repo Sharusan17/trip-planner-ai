@@ -16,6 +16,7 @@ import type {
 } from '@trip-planner-ai/shared';
 import { EXPENSE_CATEGORY_ICONS } from '@trip-planner-ai/shared';
 import { parseLocalDate } from '@/utils/date';
+import { getCurrencySymbol } from '@/utils/currency';
 import { Pencil, Trash2, RotateCcw, FileBarChart2, Flag, AlertTriangle } from 'lucide-react';
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -44,7 +45,6 @@ const DEPOSIT_STATUS_TABS: { key: 'all' | DepositStatus; label: string }[] = [
   { key: 'forfeited', label: 'Forfeited' },
 ];
 
-const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', USD: '$' };
 const QUICK_AMOUNTS = [10, 20, 50, 100, 200];
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -398,8 +398,8 @@ export default function ExpensesPage() {
     balanceMap[s.from_traveller] = (balanceMap[s.from_traveller] ?? 0) - s.amount;
     balanceMap[s.to_traveller]   = (balanceMap[s.to_traveller]   ?? 0) + s.amount;
   }
-  const fromSym = CURRENCY_SYMBOLS[currFrom] || currFrom;
-  const toSym   = CURRENCY_SYMBOLS[currTo]   || currTo;
+  const fromSym = getCurrencySymbol(currFrom);
+  const toSym   = getCurrencySymbol(currTo);
 
   const timeSince = useCallback((dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -970,9 +970,9 @@ export default function ExpensesPage() {
           {rateInfo && (
             <div className="vintage-card p-4 text-center">
               <div className="font-display text-lg">
-                1 {CURRENCY_SYMBOLS[homeCurrency] ?? homeCurrency} ={' '}
+                1 {getCurrencySymbol(homeCurrency)} ={' '}
                 <span className="font-bold text-navy">{rateInfo.rate.toFixed(4)}</span>{' '}
-                {CURRENCY_SYMBOLS[destCurrency] ?? destCurrency}
+                {getCurrencySymbol(destCurrency)}
               </div>
               <div className="text-xs text-ink-faint mt-1">Updated {timeSince(rateInfo.fetched_at)}</div>
             </div>
@@ -1021,8 +1021,8 @@ export default function ExpensesPage() {
                 const rate = rateInfo?.rate || 0;
                 return (
                   <div key={amt} className="flex justify-between text-sm py-1 border-b border-parchment-dark last:border-0">
-                    <span>{CURRENCY_SYMBOLS[homeCurrency] ?? homeCurrency}{amt}</span>
-                    <span className="font-mono text-ink-faint">{CURRENCY_SYMBOLS[destCurrency] ?? destCurrency}{(amt * rate).toFixed(2)}</span>
+                    <span>{getCurrencySymbol(homeCurrency)}{amt}</span>
+                    <span className="font-mono text-ink-faint">{getCurrencySymbol(destCurrency)}{(amt * rate).toFixed(2)}</span>
                   </div>
                 );
               })}

@@ -1,15 +1,4 @@
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  GBP: '£', EUR: '€', USD: '$', AUD: 'A$', CAD: 'C$', CHF: '₣', JPY: '¥',
-};
-
-const CURRENCIES = [
-  { code: 'GBP', label: 'GBP' },
-  { code: 'EUR', label: 'EUR' },
-  { code: 'USD', label: 'USD' },
-  { code: 'AUD', label: 'AUD' },
-  { code: 'CAD', label: 'CAD' },
-  { code: 'CHF', label: 'CHF' },
-];
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 
 interface Props {
   price: string;
@@ -20,7 +9,7 @@ interface Props {
 }
 
 export default function PriceField({ price, currency, placeholder = '0.00', onPriceChange, onCurrencyChange }: Props) {
-  const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
+  const symbol = getCurrencySymbol(currency);
 
   return (
     <div className="flex rounded-xl border border-parchment-dark overflow-hidden focus-within:ring-2 focus-within:ring-navy/20 focus-within:border-navy transition-shadow">
@@ -46,8 +35,8 @@ export default function PriceField({ price, currency, placeholder = '0.00', onPr
         value={currency}
         onChange={(e) => onCurrencyChange(e.target.value)}
       >
-        {CURRENCIES.map((c) => (
-          <option key={c.code} value={c.code}>{c.code}</option>
+        {ALL_CURRENCIES.map((c) => (
+          <option key={c} value={c}>{c}</option>
         ))}
       </select>
     </div>
