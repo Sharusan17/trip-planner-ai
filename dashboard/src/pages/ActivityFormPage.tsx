@@ -5,6 +5,7 @@ import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
 import { ArrowLeft, MapPin, Search, X } from 'lucide-react';
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 
 const ACTIVITY_TYPES: ActivityType[] = [
   'flight', 'transport', 'hotel', 'food', 'sightseeing', 'beach', 'shopping', 'entertainment', 'custom',
@@ -37,6 +38,8 @@ export default function ActivityFormPage() {
   const [actLocation, setActLocation] = useState('');
   const [actLat, setActLat] = useState('');
   const [actLng, setActLng] = useState('');
+  const [actCost, setActCost] = useState('');
+  const [actCostCurrency, setActCostCurrency] = useState(currentTrip?.dest_currency ?? 'EUR');
 
   // Location search
   const [locationSearch, setLocationSearch] = useState('');
@@ -64,6 +67,8 @@ export default function ActivityFormPage() {
         setLocationSearch(activity.location_tag || '');
         setActLat(activity.latitude?.toString() || '');
         setActLng(activity.longitude?.toString() || '');
+        setActCost(activity.cost ? String(activity.cost) : '');
+        setActCostCurrency(activity.cost_currency ?? currentTrip?.dest_currency ?? 'EUR');
         break;
       }
     }
@@ -115,8 +120,11 @@ export default function ActivityFormPage() {
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
+      cost: actCost ? parseFloat(actCost) : undefined,
+      cost_currency: actCost ? actCostCurrency : undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days'] }); navigate('/itinerary'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days', 'expenses'] }); navigate('/itinerary'); },
+    onError: (err) => alert(`Failed to save activity: ${err.message}`),
   });
 
   const updateMutation = useMutation({
@@ -128,8 +136,11 @@ export default function ActivityFormPage() {
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
+      cost: actCost ? parseFloat(actCost) : undefined,
+      cost_currency: actCost ? actCostCurrency : undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days'] }); navigate('/itinerary'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['days', 'expenses'] }); navigate('/itinerary'); },
+    onError: (err) => alert(`Failed to update activity: ${err.message}`),
   });
 
   function handleSubmit(e: React.FormEvent) {
@@ -249,6 +260,36 @@ export default function ActivityFormPage() {
             value={actNotes}
             onChange={(e) => setActNotes(e.target.value)}
           />
+        </div>
+
+        {/* Cost — optional, auto-creates linked expense */}
+        <div>
+          <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
+            Cost <span className="normal-case font-normal">(optional — auto-adds to expenses)</span>
+          </label>
+          <div className="flex gap-2 items-stretch">
+            <div className="flex flex-1 min-w-0 items-stretch border border-parchment-dark rounded-[10px] overflow-hidden bg-white focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/20">
+              <span className="px-3 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark flex items-center select-none flex-shrink-0">
+                {getCurrencySymbol(actCostCurrency)}
+              </span>
+              <input type="number" step="0.01" min="0"
+                className="flex-1 px-3 py-[0.4375rem] text-sm outline-none bg-white min-w-0"
+                value={actCost} placeholder="0.00"
+                onChange={(e) => setActCost(e.target.value)} />
+            </div>
+            <div className="flex-shrink-0 w-20">
+              <select
+                className="w-full h-[40px] border border-parchment-dark rounded-[10px] bg-white px-2 text-sm text-ink focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/20"
+                value={actCostCurrency}
+                onChange={(e) => setActCostCurrency(e.target.value)}>
+                {['EUR', 'GBP', 'USD'].map((c) => <option key={c} value={c}>{c}</option>)}
+                <option disabled>──────</option>
+                {ALL_CURRENCIES.filter((c) => !['EUR','GBP','USD'].includes(c)).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3 pt-2">

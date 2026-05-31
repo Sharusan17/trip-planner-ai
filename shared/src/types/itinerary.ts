@@ -43,6 +43,8 @@ export interface Activity {
   longitude: number | null;
   kid_friendly: boolean;
   sort_order: number;
+  cost: number | null;
+  cost_currency: string | null;
   created_at: string;
 }
 
@@ -62,6 +64,8 @@ export interface CreateActivityInput {
   latitude?: number;
   longitude?: number;
   kid_friendly?: boolean;
+  cost?: number;
+  cost_currency?: string;
 }
 
 export interface UpdateDayInput extends Partial<CreateDayInput> {}

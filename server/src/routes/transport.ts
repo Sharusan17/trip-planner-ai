@@ -57,6 +57,80 @@ async function tryAutoLink(client: PoolClient,
   return null;
 }
 
+async function syncExpenseForBooking(
+  bookingId: string, tripId: string, transportType: string,
+  fromLocation: string, toLocation: string, departureTime: string,
+  price: number | null, currency: string | null, priceHome: number | null,
+  travellerIds: string[]
+): Promise<void> {
+  if (!price || price <= 0 || !currency) return;
+  const description = `${transportType.charAt(0).toUpperCase() + transportType.slice(1)} · ${fromLocation} → ${toLocation}`;
+  const expenseDate = departureTime.slice(0, 10);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query(
+      `SELECT id FROM expenses WHERE transport_booking_id = $1`, [bookingId]
+    );
+    if (existing.rows.length > 0) {
+      const expId = existing.rows[0].id as string;
+      await client.query(
+        `UPDATE expenses SET amount=$1, currency=$2, amount_home=$3, description=$4, expense_date=$5, updated_at=NOW() WHERE id=$6`,
+        [price, currency, priceHome, description, expenseDate, expId]
+      );
+      const splitsRes = await client.query(`SELECT traveller_id FROM expense_splits WHERE expense_id=$1`, [expId]);
+      if (splitsRes.rows.length > 0) {
+        const tIds: string[] = splitsRes.rows.map((r: { traveller_id: string }) => r.traveller_id);
+        await client.query(`DELETE FROM expense_splits WHERE expense_id=$1`, [expId]);
+        for (let i = 0; i < tIds.length; i++) {
+          const base = Math.floor(price * 100 / tIds.length) / 100;
+          const rem  = i === 0 ? Math.round((price - base * tIds.length) * 100) / 100 : 0;
+          const splitAmt  = base + rem;
+          const splitHome = priceHome ? Math.round(splitAmt * priceHome / price * 100) / 100 : null;
+          await client.query(
+            `INSERT INTO expense_splits (expense_id, traveller_id, amount, amount_home) VALUES ($1,$2,$3,$4)`,
+            [expId, tIds[i], splitAmt, splitHome]
+          );
+        }
+      }
+    } else {
+      const paidByRes = await client.query(
+        `SELECT id FROM travellers WHERE trip_id=$1 ORDER BY CASE WHEN role='organiser' THEN 0 ELSE 1 END, created_at LIMIT 1`,
+        [tripId]
+      );
+      if (paidByRes.rows.length === 0) { await client.query('ROLLBACK'); return; }
+      const paidBy = paidByRes.rows[0].id as string;
+      let tIds = travellerIds;
+      if (tIds.length === 0) {
+        const tRes = await client.query(`SELECT id FROM travellers WHERE trip_id=$1 ORDER BY created_at`, [tripId]);
+        tIds = tRes.rows.map((r: { id: string }) => r.id);
+      }
+      const expRes = await client.query(
+        `INSERT INTO expenses (trip_id, paid_by, amount, currency, amount_home, description, category, split_mode, expense_date, transport_booking_id)
+         VALUES ($1,$2,$3,$4,$5,$6,'transport','equal',$7,$8) RETURNING id`,
+        [tripId, paidBy, price, currency, priceHome, description, expenseDate, bookingId]
+      );
+      const expId = expRes.rows[0].id as string;
+      for (let i = 0; i < tIds.length; i++) {
+        const base = Math.floor(price * 100 / tIds.length) / 100;
+        const rem  = i === 0 ? Math.round((price - base * tIds.length) * 100) / 100 : 0;
+        const splitAmt  = base + rem;
+        const splitHome = priceHome ? Math.round(splitAmt * priceHome / price * 100) / 100 : null;
+        await client.query(
+          `INSERT INTO expense_splits (expense_id, traveller_id, amount, amount_home) VALUES ($1,$2,$3,$4)`,
+          [expId, tIds[i], splitAmt, splitHome]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    log.warn('expense sync failed for booking', { bookingId, err: (err as Error).message });
+  } finally {
+    client.release();
+  }
+}
+
 async function attachTravellers(bookings: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
   if (bookings.length === 0) return bookings;
   const ids = bookings.map((b) => b.id);
@@ -183,6 +257,15 @@ router.post('/trips/:tripId/transport', async (req: Request, res: Response) => {
     const finalRes = await pool.query(`SELECT * FROM transport_bookings WHERE id = $1`, [booking.id]);
     const final = finalRes.rows[0];
 
+    // Sync linked expense (best-effort, non-blocking)
+    syncExpenseForBooking(
+      booking.id as string, String(tripId), String(transport_type),
+      String(from_location), String(to_location), String(departure_time),
+      final.price ? parseFloat(final.price) : null,
+      final.currency, final.price_home ? parseFloat(final.price_home) : null,
+      traveller_ids || []
+    ).catch(() => {});
+
     res.status(201).json({
       ...final,
       price: final.price ? parseFloat(final.price) : null,
@@ -289,11 +372,24 @@ router.put('/transport/:id', async (req: Request, res: Response) => {
       `SELECT traveller_id FROM transport_travellers WHERE transport_id = $1`,
       [req.params.id]
     );
+    const updatedTravellerIds = tResult.rows.map((r: { traveller_id: string }) => r.traveller_id);
+
+    // Sync linked expense (best-effort)
+    syncExpenseForBooking(
+      String(req.params.id), booking.trip_id as string,
+      booking.transport_type as string, booking.from_location as string,
+      booking.to_location as string, booking.departure_time as string,
+      booking.price ? parseFloat(booking.price) : null,
+      booking.currency as string | null,
+      booking.price_home ? parseFloat(booking.price_home) : null,
+      updatedTravellerIds
+    ).catch(() => {});
+
     res.json({
       ...booking,
       price: booking.price ? parseFloat(booking.price) : null,
       price_home: booking.price_home ? parseFloat(booking.price_home) : null,
-      traveller_ids: tResult.rows.map((r) => r.traveller_id),
+      traveller_ids: updatedTravellerIds,
     });
   } catch (err) {
     await client.query('ROLLBACK');

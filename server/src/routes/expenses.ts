@@ -6,6 +6,26 @@ import type { SplitMode, ExpenseCategory } from '@trip-planner-ai/shared';
 
 const router = Router();
 
+function syncLinkedSource(
+  expense: Record<string, unknown>,
+  newAmount: number,
+  newCurrency: string,
+  amountHome: number | null
+): void {
+  if (expense.transport_booking_id) {
+    pool.query(
+      `UPDATE transport_bookings SET price=$1, currency=$2, price_home=$3, updated_at=NOW() WHERE id=$4`,
+      [newAmount, newCurrency, amountHome, expense.transport_booking_id]
+    ).catch(() => {});
+  }
+  if (expense.activity_id) {
+    pool.query(
+      `UPDATE activities SET cost=$1, cost_currency=$2 WHERE id=$3`,
+      [newAmount, newCurrency, expense.activity_id]
+    ).catch(() => {});
+  }
+}
+
 interface SplitRow {
   traveller_id: string;
   amount: number;
@@ -328,6 +348,8 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
 
       await client.query('COMMIT');
 
+      syncLinkedSource(expense, newAmount, newCurrency, amountHome);
+
       return res.json({
         ...expense,
         amount: parseFloat(expense.amount),
@@ -341,6 +363,8 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
+
+    syncLinkedSource(expense, newAmount, newCurrency, amountHome);
 
     const splitsResult = await client.query(
       `SELECT * FROM expense_splits WHERE expense_id = $1`,

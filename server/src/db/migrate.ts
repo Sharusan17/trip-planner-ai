@@ -504,6 +504,14 @@ const migrations = [
   // link a forfeited deposit back to the expense it spawned
   `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS forfeited_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
 
+  // transport + activity → expense linking
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS transport_booking_id UUID REFERENCES transport_bookings(id) ON DELETE SET NULL;`,
+  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS activity_id UUID REFERENCES activities(id) ON DELETE SET NULL;`,
+  `CREATE INDEX IF NOT EXISTS idx_expenses_transport_booking ON expenses(transport_booking_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_expenses_activity ON expenses(activity_id);`,
+  `ALTER TABLE activities ADD COLUMN IF NOT EXISTS cost NUMERIC(10,2);`,
+  `ALTER TABLE activities ADD COLUMN IF NOT EXISTS cost_currency TEXT;`,
+
   // travel checklist — shared items + per-traveller checked state
   `CREATE TABLE IF NOT EXISTS trip_checklist_items (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
