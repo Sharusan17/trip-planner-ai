@@ -6,8 +6,10 @@ import { tripsApi } from '@/api/trips';
 import { travellersApi } from '@/api/travellers';
 import { ArrowLeft, Copy, Check, MapPin, Search, X, Camera, Trash2 } from 'lucide-react';
 import { toDateInput } from '@/utils/date';
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 
-const COMMON_CURRENCIES = ['GBP', 'EUR', 'USD', 'AED', 'AUD', 'CAD', 'CHF', 'DKK', 'JPY', 'MXN', 'NOK', 'NZD', 'PLN', 'SEK', 'SGD', 'THB', 'TRY', 'ZAR'];
+const TOP_CURRENCIES = ['GBP', 'EUR', 'USD'];
+const OTHER_CURRENCIES = ALL_CURRENCIES.filter((c) => !TOP_CURRENCIES.includes(c));
 const AVATAR_COLOURS = ['#1B3A5C', '#C65D3E', '#B8963E', '#2A5580', '#D4806A', '#9A7B2F', '#5C4D3C', '#6B8E7B', '#8B6FAE', '#D4A574'];
 
 export default function TripSettingsPage() {
@@ -365,13 +367,25 @@ export default function TripSettingsPage() {
               <div>
                 <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Home Currency</label>
                 <select className="vintage-input" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value)}>
-                  {COMMON_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {TOP_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
+                  <option disabled>──────────</option>
+                  {OTHER_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">Destination Currency</label>
                 <select className="vintage-input" value={destCurrency} onChange={(e) => setDestCurrency(e.target.value)}>
-                  {COMMON_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {TOP_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
+                  <option disabled>──────────</option>
+                  {OTHER_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
                 </select>
               </div>
             </div>

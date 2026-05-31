@@ -5,6 +5,10 @@ import { tripsApi } from '@/api/trips';
 import { travellersApi } from '@/api/travellers';
 import type { Trip, Traveller } from '@trip-planner-ai/shared';
 import { Plane, ArrowLeft, AlertCircle, MapPin, Users, Search, Check, Loader2, X } from 'lucide-react';
+import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
+
+const TOP_CURRENCIES = ['GBP', 'EUR', 'USD'];
+const OTHER_CURRENCIES = ALL_CURRENCIES.filter((c) => !TOP_CURRENCIES.includes(c));
 
 type View = 'forms' | 'select-traveller';
 
@@ -336,17 +340,25 @@ export default function LandingPage() {
               <div>
                 <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">Home Currency</label>
                 <select className="vintage-input" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value)}>
-                  <option value="GBP">GBP (£)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
+                  {TOP_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
+                  <option disabled>──────────</option>
+                  {OTHER_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider font-body">Dest. Currency</label>
                 <select className="vintage-input" value={destCurrency} onChange={(e) => setDestCurrency(e.target.value)}>
-                  <option value="EUR">EUR (€)</option>
-                  <option value="GBP">GBP (£)</option>
-                  <option value="USD">USD ($)</option>
+                  {TOP_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
+                  <option disabled>──────────</option>
+                  {OTHER_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c} ({getCurrencySymbol(c)})</option>
+                  ))}
                 </select>
               </div>
             </div>
