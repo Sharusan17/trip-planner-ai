@@ -183,11 +183,11 @@ function formatResult(raw: TabscannerResult) {
       li.desc ?? li.lineText ?? li.descr ?? li.text ?? li.name ?? ''
     ).trim();
 
-    // Extract qty: prefer explicit qty field; if missing/zero, parse "2x " prefix from description
-    // (Tabscanner often encodes quantity only as a prefix like "2x Pizza" with qty=0 or absent)
+    // Extract qty: prefer explicit qty field; if missing/zero, parse leading digit prefix from description.
+    // Tabscanner often encodes qty as "2x Pizza" or "2 Pizza" (plain space, no x) with qty=0 or absent.
     let qty = Math.round(toNum(li.qty));
     if (qty <= 0) {
-      const prefixMatch = rawDesc.match(/^(\d+)[xX]\s+/);
+      const prefixMatch = rawDesc.match(/^(\d+)[xX]?\s+/);
       qty = prefixMatch ? parseInt(prefixMatch[1], 10) : 1;
     }
     qty = Math.max(1, qty);
@@ -196,15 +196,17 @@ function formatResult(raw: TabscannerResult) {
     const unitPrice = toNum(li.price ?? li.unitPrice);
     const amount    = lineTotal > 0 ? lineTotal : round2(unitPrice * qty);
 
-    // Strip trailing price/$ symbols (e.g. "Item $ 3.50" or "Item $")
-    // and leading qty prefix (e.g. "2x " or "1X ")
+    // Strip embedded qty and price from description.
+    // Some receipt formats (e.g. French/European) encode the full line as:
+    //   "{qty} {item name} {unit_price}"  e.g. "2 PENNE A LA CREME 14,00"
     const cleaned = rawDesc
       .replace(/\s*\$\s*[\d.,]*\s*$/, '')   // trailing "$ 3.50" or lone "$"
-      .replace(/^\d+[xX]\s+/, '')             // leading "2x " or "1X " prefix
+      .replace(/\s+\d+([.,]\d+)?\s*$/, '')   // trailing price like "6,00", "35", "14.50"
+      .replace(/^\d+[xX]?\s+/, '')            // leading qty like "2x ", "2X ", or "1 "
       .trim();
 
-    // If cleaning wiped the name (e.g. the whole string was "$3.50"), fall back to rawDesc minus qty prefix
-    const desc = cleaned || rawDesc.replace(/^\d+[xX]\s+/, '').trim();
+    // If cleaning wiped the name fall back to rawDesc minus the leading qty prefix only
+    const desc = cleaned || rawDesc.replace(/^\d+[xX]?\s+/, '').trim();
 
     log.debug(`line item parsed`, { rawDesc, qty, amount, desc });
 
