@@ -7,6 +7,7 @@ const router = Router();
 
 const TABSCANNER_PROCESS = 'https://api.tabscanner.com/api/2/process';
 const TABSCANNER_RESULT  = 'https://api.tabscanner.com/api/result';
+const DEEPL_URL          = 'https://api-free.deepl.com/v2/translate';
 const POLL_INTERVAL_MS   = 2500;
 const POLL_MAX_ATTEMPTS  = 12; // 30 seconds max
 
@@ -57,7 +58,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
     // If the result is already included in the upload response
     if (uploadData?.result && isSuccess(uploadData?.status)) {
       log.info('result in upload response (no polling needed)');
-      return res.json(formatResult(uploadData.result));
+      return res.json(await withTranslations(formatResult(uploadData.result)));
     }
 
     // ── Step 2: Poll for results ──────────────────────────────────────────────
@@ -80,7 +81,7 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
       // Return as soon as a result object is present — don't rely solely on status string
       if (pollData?.result) {
         log.info(`got result after ${attempt + 1} poll(s)`, { status: pollData?.status });
-        return res.json(formatResult(pollData.result));
+        return res.json(await withTranslations(formatResult(pollData.result)));
       }
 
       // Explicit failure
@@ -103,6 +104,37 @@ router.post('/receipts/scan', uploadReceipt.single('receipt'), async (req: Reque
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTranslations(result: ReturnType<typeof formatResult>) {
+  const apiKey = process.env.DEEPL_API_KEY;
+  if (!apiKey || result.lineItems.length === 0) return result;
+
+  const descriptions = result.lineItems.map((li) => li.description);
+  try {
+    const deeplRes = await fetch(DEEPL_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `DeepL-Auth-Key ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: descriptions, target_lang: 'EN-GB' }),
+    });
+    if (!deeplRes.ok) {
+      log.warn('DeepL translation failed', { status: deeplRes.status });
+      return result;
+    }
+    const data: { translations: Array<{ detected_source_language: string; text: string }> } = await deeplRes.json();
+    const lineItems = result.lineItems.map((li, i) => {
+      const t = data.translations[i];
+      if (!t) return li;
+      const isEnglish = t.detected_source_language.startsWith('EN');
+      const translationDiffers = t.text.toLowerCase().trim() !== li.description.toLowerCase().trim();
+      return isEnglish || !translationDiffers ? li : { ...li, description_en: t.text };
+    });
+    log.info('DeepL translations applied', { count: lineItems.filter((li) => 'description_en' in li).length });
+    return { ...result, lineItems };
+  } catch (err) {
+    log.warn('DeepL translation error', { message: (err as Error).message });
+    return result;
+  }
 }
 
 function isSuccess(status?: string) {

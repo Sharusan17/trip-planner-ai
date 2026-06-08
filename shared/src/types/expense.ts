@@ -47,6 +47,8 @@ export interface Expense {
   receipt_filename: string | null;
   flagged: boolean;
   flagged_reason: string | null;
+  transport_booking_id: string | null;
+  activity_id: string | null;
   splits: ExpenseSplit[];
   created_at: string;
   updated_at: string;
