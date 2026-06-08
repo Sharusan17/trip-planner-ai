@@ -52,7 +52,7 @@ export default function ExpenseFormPage() {
     paid_by: activeTraveller?.id ?? '', split_mode: 'equal',
     traveller_ids: [], custom_splits: {}, notes: '',
   });
-  const [lineItems, setLineItems] = useState<Array<{ description: string; qty: number; amount: string; traveller_ids: string[] }>>([
+  const [lineItems, setLineItems] = useState<Array<{ description: string; description_en?: string; qty: number; amount: string; traveller_ids: string[] }>>([
     { description: '', qty: 1, amount: '', traveller_ids: [] },
   ]);
   const receiptInputRef = useRef<HTMLInputElement>(null);
@@ -199,10 +199,11 @@ export default function ExpenseFormPage() {
 
       if (result.lineItems.length > 0) {
         setLineItems(result.lineItems.map((li) => ({
-          description:   li.description,
-          qty:           li.qty ?? 1,
-          amount:        String(li.amount),
-          traveller_ids: [],
+          description:    li.description,
+          description_en: li.description_en,
+          qty:            li.qty ?? 1,
+          amount:         String(li.amount),
+          traveller_ids:  [],
         })));
       }
 
@@ -587,14 +588,21 @@ export default function ExpenseFormPage() {
                       }}
                     />
                     {/* Description */}
-                    <input
-                      ref={(el) => { descRefs.current[i] = el; }}
-                      className="vintage-input flex-1 text-sm min-w-0"
-                      style={{ height: '2rem', padding: '0 0.5rem' }}
-                      placeholder="e.g. Pizza, Hotel room"
-                      value={item.description}
-                      onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })}
-                    />
+                    <div className="flex-1 min-w-0">
+                      <input
+                        ref={(el) => { descRefs.current[i] = el; }}
+                        className="vintage-input w-full text-sm"
+                        style={{ height: '2rem', padding: '0 0.5rem' }}
+                        placeholder="e.g. Pizza, Hotel room"
+                        value={item.description}
+                        onChange={(e) => setLineItems((p) => { const n = [...p]; n[i] = { ...n[i], description: e.target.value }; return n; })}
+                      />
+                      {item.description_en && (
+                        <p className="text-[11px] text-ink-faint mt-0.5 px-1 truncate" title={item.description_en}>
+                          {item.description_en}
+                        </p>
+                      )}
+                    </div>
                     {/* Currency symbol + amount */}
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <span className="text-xs text-ink-faint select-none">{getCurrencySymbol(form.currency)}</span>
