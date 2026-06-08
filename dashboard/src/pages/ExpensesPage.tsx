@@ -88,7 +88,7 @@ const DEPOSIT_STATUS_LABELS: Record<DepositStatus, string> = {
 
 function SettlementRow({
   settlement, getName, getColour, homeCurrency, onMarkPaid, onUnpay,
-  activeTravellerId, isOrganiser,
+  activeTravellerId, isOrganiser, onViewBreakdown,
 }: {
   settlement: Settlement;
   getName: (id: string) => string;
@@ -98,6 +98,7 @@ function SettlementRow({
   onUnpay?: () => void;
   activeTravellerId?: string;
   isOrganiser?: boolean;
+  onViewBreakdown?: () => void;
 }) {
   const fromName = getName(settlement.from_traveller);
   const toName   = getName(settlement.to_traveller);
@@ -124,6 +125,11 @@ function SettlementRow({
           </p>
         )}
       </div>
+      {!isPaid && (activeTravellerId === settlement.from_traveller || isOrganiser) && onViewBreakdown && (
+        <button onClick={onViewBreakdown} className="btn-secondary text-xs py-1 px-3 shrink-0">
+          View
+        </button>
+      )}
       {!isPaid && canAct && (
         <button onClick={onMarkPaid} className="btn-secondary text-xs py-1 px-3 shrink-0">✓ Paid</button>
       )}
@@ -154,6 +160,7 @@ export default function ExpensesPage() {
 
   // ── expenses state
   const [expenseCat, setExpenseCat] = useState<ExpenseCategory | 'all'>('all');
+  const [viewMode, setViewMode] = useState<'total' | 'me'>('total');
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
   const [budgetInputs, setBudgetInputs] = useState<Record<ExpenseCategory, string>>({
     accommodation: '', food: '', transport: '', activities: '', shopping: '', other: '',
@@ -194,14 +201,22 @@ export default function ExpensesPage() {
   });
   const { data: settlements = [], isLoading: settLoading } = useQuery({
     queryKey: ['settlements', currentTrip?.id],
-    // Auto-calculate then fetch so settlements are always current
-    queryFn: async () => {
-      await settlementsApi.calculate(currentTrip!.id);
-      return settlementsApi.list(currentTrip!.id);
-    },
+    // Just list — recalculation is triggered separately so marking paid never causes a re-run
+    queryFn: () => settlementsApi.list(currentTrip!.id),
     enabled: !!currentTrip && tab === 'settlements',
-    staleTime: 0,
+    staleTime: 60_000,
   });
+
+  // Recalculate once whenever the user opens the settlements tab.
+  // We intentionally do NOT recalculate on markPaid / markUnpaid — those only
+  // change a settlement's status, not the underlying expense data.
+  useEffect(() => {
+    if (tab !== 'settlements' || !currentTrip) return;
+    settlementsApi.calculate(currentTrip.id).then(() => {
+      qc.invalidateQueries({ queryKey: ['settlements', currentTrip.id] });
+    }).catch(() => {}); // best-effort
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, currentTrip?.id]);
   const { data: transfers = [], isLoading: transfersLoading } = useQuery({
     queryKey: ['transfers', currentTrip?.id],
     queryFn: () => settlementsApi.listTransfers(currentTrip!.id),
@@ -267,24 +282,48 @@ export default function ExpensesPage() {
   // ── expense mutations
   const deleteExpenseMutation = useMutation({
     mutationFn: (id: string) => expensesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      // Expense deleted → debts changed → recalculate settlements
+      if (currentTrip) {
+        settlementsApi.calculate(currentTrip.id).then(() => {
+          qc.invalidateQueries({ queryKey: ['settlements', currentTrip.id] });
+        }).catch(() => {});
+      }
+    },
   });
 
   // ── settlement mutations
+  // markPaid / markUnpaid only flip the status — they do NOT recalculate.
+  // Updating the cache directly prevents a spurious recalculate that could
+  // regenerate the same settlement at a slightly different exchange rate.
   const markPaidMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.markPaid(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+    onSuccess: (updated) => {
+      qc.setQueryData(
+        ['settlements', currentTrip?.id],
+        (old: any[]) => old?.map((s) => (s.id === updated.id ? updated : s)) ?? [],
+      );
+    },
   });
   const markUnpaidMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.markUnpaid(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settlements'] }),
+    onSuccess: (updated) => {
+      qc.setQueryData(
+        ['settlements', currentTrip?.id],
+        (old: any[]) => old?.map((s) => (s.id === updated.id ? updated : s)) ?? [],
+      );
+    },
   });
 
   const deleteTransferMutation = useMutation({
     mutationFn: (id: string) => settlementsApi.deleteTransfer(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transfers'] });
-      qc.invalidateQueries({ queryKey: ['settlements'] });
+      // Transfer deleted → underlying debts changed → recalculate
+      settlementsApi.calculate(currentTrip!.id).then(() => {
+        qc.invalidateQueries({ queryKey: ['settlements', currentTrip?.id] });
+      }).catch(() => {});
     },
   });
 
@@ -352,12 +391,28 @@ export default function ExpensesPage() {
   }
 
   // ── derived data
-  const filteredExpenses = expenseCat === 'all' ? expenses : expenses.filter((e) => e.category === expenseCat);
+  const baseExpenses = viewMode === 'me'
+    ? expenses.filter((e) => (e.splits.find((s) => s.traveller_id === activeTraveller?.id)?.amount ?? 0) > 0)
+    : expenses;
+  const filteredExpenses = expenseCat === 'all' ? baseExpenses : baseExpenses.filter((e) => e.category === expenseCat);
   const groupedExpenses  = groupByDate(filteredExpenses);
   const summaryMap: Record<string, { total_home: number; budget_amount: number | null; count: number }> = {};
   for (const s of expSummary) summaryMap[s.category] = { total_home: s.total_home, budget_amount: s.budget_amount, count: s.count };
   const totalSpent  = expSummary.reduce((s, r) => s + r.total_home, 0);
   const totalBudget = budgets.reduce((s, b) => s + b.amount, 0);
+
+  // My personal spend per expense (for "Just Me" mode)
+  const mySpendTotal = expenses.reduce((sum, exp) => {
+    const s = exp.splits.find((sp) => sp.traveller_id === activeTraveller?.id);
+    return sum + (s?.amount_home ?? 0);
+  }, 0);
+
+  // My per-category spend (for "Just Me" category chips)
+  const myCategorySpend: Record<string, number> = {};
+  for (const exp of expenses) {
+    const s = exp.splits.find((sp) => sp.traveller_id === activeTraveller?.id);
+    if (s) myCategorySpend[exp.category] = (myCategorySpend[exp.category] ?? 0) + (s.amount_home ?? 0);
+  }
   const pendingSettlements = settlements.filter((s) => s.status === 'pending');
   const paidSettlements    = settlements.filter((s) => s.status === 'paid');
   const filteredDeposits   = depositStatusTab === 'all' ? deposits : deposits.filter((d) => d.status === depositStatusTab);
@@ -417,29 +472,47 @@ export default function ExpensesPage() {
           <h1 className="font-display text-2xl font-bold text-navy">Finance</h1>
           {totalSpent > 0 && (
             <p className="text-sm text-ink-faint">
-              {fmt(totalSpent, homeCurrency)} spent
-              {totalBudget > 0 && ` · ${fmt(totalBudget, homeCurrency)} budget`}
+              {fmt(viewMode === 'me' ? mySpendTotal : totalSpent, homeCurrency)} spent
+              {viewMode === 'total' && totalBudget > 0 && ` · ${fmt(totalBudget, homeCurrency)} budget`}
             </p>
           )}
         </div>
-        {tab === 'expenses' && (
-          <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
-        )}
-        {tab === 'deposits' && (
-          <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
-            + Add Deposit
-          </button>
-        )}
-        {tab === 'settlements' && (
-          <button className="btn-secondary text-sm" onClick={() => navigate('/expenses/transfers/add')}>
-            + Record Transfer
-          </button>
-        )}
-        {tab === 'claims' && isOrganiser && (
-          <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
-            + Send for Group Review
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {tab === 'expenses' && (
+            <div className="flex items-center bg-parchment-dark/30 rounded-full p-0.5 text-xs font-medium">
+              <button
+                onClick={() => setViewMode('total')}
+                className={`px-3 py-1 rounded-full transition-colors ${viewMode === 'total' ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
+              >
+                Total
+              </button>
+              <button
+                onClick={() => setViewMode('me')}
+                className={`px-3 py-1 rounded-full transition-colors ${viewMode === 'me' ? 'bg-white text-ink shadow-sm' : 'text-ink-faint hover:text-ink'}`}
+              >
+                Just Me
+              </button>
+            </div>
+          )}
+          {tab === 'expenses' && (
+            <button className="btn-primary" onClick={() => navigate('/expenses/add')}>+ Add Expense</button>
+          )}
+          {tab === 'deposits' && (
+            <button className="btn-primary" onClick={() => navigate('/expenses/deposits/add')}>
+              + Add Deposit
+            </button>
+          )}
+          {tab === 'settlements' && (
+            <button className="btn-secondary text-sm" onClick={() => navigate('/expenses/transfers/add')}>
+              + Record Transfer
+            </button>
+          )}
+          {tab === 'claims' && isOrganiser && (
+            <button className="btn-primary" onClick={() => navigate('/expenses/claims/new')}>
+              + Send for Group Review
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -479,7 +552,7 @@ export default function ExpensesPage() {
                 >
                   <span className="text-xl">📋</span>
                   <span className="text-xs mt-1 font-medium">All</span>
-                  <span className="text-xs opacity-70">{fmt(totalSpent, homeCurrency)}</span>
+                  <span className="text-xs opacity-70">{fmt(viewMode === 'me' ? mySpendTotal : totalSpent, homeCurrency)}</span>
                 </button>
                 {CATEGORIES.filter((c) => summaryMap[c]).map((cat) => {
                   const s = summaryMap[cat];
@@ -495,7 +568,7 @@ export default function ExpensesPage() {
                     >
                       <span className="text-xl">{EXPENSE_CATEGORY_ICONS[cat]}</span>
                       <span className="text-xs mt-1 font-medium capitalize">{cat}</span>
-                      <span className="text-xs opacity-70">{fmt(s.total_home, homeCurrency)}</span>
+                      <span className="text-xs opacity-70">{fmt(viewMode === 'me' ? (myCategorySpend[cat] ?? 0) : s.total_home, homeCurrency)}</span>
                       {pct !== null && (
                         <div className="progress-bar-track w-16 mt-1">
                           <div className="progress-bar-fill" style={{ width: `${pct}%`, backgroundColor: over ? '#EF4444' : undefined }} />
@@ -556,7 +629,13 @@ export default function ExpensesPage() {
                                   )}
                                 </div>
                                 <div className="text-right shrink-0">
-                                  {exp.amount_home !== null ? (
+                                  {viewMode === 'me' ? (
+                                    <p className="font-bold text-ink text-lg">
+                                      {mySplit?.amount_home != null
+                                        ? fmt(mySplit.amount_home, homeCurrency)
+                                        : fmt(mySplit?.amount ?? 0, exp.currency)}
+                                    </p>
+                                  ) : exp.amount_home !== null ? (
                                     <>
                                       <p className="font-bold text-ink text-lg">{fmt(exp.amount_home, homeCurrency)}</p>
                                       {exp.currency !== homeCurrency && (
@@ -570,8 +649,14 @@ export default function ExpensesPage() {
                               </div>
                               <div className="flex items-center gap-2 mt-2 flex-wrap">
                                 <span className="badge badge-gold text-xs capitalize">{exp.split_mode}</span>
-                                {mySplit && (
-                                  <span className="text-xs text-ink-faint">Your share: <strong>{fmt(mySplit.amount, exp.currency)}</strong></span>
+                                {mySplit && viewMode === 'total' && (
+                                  <span className="text-xs text-ink-faint">Your share: <strong>
+                                    {exp.split_mode === 'equal' && exp.splits.length > 0
+                                      ? (exp.amount_home != null
+                                          ? fmt(exp.amount_home / exp.splits.length, homeCurrency)
+                                          : fmt(exp.amount / exp.splits.length, exp.currency))
+                                      : fmt(mySplit.amount, exp.currency)}
+                                  </strong></span>
                                 )}
                                 <span className="text-xs text-ink-faint">{exp.splits.length} {exp.splits.length === 1 ? 'person' : 'people'}</span>
                                 {exp.receipt_filename && (
@@ -755,7 +840,8 @@ export default function ExpensesPage() {
                       {pendingSettlements.map((s) => (
                         <SettlementRow key={s.id} settlement={s} getName={getName} getColour={getColour}
                           homeCurrency={homeCurrency} onMarkPaid={() => markPaidMutation.mutate(s.id)}
-                          activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser} />
+                          activeTravellerId={activeTraveller?.id} isOrganiser={isOrganiser}
+                          onViewBreakdown={() => navigate(`/expenses/settlements/${s.id}`)} />
                       ))}
                     </div>
                   )}

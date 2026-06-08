@@ -57,7 +57,7 @@ export default function TransportBookingFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
   const qc = useQueryClient();
 
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -149,6 +149,7 @@ export default function TransportBookingFormPage() {
       arrival_terminal: form.arrival_terminal || undefined,
       aircraft_type: form.aircraft_type || undefined,
       traveller_ids: form.traveller_ids,
+      created_by: activeTraveller?.id || undefined,
     };
     // Attach return leg
     if (!isEdit && hasReturn && returnDraft.from_location && returnDraft.to_location && returnDraft.departure_time) {

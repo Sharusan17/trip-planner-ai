@@ -41,7 +41,7 @@ function Avatar({ name, colour, size = 8 }: { name: string; colour: string; size
   );
 }
 
-// ── Section header ─────────────────────────────────────────────────────────────
+// ── Section header ─────────────────────────────────────────────
 function SectionHeader({ emoji, title, count, total, currency }: {
   emoji: string; title: string; count: number; total: number; currency: string;
 }) {
@@ -57,9 +57,9 @@ function SectionHeader({ emoji, title, count, total, currency }: {
   );
 }
 
-// ── The report content (also used for printing) ────────────────────────────────
+// ── The report content (also used for printing) ──────────────────────────────────
 function ReportContent({
-  title, subtitle, expenses, deposits, transfers, travellers, homeCurrency, reportType, subjectId, families,
+  title, subtitle, expenses, deposits, transfers, travellers, homeCurrency, reportType, scopeIds, families,
 }: {
   title: string;
   subtitle: string;
@@ -69,7 +69,7 @@ function ReportContent({
   travellers: any[];
   homeCurrency: string;
   reportType: ReportType;
-  subjectId: string | null;
+  scopeIds: Set<string> | null;
   families: any[];
 }) {
   const getName = (id: string) => travellers.find((t: any) => t.id === id)?.name ?? 'Unknown';
@@ -85,17 +85,28 @@ function ReportContent({
     b.transfer_date.localeCompare(a.transfer_date)
   );
 
-  const totalExpenses = expenses.reduce((s, e) => s + (e.amount_home ?? e.amount), 0);
+  // For scoped reports, total = sum of relevant splits only
+  const scopedExpenseAmount = (e: Expense): number => {
+    if (!scopeIds) return e.amount_home ?? e.amount;
+    return e.splits
+      .filter((s) => scopeIds.has(s.traveller_id))
+      .reduce((sum, s) => sum + (s.amount_home ?? s.amount), 0);
+  };
+
+  const totalExpenses = expenses.reduce((s, e) => s + scopedExpenseAmount(e), 0);
   const totalDeposits = deposits.reduce((s: number, d: any) => s + (d.amount_home ?? d.amount), 0);
   const totalTransfers = transfers.reduce((s: number, t: any) => s + (t.amount_home ?? t.amount), 0);
 
-  // Per-traveller spend breakdown (for group report)
+  // Per-traveller spend breakdown
   const travellerSpend: Record<string, number> = {};
   for (const e of expenses) {
     for (const split of e.splits) {
       travellerSpend[split.traveller_id] = (travellerSpend[split.traveller_id] ?? 0) + (split.amount_home ?? split.amount);
     }
   }
+
+  // For individual report summary: single traveller ID from scopeIds
+  const subjectId = scopeIds && scopeIds.size === 1 ? [...scopeIds][0] : null;
 
   return (
     <div className="print-content space-y-0">
@@ -135,33 +146,81 @@ function ReportContent({
         </div>
       </div>
 
-      {/* Traveller breakdown — group report only */}
-      {reportType === 'group' && travellers.length > 1 && (
-        <div className="vintage-card p-5 mb-4">
-          <h2 className="font-display text-sm font-bold text-ink mb-3 flex items-center gap-2">
-            <Users size={14} className="text-ink-faint" /> Per-Person Breakdown
-          </h2>
-          <div className="space-y-2">
-            {travellers
-              .filter((t: any) => travellerSpend[t.id] > 0)
-              .sort((a: any, b: any) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0))
-              .map((t: any) => {
-                const spent = travellerSpend[t.id] ?? 0;
+      {/* Traveller breakdown — group report: all travellers; family report: members only */}
+      {(reportType === 'group' || reportType === 'family') && travellers.length > 1 && totalExpenses > 0 && (() => {
+        const rows: { id: string; name: string; colour: string }[] = reportType === 'family' && scopeIds
+          ? travellers.filter((t: any) => scopeIds.has(t.id)).map((t: any) => ({ id: t.id, name: t.name, colour: t.avatar_colour }))
+          : travellers.map((t: any) => ({ id: t.id, name: t.name, colour: t.avatar_colour }));
+        const shown = rows.filter((r) => (travellerSpend[r.id] ?? 0) > 0)
+          .sort((a, b) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0));
+        if (shown.length === 0) return null;
+        return (
+          <div className="vintage-card p-5 mb-4">
+            <h2 className="font-display text-sm font-bold text-ink mb-3 flex items-center gap-2">
+              <Users size={14} className="text-ink-faint" />
+              {reportType === 'family' ? 'Per-Member Breakdown' : 'Per-Person Breakdown'}
+            </h2>
+            <div className="space-y-2">
+              {shown.map((r) => {
+                const spent = travellerSpend[r.id] ?? 0;
                 const pct = totalExpenses > 0 ? (spent / totalExpenses) * 100 : 0;
                 return (
-                  <div key={t.id} className="flex items-center gap-3">
-                    <Avatar name={t.name} colour={t.avatar_colour} size={7} />
-                    <span className="text-sm text-ink w-28 truncate">{t.name}</span>
+                  <div key={r.id} className="flex items-center gap-3">
+                    <Avatar name={r.name} colour={r.colour} size={7} />
+                    <span className="text-sm text-ink w-28 truncate">{r.name}</span>
                     <div className="flex-1 h-1.5 bg-parchment-dark rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: t.avatar_colour }} />
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: r.colour }} />
                     </div>
                     <span className="text-sm font-semibold text-ink w-20 text-right">{fmt(spent, homeCurrency)}</span>
                   </div>
                 );
               })}
+              {reportType === 'family' && (
+                <div className="flex items-center gap-3 pt-1 border-t border-parchment-dark mt-1">
+                  <div className="w-7 h-7 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-ink w-28">Family total</span>
+                  <div className="flex-1" />
+                  <span className="text-sm font-bold text-ink w-20 text-right">
+                    {fmt(shown.reduce((s, r) => s + (travellerSpend[r.id] ?? 0), 0), homeCurrency)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Individual report summary */}
+      {reportType === 'individual' && subjectId && totalExpenses > 0 && (() => {
+        const myShare = travellerSpend[subjectId] ?? 0;
+        const iPaid = expenses.reduce((s, e) => e.paid_by === subjectId ? s + (e.amount_home ?? e.amount) : s, 0);
+        const balance = iPaid - myShare;
+        return (
+          <div className="vintage-card p-5 mb-4">
+            <h2 className="font-display text-sm font-bold text-ink mb-3 flex items-center gap-2">
+              <User size={14} className="text-ink-faint" /> {getName(subjectId)}'s Summary
+            </h2>
+            <div className="grid grid-cols-3 divide-x divide-parchment-dark text-center">
+              <div className="px-3 py-1">
+                <p className="text-[10px] text-ink-faint uppercase tracking-wide mb-0.5">My Share</p>
+                <p className="font-display text-base font-bold text-ink">{fmt(myShare, homeCurrency)}</p>
+              </div>
+              <div className="px-3 py-1">
+                <p className="text-[10px] text-ink-faint uppercase tracking-wide mb-0.5">I Paid</p>
+                <p className="font-display text-base font-bold text-ink">{fmt(iPaid, homeCurrency)}</p>
+              </div>
+              <div className="px-3 py-1">
+                <p className="text-[10px] text-ink-faint uppercase tracking-wide mb-0.5">
+                  {balance >= 0 ? 'Owed Back' : 'Still Owe'}
+                </p>
+                <p className={`font-display text-base font-bold ${balance >= 0 ? 'text-emerald-600' : 'text-terracotta'}`}>
+                  {fmt(Math.abs(balance), homeCurrency)}
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Deposits ──────────────────────────────────────────────────────────── */}
       <div className="vintage-card overflow-hidden mb-4">
@@ -216,10 +275,10 @@ function ReportContent({
             {sortedExpenses.map((e) => {
               const paidByName = getName(e.paid_by);
               const paidByColour = getColour(e.paid_by);
-              // For individual report, show this person's split amount
-              const myShare = reportType === 'individual' && subjectId
-                ? e.splits.find((s) => s.traveller_id === subjectId)
-                : null;
+              const displayAmount = scopedExpenseAmount(e);
+              const visibleSplits = scopeIds
+                ? e.splits.filter((s) => scopeIds.has(s.traveller_id))
+                : e.splits;
               return (
                 <div key={e.id} className="px-5 py-3.5">
                   <div className="flex items-start gap-3">
@@ -240,10 +299,10 @@ function ReportContent({
                           </>
                         )}
                       </div>
-                      {/* Splits row — compact chips */}
-                      {reportType !== 'individual' && e.splits.length > 0 && (
+                      {/* Splits row — only scoped members for family/individual */}
+                      {visibleSplits.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
-                          {e.splits.map((s) => (
+                          {visibleSplits.map((s) => (
                             <span key={s.traveller_id}
                               className="inline-flex items-center gap-1 text-[10px] bg-parchment px-1.5 py-0.5 rounded-full text-ink-light border border-parchment-dark">
                               <span
@@ -257,12 +316,7 @@ function ReportContent({
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-ink">{fmt(e.amount_home ?? e.amount, homeCurrency)}</p>
-                      {myShare && (
-                        <p className="text-xs text-ink-faint">
-                          your share: {fmt(myShare.amount_home ?? myShare.amount, homeCurrency)}
-                        </p>
-                      )}
+                      <p className="text-sm font-semibold text-ink">{fmt(displayAmount, homeCurrency)}</p>
                     </div>
                   </div>
                 </div>
@@ -272,7 +326,7 @@ function ReportContent({
         )}
       </div>
 
-      {/* ── Receipts Bundle ───────────────────────────────────────────────────── */}
+      {/* ── Receipts Bundle ─────────────────────────────────────────────────────────────── */}
       {(() => {
         const receipts = expenses.filter((e) => e.receipt_filename);
         if (receipts.length === 0) return null;
@@ -312,10 +366,10 @@ function ReportContent({
         );
       })()}
 
-      {/* ── Transfers ─────────────────────────────────────────────────────────── */}
+      {/* ── Transfers ─────────────────────────────────────────────────────────────── */}
       <div className="vintage-card overflow-hidden">
         <div className="px-5 pt-5 pb-0">
-          <SectionHeader emoji="↔️" title="Transfers" count={transfers.length} total={totalTransfers} currency={homeCurrency} />
+          <SectionHeader emoji="⇔️" title="Transfers" count={transfers.length} total={totalTransfers} currency={homeCurrency} />
         </div>
         {sortedTransfers.length === 0 ? (
           <p className="px-5 py-4 text-sm text-ink-faint">No transfers recorded.</p>
@@ -367,7 +421,7 @@ function ReportContent({
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+// ── Main page ───────────────────────────────────────────────────────────────────
 
 export default function ReportPage() {
   const { currentTrip } = useTrip();
@@ -410,7 +464,18 @@ export default function ReportPage() {
 
   const getName = (id: string) => travellers.find((t) => t.id === id)?.name ?? 'Unknown';
 
-  // ── Filtered data based on report type + subject ───────────────────────────
+  const scopeIds = useMemo((): Set<string> | null => {
+    if (reportType === 'family' && selectedFamilyId) {
+      const fam = families.find((f) => f.id === selectedFamilyId);
+      return fam ? new Set(fam.members.map((m: any) => m.id)) : null;
+    }
+    if (reportType === 'individual' && selectedTravellerId) {
+      return new Set([selectedTravellerId]);
+    }
+    return null;
+  }, [reportType, selectedFamilyId, selectedTravellerId, families]);
+
+  // ── Filtered data based on report type + subject ─────────────────────────────────────────
   const filteredExpenses = useMemo(() => {
     if (reportType === 'group') return expenses;
     if (reportType === 'family' && selectedFamilyId) {
@@ -445,7 +510,6 @@ export default function ReportPage() {
     return [];
   }, [transfers, reportType, selectedFamilyId, selectedTravellerId, families]);
 
-  // deposits shown for all report types (group = all, family/individual = all as they're trip-level)
   const reportDeposits = deposits;
 
   function pickType(type: ReportType) {
@@ -483,10 +547,8 @@ export default function ReportPage() {
 
   if (!currentTrip) return null;
 
-  // ── Report title ───────────────────────────────────────────────────────────
   let reportTitle = `${currentTrip.name} — Full Group Report`;
   let reportSubtitle = `${currentTrip.destination} · ${fmtD(currentTrip.start_date)} – ${fmtD(currentTrip.end_date)}`;
-  const subjectId = reportType === 'family' ? selectedFamilyId : selectedTravellerId;
 
   if (reportType === 'family' && selectedFamilyId) {
     const fam = families.find((f) => f.id === selectedFamilyId);
@@ -505,7 +567,6 @@ export default function ReportPage() {
     </button>
   );
 
-  // ══ SCREEN 1: Pick type ════════════════════════════════════════════════════
   if (step === 'pick-type') {
     return (
       <div className="max-w-lg mx-auto space-y-5">
@@ -516,62 +577,35 @@ export default function ReportPage() {
             <p className="text-sm text-ink-faint mt-0.5">Choose what to include in the report</p>
           </div>
         </div>
-
         <div className="space-y-3">
-          {/* Group */}
-          <button
-            onClick={() => pickType('group')}
-            className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-          >
+          <button onClick={() => pickType('group')} className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] flex items-center justify-center flex-shrink-0">
-                <Users size={20} className="text-white" />
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-[#1C1917] flex items-center justify-center flex-shrink-0"><Users size={20} className="text-white" /></div>
               <div className="flex-1 min-w-0">
                 <p className="font-display font-bold text-ink text-base">Full Group Report</p>
-                <p className="text-sm text-ink-faint mt-0.5">
-                  Every expense, deposit and transfer — all {travellers.length} travellers
-                </p>
+                <p className="text-sm text-ink-faint mt-0.5">Every expense, deposit and transfer — all {travellers.length} travellers</p>
               </div>
               <ChevronRight size={16} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
-
-          {/* Family — only if families exist */}
           {families.length > 0 && (
-            <button
-              onClick={() => pickType('family')}
-              className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-            >
+            <button onClick={() => pickType('family')} className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Home size={20} className="text-gold-aged" />
-                </div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0"><Home size={20} className="text-gold-aged" /></div>
                 <div className="flex-1 min-w-0">
                   <p className="font-display font-bold text-ink text-base">Family Report</p>
-                  <p className="text-sm text-ink-faint mt-0.5">
-                    Filtered to one family group · {families.length} famil{families.length !== 1 ? 'ies' : 'y'}
-                  </p>
+                  <p className="text-sm text-ink-faint mt-0.5">Filtered to one family group · {families.length} famil{families.length !== 1 ? 'ies' : 'y'}</p>
                 </div>
                 <ChevronRight size={16} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </button>
           )}
-
-          {/* Individual */}
-          <button
-            onClick={() => pickType('individual')}
-            className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-          >
+          <button onClick={() => pickType('individual')} className="vintage-card w-full p-5 text-left group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
-                <User size={20} className="text-emerald-600" />
-              </div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0"><User size={20} className="text-emerald-600" /></div>
               <div className="flex-1 min-w-0">
                 <p className="font-display font-bold text-ink text-base">Individual Report</p>
-                <p className="text-sm text-ink-faint mt-0.5">
-                  One person's expenses, splits and transfers
-                </p>
+                <p className="text-sm text-ink-faint mt-0.5">One person's expenses, splits and transfers</p>
               </div>
               <ChevronRight size={16} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </div>
@@ -581,7 +615,6 @@ export default function ReportPage() {
     );
   }
 
-  // ══ SCREEN 2: Pick subject ═════════════════════════════════════════════════
   if (step === 'pick-subject') {
     const isFamily = reportType === 'family';
     return (
@@ -589,51 +622,25 @@ export default function ReportPage() {
         <div className="flex items-center gap-3">
           {backBtn}
           <div>
-            <h1 className="font-display text-xl font-bold text-ink">
-              {isFamily ? 'Select Family' : 'Select Person'}
-            </h1>
-            <p className="text-sm text-ink-faint mt-0.5">
-              {isFamily ? "Report will be filtered to this family's activity" : "Report will show this person's activity"}
-            </p>
+            <h1 className="font-display text-xl font-bold text-ink">{isFamily ? 'Select Family' : 'Select Person'}</h1>
+            <p className="text-sm text-ink-faint mt-0.5">{isFamily ? "Report will be filtered to this family's activity" : "Report will show this person's activity"}</p>
           </div>
         </div>
-
         <div className="space-y-2">
           {isFamily
             ? families.map((fam: any) => (
-                <button
-                  key={fam.id}
-                  onClick={() => pickSubject(fam.id)}
-                  className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-bold flex-shrink-0"
-                    style={{ backgroundColor: fam.colour }}
-                  >
-                    {fam.name.charAt(0).toUpperCase()}
-                  </div>
+                <button key={fam.id} onClick={() => pickSubject(fam.id)} className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-bold flex-shrink-0" style={{ backgroundColor: fam.colour }}>{fam.name.charAt(0).toUpperCase()}</div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-ink">{fam.name}</p>
-                    <p className="text-xs text-ink-faint">
-                      {fam.members.length} member{fam.members.length !== 1 ? 's' : ''}
-                      {' · '}{fam.members.map((m: any) => m.name).join(', ')}
-                    </p>
+                    <p className="text-xs text-ink-faint">{fam.members.length} member{fam.members.length !== 1 ? 's' : ''}{' · '}{fam.members.map((m: any) => m.name).join(', ')}</p>
                   </div>
                   <ChevronRight size={15} className="text-ink-faint flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
                 </button>
               ))
             : travellers.map((t: any) => (
-                <button
-                  key={t.id}
-                  onClick={() => pickSubject(t.id)}
-                  className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150"
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0 text-sm"
-                    style={{ backgroundColor: t.avatar_colour }}
-                  >
-                    {t.name.charAt(0).toUpperCase()}
-                  </div>
+                <button key={t.id} onClick={() => pickSubject(t.id)} className="vintage-card w-full p-4 text-left flex items-center gap-4 group hover:shadow-[var(--shadow-card-hover)] transition-all duration-150">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0 text-sm" style={{ backgroundColor: t.avatar_colour }}>{t.name.charAt(0).toUpperCase()}</div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-ink">{t.name}</p>
                     <p className="text-xs text-ink-faint capitalize">{t.type} · {t.role}</p>
@@ -647,10 +654,8 @@ export default function ReportPage() {
     );
   }
 
-  // ══ SCREEN 3: Report ═══════════════════════════════════════════════════════
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Toolbar — hidden on print */}
       <div className="no-print flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           {backBtn}
@@ -667,15 +672,11 @@ export default function ReportPage() {
             </h1>
           </div>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="btn-primary flex items-center gap-2 text-sm"
-        >
+        <button onClick={() => window.print()} className="btn-primary flex items-center gap-2 text-sm">
           <Printer size={15} />
           Print / PDF
         </button>
       </div>
-
       <ReportContent
         title={reportTitle}
         subtitle={reportSubtitle}
@@ -685,7 +686,7 @@ export default function ReportPage() {
         travellers={travellers}
         homeCurrency={homeCurrency}
         reportType={reportType!}
-        subjectId={subjectId}
+        scopeIds={scopeIds}
         families={families}
       />
     </div>

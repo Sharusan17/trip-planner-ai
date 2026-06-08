@@ -82,16 +82,29 @@ export default function TripMap({ selectedDayId, days }: TripMapProps) {
       day.activities
         .filter((a) => a.latitude && a.longitude)
         .filter(() => selectedDayId === null || day.id === selectedDayId)
-        .map((a) => ({ ...a, day_number: day.day_number, day_title: day.title }))
-    );
+        .map((a) => ({ ...a, day_number: day.day_number, day_title: day.title, day_date: day.date }))
+    ).sort((a, b) => {
+      const dateCompare = a.day_date.localeCompare(b.day_date);
+      if (dateCompare !== 0) return dateCompare;
+      if (!a.time && !b.time) return 0;
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return a.time.localeCompare(b.time);
+    });
   }, [days, selectedDayId]);
 
   const routeLines = useMemo(() => {
     const lines: { positions: [number, number][]; colour: string }[] = [];
     const daysToShow = selectedDayId !== null ? days.filter((d) => d.id === selectedDayId) : days;
     for (const day of daysToShow) {
-      const coords = day.activities
+      const coords = [...day.activities]
         .filter((a) => a.latitude && a.longitude)
+        .sort((a, b) => {
+          if (!a.time && !b.time) return 0;
+          if (!a.time) return 1;
+          if (!b.time) return -1;
+          return a.time.localeCompare(b.time);
+        })
         .map((a) => [a.latitude!, a.longitude!] as [number, number]);
       if (coords.length > 1) {
         lines.push({ positions: coords, colour: DAY_COLOURS[(day.day_number - 1) % DAY_COLOURS.length] });

@@ -6,24 +6,23 @@ import type { SplitMode, ExpenseCategory } from '@trip-planner-ai/shared';
 
 const router = Router();
 
-function syncLinkedSource(
-  expense: Record<string, unknown>,
-  newAmount: number,
-  newCurrency: string,
-  amountHome: number | null
-): void {
-  if (expense.transport_booking_id) {
-    pool.query(
-      `UPDATE transport_bookings SET price=$1, currency=$2, price_home=$3, updated_at=NOW() WHERE id=$4`,
-      [newAmount, newCurrency, amountHome, expense.transport_booking_id]
-    ).catch(() => {});
-  }
-  if (expense.activity_id) {
-    pool.query(
-      `UPDATE activities SET cost=$1, cost_currency=$2 WHERE id=$3`,
-      [newAmount, newCurrency, expense.activity_id]
-    ).catch(() => {});
-  }
+// When an expense is edited, push the new amount/currency back to any linked source booking/activity
+function syncLinkedSource(expenseId: string, newAmount: number, newCurrency: string): void {
+  pool.query(
+    `UPDATE transport_bookings SET price = $1, currency = $2, updated_at = NOW()
+     WHERE linked_expense_id = $3`,
+    [newAmount, newCurrency, expenseId]
+  ).catch(() => {});
+  pool.query(
+    `UPDATE accommodation_bookings SET price = $1, currency = $2, updated_at = NOW()
+     WHERE linked_expense_id = $3`,
+    [newAmount, newCurrency, expenseId]
+  ).catch(() => {});
+  pool.query(
+    `UPDATE activities SET price = $1, currency = $2
+     WHERE linked_expense_id = $3`,
+    [newAmount, newCurrency, expenseId]
+  ).catch(() => {});
 }
 
 interface SplitRow {
@@ -225,11 +224,22 @@ router.post('/trips/:tripId/expenses', async (req: Request, res: Response) => {
     );
     const expense = expResult.rows[0];
 
+    // Compute split amount_homes and apply rounding correction to the last split
+    // so that sum(splits.amount_home) === expense.amount_home exactly.
+    let splitHomeRunning = 0;
     const splitRows = [];
-    for (const split of splits) {
+    for (let i = 0; i < splits.length; i++) {
+      const split = splits[i];
+      const isLast = i === splits.length - 1;
       let splitHome: number | null = null;
       if (amountHome !== null) {
-        splitHome = Math.round(split.amount * (amountHome / parseFloat(amount)) * 100) / 100;
+        if (isLast) {
+          // Last split absorbs any rounding remainder
+          splitHome = Math.round((amountHome - splitHomeRunning) * 100) / 100;
+        } else {
+          splitHome = Math.round(split.amount * (amountHome / parseFloat(amount)) * 100) / 100;
+          splitHomeRunning += splitHome;
+        }
       }
       const splitResult = await client.query(
         `INSERT INTO expense_splits (expense_id, traveller_id, amount, amount_home)
@@ -319,24 +329,42 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
     );
     const expense = updResult.rows[0];
 
-    if (traveller_ids && traveller_ids.length > 0) {
+    // If traveller_ids not provided but amount/currency/split_mode changed, refetch existing split participants
+    let tIdsToRecalc: string[] | undefined = traveller_ids?.length ? traveller_ids : undefined;
+    if (!tIdsToRecalc && (amount !== undefined || currency !== undefined || split_mode !== undefined)) {
+      const existRes = await client.query(
+        `SELECT traveller_id FROM expense_splits WHERE expense_id = $1`,
+        [req.params.id]
+      );
+      if (existRes.rows.length > 0) tIdsToRecalc = existRes.rows.map((r: any) => r.traveller_id);
+    }
+
+    if (tIdsToRecalc && tIdsToRecalc.length > 0) {
       const travellersResult = await client.query(
         `SELECT id, cost_split_weight FROM travellers WHERE id = ANY($1)`,
-        [newTravellerIds]
+        [tIdsToRecalc]
       );
       const weights: Record<string, number> = {};
       for (const t of travellersResult.rows) {
         weights[t.id] = parseFloat(t.cost_split_weight);
       }
-      const splits = computeSplits(newAmount, newSplitMode, newTravellerIds, weights, custom_splits);
+      const splits = computeSplits(newAmount, newSplitMode, tIdsToRecalc, weights, custom_splits);
 
       await client.query(`DELETE FROM expense_splits WHERE expense_id = $1`, [req.params.id]);
 
+      let splitHomeRunning2 = 0;
       const splitRows = [];
-      for (const split of splits) {
+      for (let i = 0; i < splits.length; i++) {
+        const split = splits[i];
+        const isLast = i === splits.length - 1;
         let splitHome: number | null = null;
         if (amountHome !== null) {
-          splitHome = Math.round(split.amount * (amountHome / newAmount) * 100) / 100;
+          if (isLast) {
+            splitHome = Math.round((amountHome - splitHomeRunning2) * 100) / 100;
+          } else {
+            splitHome = Math.round(split.amount * (amountHome / newAmount) * 100) / 100;
+            splitHomeRunning2 += splitHome;
+          }
         }
         const splitResult = await client.query(
           `INSERT INTO expense_splits (expense_id, traveller_id, amount, amount_home)
@@ -347,8 +375,7 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
       }
 
       await client.query('COMMIT');
-
-      syncLinkedSource(expense, newAmount, newCurrency, amountHome);
+      syncLinkedSource(String(req.params.id), newAmount, newCurrency);
 
       return res.json({
         ...expense,
@@ -363,8 +390,7 @@ router.put('/expenses/:id', async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
-
-    syncLinkedSource(expense, newAmount, newCurrency, amountHome);
+    syncLinkedSource(String(req.params.id), newAmount, newCurrency);
 
     const splitsResult = await client.query(
       `SELECT * FROM expense_splits WHERE expense_id = $1`,

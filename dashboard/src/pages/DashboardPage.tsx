@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useState, useRef } from 'react';
 import { useTrip } from '@/context/TripContext';
 import { useQuery } from '@tanstack/react-query';
 import { travellersApi } from '@/api/travellers';
+import { familiesApi } from '@/api/families';
 import { itineraryApi } from '@/api/itinerary';
 import { expensesApi } from '@/api/expenses';
 import { depositsApi } from '@/api/deposits';
@@ -59,6 +61,51 @@ function StatCard({ icon, value, label, iconBg }: StatCardProps) {
   );
 }
 
+interface SpendSlide { icon: React.ReactNode; value: string; label: string; iconBg: string }
+
+function SwipeableSpendCard({ slides }: { slides: SpendSlide[] }) {
+  const [idx, setIdx] = useState(0);
+  const touchX = useRef<number | null>(null);
+  const swiped = useRef(false);
+
+  function next() { setIdx((i) => (i + 1) % slides.length); }
+  function prev() { setIdx((i) => (i - 1 + slides.length) % slides.length); }
+
+  const s = slides[idx];
+  return (
+    <div
+      className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] p-4 flex flex-col gap-2.5 select-none cursor-pointer"
+      onTouchStart={(e) => { touchX.current = e.touches[0].clientX; swiped.current = false; }}
+      onTouchEnd={(e) => {
+        if (touchX.current === null) return;
+        const dx = e.changedTouches[0].clientX - touchX.current;
+        if (Math.abs(dx) > 28) { dx < 0 ? next() : prev(); swiped.current = true; }
+        touchX.current = null;
+      }}
+      onClick={() => { if (!swiped.current) next(); swiped.current = false; }}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${s.iconBg}`}>
+          {s.icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-xl font-bold text-ink leading-none">{s.value}</div>
+          <div className="text-xs text-ink-faint font-body mt-0.5">{s.label}</div>
+        </div>
+      </div>
+      <div className="flex gap-1 justify-center">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? 'bg-ink' : 'bg-ink-faint/25'}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { currentTrip, activeTraveller } = useTrip();
 
@@ -110,6 +157,20 @@ export default function DashboardPage() {
     staleTime: 0,
   });
 
+  const { data: families = [] } = useQuery({
+    queryKey: ['families', currentTrip?.id],
+    queryFn: () => familiesApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
+  const { data: expenses = [] } = useQuery({
+    queryKey: ['expenses', currentTrip?.id],
+    queryFn: () => expensesApi.list(currentTrip!.id),
+    enabled: !!currentTrip,
+    staleTime: 60_000,
+  });
+
   if (!currentTrip) return null;
 
   const totalSpent        = expenseSummary.reduce((s, r) => s + r.total_home, 0);
@@ -123,6 +184,12 @@ export default function DashboardPage() {
   const _now = new Date();
   const _pad = (n: number) => String(n).padStart(2, '0');
   const todayStr = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}`;
+
+  // Spend card derived values
+  const myShare = expenses.reduce((sum, exp) => {
+    const split = exp.splits.find((s) => s.traveller_id === activeTraveller?.id);
+    return sum + (split?.amount_home ?? 0);
+  }, 0);
   const todayDay = days?.find((d) => d.date.startsWith(todayStr));
 
   // Next upcoming day if today has no entry
@@ -137,6 +204,28 @@ export default function DashboardPage() {
     new Intl.NumberFormat('en-GB', { style: 'currency', currency: currentTrip.home_currency }).format(n);
 
   const showFinance = totalSpent > 0 || depositsOutstanding > 0 || pendingSettlements > 0;
+
+  // Per-traveller spend (from splits)
+  const travellerSpend: Record<string, number> = {};
+  for (const exp of expenses) {
+    for (const split of exp.splits) {
+      travellerSpend[split.traveller_id] = (travellerSpend[split.traveller_id] ?? 0) + (split.amount_home ?? 0);
+    }
+  }
+
+  // Per-family spend = sum of member totals
+  const familySpend: Record<string, number> = {};
+  for (const fam of families) {
+    familySpend[fam.id] = fam.members.reduce((s: number, m: { id: string }) => s + (travellerSpend[m.id] ?? 0), 0);
+  }
+
+  // Travellers not in any family
+  const familyMemberIds = new Set(families.flatMap((f) => f.members.map((m: { id: string }) => m.id)));
+  const ungroupedTravellers = (travellers ?? []).filter((t) => !familyMemberIds.has(t.id));
+
+  // Active traveller's family spend
+  const myFamily = families.find((f) => f.members.some((m: { id: string }) => m.id === activeTraveller?.id));
+  const myFamilySpend = myFamily ? (familySpend[myFamily.id] ?? 0) : 0;
 
   return (
     <div className="space-y-4">
@@ -209,11 +298,27 @@ export default function DashboardPage() {
           label="Activities"
           iconBg="bg-orange-50"
         />
-        <StatCard
-          icon={<Receipt size={18} strokeWidth={1.75} className="text-emerald-600" />}
-          value={totalSpent > 0 ? fmt(totalSpent) : '—'}
-          label="Total Spent"
-          iconBg="bg-emerald-50"
+        <SwipeableSpendCard
+          slides={[
+            {
+              icon: <Users size={18} strokeWidth={1.75} className="text-[#3A6666]" />,
+              value: myShare > 0 ? fmt(myShare) : '—',
+              label: 'My Spent',
+              iconBg: 'bg-[#EBF4F4]',
+            },
+            {
+              icon: <Receipt size={18} strokeWidth={1.75} className="text-emerald-600" />,
+              value: totalSpent > 0 ? fmt(totalSpent) : '—',
+              label: 'Total Spent',
+              iconBg: 'bg-emerald-50',
+            },
+            {
+              icon: <Users size={18} strokeWidth={1.75} className="text-violet-600" />,
+              value: myFamilySpend > 0 ? fmt(myFamilySpend) : '—',
+              label: myFamily ? `${myFamily.name} Total` : 'Family Spend',
+              iconBg: 'bg-violet-50',
+            },
+          ]}
         />
       </div>
 
@@ -326,6 +431,80 @@ export default function DashboardPage() {
               <span className="font-display text-sm font-bold text-ink">{pendingSettlements}</span>
               <span className="text-xs text-ink-faint font-body">Pending</span>
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── Spend breakdown by person / family ── */}
+      {totalSpent > 0 && (travellers?.length ?? 0) > 1 && (
+        <div className="bg-white rounded-xl border border-parchment-dark shadow-[var(--shadow-card)] overflow-hidden">
+          <div className="px-5 py-3 border-b border-parchment-dark flex items-center justify-between">
+            <h3 className="font-display text-sm font-semibold text-ink flex items-center gap-1.5">
+              <Users size={13} strokeWidth={2} className="text-ink-faint" />
+              Spend Breakdown
+            </h3>
+            <Link to="/expenses" className="text-xs text-navy hover:underline font-body">Details →</Link>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            {/* Family groups */}
+            {families.map((fam) => {
+              const famTotal = familySpend[fam.id] ?? 0;
+              if (famTotal === 0) return null;
+              const famPct = totalSpent > 0 ? (famTotal / totalSpent) * 100 : 0;
+              return (
+                <div key={fam.id} className="space-y-1.5">
+                  {/* Family row */}
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: fam.colour }} />
+                    <span className="text-xs font-semibold text-ink flex-1 truncate">{fam.name}</span>
+                    <div className="flex-1 h-1.5 bg-parchment-dark rounded-full overflow-hidden mx-2">
+                      <div className="h-full rounded-full" style={{ width: `${famPct}%`, backgroundColor: fam.colour }} />
+                    </div>
+                    <span className="text-xs font-bold text-ink w-20 text-right flex-shrink-0">{fmt(famTotal)}</span>
+                  </div>
+                  {/* Members */}
+                  {fam.members.map((m: { id: string; name: string; avatar_colour: string }) => {
+                    const mSpend = travellerSpend[m.id] ?? 0;
+                    if (mSpend === 0) return null;
+                    const mPct = famTotal > 0 ? (mSpend / famTotal) * 100 : 0;
+                    return (
+                      <div key={m.id} className="flex items-center gap-2.5 pl-5">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                          style={{ backgroundColor: m.avatar_colour }}>
+                          {m.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-xs text-ink-light flex-1 truncate">{m.name}</span>
+                        <div className="flex-1 h-1 bg-parchment-dark rounded-full overflow-hidden mx-2">
+                          <div className="h-full rounded-full" style={{ width: `${mPct}%`, backgroundColor: m.avatar_colour }} />
+                        </div>
+                        <span className="text-xs text-ink-faint w-20 text-right flex-shrink-0">{fmt(mSpend)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {/* Ungrouped travellers */}
+            {ungroupedTravellers
+              .filter((t) => (travellerSpend[t.id] ?? 0) > 0)
+              .sort((a, b) => (travellerSpend[b.id] ?? 0) - (travellerSpend[a.id] ?? 0))
+              .map((t) => {
+                const spent = travellerSpend[t.id] ?? 0;
+                const pct = totalSpent > 0 ? (spent / totalSpent) * 100 : 0;
+                return (
+                  <div key={t.id} className="flex items-center gap-2.5">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: t.avatar_colour }}>
+                      {t.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-xs text-ink flex-1 truncate">{t.name}</span>
+                    <div className="flex-1 h-1.5 bg-parchment-dark rounded-full overflow-hidden mx-2">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: t.avatar_colour }} />
+                    </div>
+                    <span className="text-xs font-semibold text-ink w-20 text-right flex-shrink-0">{fmt(spent)}</span>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

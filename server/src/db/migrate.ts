@@ -504,13 +504,22 @@ const migrations = [
   // link a forfeited deposit back to the expense it spawned
   `ALTER TABLE deposits ADD COLUMN IF NOT EXISTS forfeited_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;`,
 
-  // transport + activity → expense linking
-  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS transport_booking_id UUID REFERENCES transport_bookings(id) ON DELETE SET NULL;`,
-  `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS activity_id UUID REFERENCES activities(id) ON DELETE SET NULL;`,
-  `CREATE INDEX IF NOT EXISTS idx_expenses_transport_booking ON expenses(transport_booking_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_expenses_activity ON expenses(activity_id);`,
-  `ALTER TABLE activities ADD COLUMN IF NOT EXISTS cost NUMERIC(10,2);`,
-  `ALTER TABLE activities ADD COLUMN IF NOT EXISTS cost_currency TEXT;`,
+  // 029: link transport/accommodation/activity bookings to auto-created expenses
+  `ALTER TABLE transport_bookings    ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+  `ALTER TABLE transport_bookings    ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
+  `ALTER TABLE accommodation_bookings ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+  `ALTER TABLE accommodation_bookings ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS price             DECIMAL(12,2);`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS currency          CHAR(3);`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS created_by        UUID REFERENCES travellers(id) ON DELETE SET NULL;`,
+  `ALTER TABLE activities             ADD COLUMN IF NOT EXISTS linked_expense_id UUID REFERENCES expenses(id)   ON DELETE SET NULL;`,
+
+  // 030: freeze settlement home-currency value at payment time (pence/cents, integer)
+  // This is used for the paid-settlement ledger adjustment — the rate at which money
+  // actually changed hands, never retroactively recalculated.
+  `ALTER TABLE settlements ADD COLUMN IF NOT EXISTS paid_home_pence BIGINT;`,
+  // Backfill existing paid rows so history is consistent
+  `UPDATE settlements SET paid_home_pence = ROUND(amount * 100)::BIGINT WHERE status = 'paid' AND paid_home_pence IS NULL;`,
 
   // travel checklist — shared items + per-traveller checked state
   `CREATE TABLE IF NOT EXISTS trip_checklist_items (

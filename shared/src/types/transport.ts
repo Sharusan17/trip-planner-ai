@@ -47,6 +47,8 @@ export interface CreateTransportInput {
   arrival_terminal?: string;
   aircraft_type?: string;
   linked_booking_id?: string;
+  /** Traveller ID of whoever logged this booking — used as paid_by on the auto-expense */
+  created_by?: string;
   /** If provided, a return leg is created and both are auto-linked */
   linked_journey?: {
     from_location: string;

@@ -3,9 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
+import PriceField from '@/components/setup/PriceField';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
 import { ArrowLeft, MapPin, Search, X } from 'lucide-react';
-import { getCurrencySymbol, ALL_CURRENCIES } from '@/utils/currency';
 
 const ACTIVITY_TYPES: ActivityType[] = [
   'flight', 'transport', 'hotel', 'food', 'sightseeing', 'beach', 'shopping', 'entertainment', 'custom',
@@ -28,7 +28,7 @@ export default function ActivityFormPage() {
   const { dayId, id } = useParams<{ dayId?: string; id?: string }>();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { currentTrip } = useTrip();
+  const { currentTrip, activeTraveller } = useTrip();
   const qc = useQueryClient();
 
   const [actTime, setActTime] = useState('');
@@ -38,12 +38,12 @@ export default function ActivityFormPage() {
   const [actLocation, setActLocation] = useState('');
   const [actLat, setActLat] = useState('');
   const [actLng, setActLng] = useState('');
-  const [actCost, setActCost] = useState('');
-  const [actCostCurrency, setActCostCurrency] = useState(currentTrip?.dest_currency ?? 'EUR');
+  const [actPrice, setActPrice] = useState('');
+  const [actCurrency, setActCurrency] = useState('EUR');
 
   // Location search
   const [locationSearch, setLocationSearch] = useState('');
-  const [locationResults, setLocationResults] = useState<Array<{ place_id: number; display_name: string; lat: string; lon: string }>>([]);
+  const [locationResults, setLocationResults] = useState<{ place_id: number; display_name: string; lat: string; lon: string }[]>([]);
   const [showLocResults, setShowLocResults] = useState(false);
   const locSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -67,8 +67,8 @@ export default function ActivityFormPage() {
         setLocationSearch(activity.location_tag || '');
         setActLat(activity.latitude?.toString() || '');
         setActLng(activity.longitude?.toString() || '');
-        setActCost(activity.cost ? String(activity.cost) : '');
-        setActCostCurrency(activity.cost_currency ?? currentTrip?.dest_currency ?? 'EUR');
+        setActPrice(activity.price != null ? String(activity.price) : '');
+        setActCurrency(activity.currency ?? 'EUR');
         break;
       }
     }
@@ -120,8 +120,9 @@ export default function ActivityFormPage() {
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
-      cost: actCost ? parseFloat(actCost) : undefined,
-      cost_currency: actCost ? actCostCurrency : undefined,
+      price: actPrice ? parseFloat(actPrice) : undefined,
+      currency: actPrice ? actCurrency : undefined,
+      created_by: activeTraveller?.id || undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['days', 'expenses'] }); navigate('/itinerary'); },
     onError: (err) => alert(`Failed to save activity: ${err.message}`),
@@ -136,8 +137,8 @@ export default function ActivityFormPage() {
       location_tag: actLocation || undefined,
       latitude: actLat ? parseFloat(actLat) : undefined,
       longitude: actLng ? parseFloat(actLng) : undefined,
-      cost: actCost ? parseFloat(actCost) : undefined,
-      cost_currency: actCost ? actCostCurrency : undefined,
+      price: actPrice ? parseFloat(actPrice) : undefined,
+      currency: actPrice ? actCurrency : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['days', 'expenses'] }); navigate('/itinerary'); },
     onError: (err) => alert(`Failed to update activity: ${err.message}`),
@@ -262,34 +263,18 @@ export default function ActivityFormPage() {
           />
         </div>
 
-        {/* Cost — optional, auto-creates linked expense */}
+        {/* Price */}
         <div>
           <label className="block text-xs font-semibold text-ink-faint mb-1.5 uppercase tracking-wider">
-            Cost <span className="normal-case font-normal">(optional — auto-adds to expenses)</span>
+            Price <span className="normal-case font-normal">(optional — auto-creates expense)</span>
           </label>
-          <div className="flex gap-2 items-stretch">
-            <div className="flex flex-1 min-w-0 items-stretch border border-parchment-dark rounded-[10px] overflow-hidden bg-white focus-within:border-navy focus-within:ring-2 focus-within:ring-navy/20">
-              <span className="px-3 text-sm font-medium text-ink-faint bg-parchment/60 border-r border-parchment-dark flex items-center select-none flex-shrink-0">
-                {getCurrencySymbol(actCostCurrency)}
-              </span>
-              <input type="number" step="0.01" min="0"
-                className="flex-1 px-3 py-[0.4375rem] text-sm outline-none bg-white min-w-0"
-                value={actCost} placeholder="0.00"
-                onChange={(e) => setActCost(e.target.value)} />
-            </div>
-            <div className="flex-shrink-0 w-20">
-              <select
-                className="w-full h-[40px] border border-parchment-dark rounded-[10px] bg-white px-2 text-sm text-ink focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/20"
-                value={actCostCurrency}
-                onChange={(e) => setActCostCurrency(e.target.value)}>
-                {['EUR', 'GBP', 'USD'].map((c) => <option key={c} value={c}>{c}</option>)}
-                <option disabled>──────</option>
-                {ALL_CURRENCIES.filter((c) => !['EUR','GBP','USD'].includes(c)).map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <PriceField
+            price={actPrice}
+            currency={actCurrency}
+            placeholder="0.00"
+            onPriceChange={setActPrice}
+            onCurrencyChange={setActCurrency}
+          />
         </div>
 
         <div className="flex gap-3 pt-2">
