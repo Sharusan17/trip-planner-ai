@@ -114,7 +114,7 @@ export default function ItineraryPage() {
         <h2 className="font-display text-2xl font-bold text-navy">Itinerary</h2>
         {isOrganiser && (
           <button
-            onClick={() => navigate('/itinerary/plan')}
+            onClick={() => navigate('/itinerary/plan', { state: { defaultDayId: activeDay?.id } })}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold/10 border border-gold/30 text-gold-aged text-sm font-semibold hover:bg-gold/20 transition-colors flex-shrink-0"
           >
             <Wand2 size={15} />
