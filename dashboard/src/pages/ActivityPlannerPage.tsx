@@ -17,7 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ArrowLeft, ArrowRight, Wand2, MapPin, GripVertical,
-  Check, X, RefreshCw, Loader2, CalendarDays, Zap,
+  Check, X, RefreshCw, Loader2, CalendarDays, Zap, Pencil, Search,
 } from 'lucide-react';
 import { parseLocalDate } from '@/utils/date';
 
@@ -264,39 +264,162 @@ function GeocodedRow({
   );
 }
 
-function SortableRow({ item, index }: { item: OrderedItem; index: number }) {
+function SortableRow({
+  item, index, tripLat, tripLon, onUpdate,
+}: {
+  item: OrderedItem;
+  index: number;
+  tripLat?: number;
+  tripLon?: number;
+  onUpdate: (id: string, opt: GeoOption) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.45 : 1,
   };
+
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GeoOption[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function openEdit() {
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  function closeEdit() {
+    setEditing(false);
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+  }
+
+  function handleQueryChange(q: string) {
+    setQuery(q);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.length < 2) { setResults([]); setShowResults(false); return; }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const opts = await geocodeItem(q, tripLat, tripLon);
+        setResults(opts);
+        setShowResults(opts.length > 0);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+  }
+
+  function selectResult(opt: GeoOption) {
+    onUpdate(item.id, opt);
+    closeEdit();
+  }
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-2.5 bg-white border border-parchment-dark rounded-xl px-3 py-2.5 shadow-sm select-none"
-    >
-      <button
-        className="touch-none cursor-grab active:cursor-grabbing text-ink-faint hover:text-ink flex-shrink-0 p-0.5"
-        {...attributes}
-        {...listeners}
-        aria-label="Drag to reorder"
-      >
-        <GripVertical size={15} />
-      </button>
-      <div
-        className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
-        style={{ backgroundColor: getColour(index) }}
-      >
-        {index + 1}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-ink leading-snug truncate">{item.label}</p>
-        {item.resolvedName !== item.label && (
-          <p className="text-[11px] text-ink-faint truncate">{item.resolvedName}</p>
+    <div ref={setNodeRef} style={style} className="relative">
+      <div className={`flex items-center gap-2.5 bg-white border rounded-xl px-3 py-2.5 shadow-sm select-none transition-colors ${
+        editing ? 'border-navy/40 shadow-[0_0_0_3px_rgba(78,128,128,0.12)]' : 'border-parchment-dark'
+      }`}>
+        {/* Drag handle — hidden while editing */}
+        <button
+          className={`touch-none flex-shrink-0 p-0.5 transition-colors ${
+            editing
+              ? 'text-ink-faint/30 cursor-default'
+              : 'cursor-grab active:cursor-grabbing text-ink-faint hover:text-ink'
+          }`}
+          {...(editing ? {} : { ...attributes, ...listeners })}
+          aria-label="Drag to reorder"
+          tabIndex={editing ? -1 : 0}
+        >
+          <GripVertical size={15} />
+        </button>
+
+        {/* Number badge */}
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
+          style={{ backgroundColor: getColour(index) }}
+        >
+          {index + 1}
+        </div>
+
+        {/* Content / search input */}
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div className="relative">
+              <div className="flex items-center gap-1.5">
+                <Search size={12} className="text-ink-faint flex-shrink-0" />
+                <input
+                  ref={inputRef}
+                  className="flex-1 text-sm bg-transparent outline-none text-ink placeholder:text-ink-faint min-w-0"
+                  placeholder={`Search to replace "${item.label}"…`}
+                  value={query}
+                  onChange={(e) => handleQueryChange(e.target.value)}
+                  onBlur={() => setTimeout(() => { setShowResults(false); }, 200)}
+                />
+                {searching && <Loader2 size={12} className="text-ink-faint animate-spin flex-shrink-0" />}
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-ink leading-snug truncate">{item.label}</p>
+              {item.resolvedName !== item.label && (
+                <p className="text-[11px] text-ink-faint truncate">{item.resolvedName}</p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Edit / Cancel button */}
+        {editing ? (
+          <button
+            onClick={closeEdit}
+            className="flex-shrink-0 p-1 text-ink-faint hover:text-terracotta transition-colors"
+            aria-label="Cancel"
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <button
+            onClick={openEdit}
+            className="flex-shrink-0 p-1 text-ink-faint hover:text-navy transition-colors"
+            aria-label="Change location"
+          >
+            <Pencil size={13} />
+          </button>
         )}
       </div>
+
+      {/* Search results dropdown */}
+      {editing && showResults && results.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-parchment-dark rounded-xl shadow-[var(--shadow-elevated)] overflow-hidden z-[500]">
+          {results.map((opt, i) => (
+            <button
+              key={i}
+              onMouseDown={() => selectResult(opt)}
+              className="w-full text-left px-3.5 py-2.5 hover:bg-parchment/60 border-b border-parchment-dark last:border-0 transition-colors flex items-start gap-2.5"
+            >
+              <MapPin size={12} className="text-navy mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink truncate">{opt.name}</p>
+                {opt.address && (
+                  <p className="text-[11px] text-ink-faint truncate">{opt.address}</p>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -439,6 +562,16 @@ export default function ActivityPlannerPage() {
         return arrayMove(items, oldIdx, newIdx);
       });
     }
+  }
+
+  function handleUpdateLocation(id: string, opt: GeoOption) {
+    setOrdered((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, resolvedName: opt.name, lat: opt.lat, lon: opt.lon }
+          : item
+      )
+    );
   }
 
   function autoGroupAndProceed() {
@@ -695,7 +828,14 @@ export default function ActivityPlannerPage() {
                 <SortableContext items={ordered.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-2">
                     {ordered.map((item, i) => (
-                      <SortableRow key={item.id} item={item} index={i} />
+                      <SortableRow
+                        key={item.id}
+                        item={item}
+                        index={i}
+                        tripLat={currentTrip?.latitude}
+                        tripLon={currentTrip?.longitude}
+                        onUpdate={handleUpdateLocation}
+                      />
                     ))}
                   </div>
                 </SortableContext>
