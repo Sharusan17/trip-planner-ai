@@ -186,16 +186,63 @@ function StepStrip({ step }: { step: number }) {
 }
 
 function GeocodedRow({
-  item, onSelect, onRetry,
+  item, onSelect, onRetry, tripLat, tripLon,
 }: {
   item: GeocodedItem;
   onSelect: (opt: GeoOption) => void;
   onRetry: () => void;
+  tripLat?: number;
+  tripLon?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GeoOption[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function openEdit() {
+    setQuery(item.original);
+    setResults([]);
+    setShowResults(false);
+    setEditing(true);
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 50);
+  }
+
+  function closeEdit() {
+    setEditing(false);
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+  }
+
+  function handleQueryChange(q: string) {
+    setQuery(q);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.length < 2) { setResults([]); setShowResults(false); return; }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const opts = await geocodeItem(q, tripLat, tripLon);
+        setResults(opts);
+        setShowResults(opts.length > 0);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+  }
+
+  function selectResult(opt: GeoOption) {
+    onSelect(opt);
+    closeEdit();
+  }
 
   return (
-    <div className="px-4 py-3.5">
+    <div className="px-4 py-3.5 relative">
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5 w-4">
           {item.status === 'loading' && <Loader2 size={15} className="text-navy animate-spin" />}
@@ -204,62 +251,124 @@ function GeocodedRow({
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-ink leading-snug">{item.original}</p>
-
-          {item.status === 'resolved' && item.chosen && (
-            <div className="mt-0.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <p className="text-xs text-ink-faint">
-                  {item.chosen.name}
-                  {item.chosen.address ? ` · ${item.chosen.address}` : ''}
-                </p>
-                {item.options.length > 1 && (
-                  <button
-                    onClick={() => setExpanded((v) => !v)}
-                    className="text-[11px] text-navy font-medium hover:underline flex-shrink-0"
-                  >
-                    {expanded ? 'Less' : `${item.options.length - 1} other${item.options.length > 2 ? 's' : ''}`}
-                  </button>
-                )}
+          {editing ? (
+            <div className="relative">
+              <div className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 transition-colors ${
+                showResults ? 'border-navy/40 shadow-[0_0_0_3px_rgba(78,128,128,0.12)]' : 'border-parchment-dark'
+              }`}>
+                <Search size={12} className="text-ink-faint flex-shrink-0" />
+                <input
+                  ref={inputRef}
+                  className="flex-1 text-sm bg-transparent outline-none text-ink placeholder:text-ink-faint min-w-0"
+                  placeholder="Search for the correct place…"
+                  value={query}
+                  onChange={(e) => handleQueryChange(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowResults(false), 200)}
+                />
+                {searching && <Loader2 size={12} className="text-ink-faint animate-spin flex-shrink-0" />}
               </div>
-              {expanded && item.options.length > 1 && (
-                <div className="mt-2 space-y-1">
-                  {item.options.map((opt, i) => {
-                    const selected = item.chosen?.lat === opt.lat && item.chosen?.lon === opt.lon;
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => { onSelect(opt); setExpanded(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-xs border transition-colors ${
-                          selected
-                            ? 'bg-navy text-white border-navy'
-                            : 'bg-white border-parchment-dark text-ink hover:border-navy/40'
-                        }`}
-                      >
-                        <span className="font-medium">{opt.name}</span>
-                        {opt.address && <span className="opacity-70"> · {opt.address}</span>}
-                      </button>
-                    );
-                  })}
+              {showResults && results.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-parchment-dark rounded-xl shadow-[var(--shadow-elevated)] overflow-hidden z-[500]">
+                  {results.map((opt, i) => (
+                    <button
+                      key={i}
+                      onMouseDown={() => selectResult(opt)}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-parchment/60 border-b border-parchment-dark last:border-0 transition-colors flex items-start gap-2.5"
+                    >
+                      <MapPin size={12} className="text-navy mt-0.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink truncate">{opt.name}</p>
+                        {opt.address && <p className="text-[11px] text-ink-faint truncate">{opt.address}</p>}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-          )}
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-ink leading-snug">{item.original}</p>
 
-          {item.status === 'failed' && (
-            <p className="text-xs text-terracotta mt-0.5">Couldn't find this place — it'll be skipped</p>
+              {item.status === 'resolved' && item.chosen && (
+                <div className="mt-0.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs text-ink-faint">
+                      {item.chosen.name}
+                      {item.chosen.address ? ` · ${item.chosen.address}` : ''}
+                    </p>
+                    {item.options.length > 1 && (
+                      <button
+                        onClick={() => setExpanded((v) => !v)}
+                        className="text-[11px] text-navy font-medium hover:underline flex-shrink-0"
+                      >
+                        {expanded ? 'Less' : `${item.options.length - 1} other${item.options.length > 2 ? 's' : ''}`}
+                      </button>
+                    )}
+                  </div>
+                  {expanded && item.options.length > 1 && (
+                    <div className="mt-2 space-y-1">
+                      {item.options.map((opt, i) => {
+                        const selected = item.chosen?.lat === opt.lat && item.chosen?.lon === opt.lon;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => { onSelect(opt); setExpanded(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs border transition-colors ${
+                              selected
+                                ? 'bg-navy text-white border-navy'
+                                : 'bg-white border-parchment-dark text-ink hover:border-navy/40'
+                            }`}
+                          >
+                            <span className="font-medium">{opt.name}</span>
+                            {opt.address && <span className="opacity-70"> · {opt.address}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {item.status === 'failed' && (
+                <p className="text-xs text-terracotta mt-0.5">Couldn't find this place — edit the name or retry</p>
+              )}
+            </>
           )}
         </div>
 
-        {item.status === 'failed' && (
-          <button
-            onClick={onRetry}
-            title="Retry"
-            className="flex-shrink-0 p-1 text-ink-faint hover:text-navy transition-colors"
-          >
-            <RefreshCw size={13} />
-          </button>
-        )}
+        {/* Action buttons */}
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          {editing ? (
+            <button
+              onClick={closeEdit}
+              title="Cancel"
+              className="p-1 text-ink-faint hover:text-terracotta transition-colors"
+            >
+              <X size={14} />
+            </button>
+          ) : (
+            <>
+              {item.status === 'failed' && (
+                <>
+                  <button
+                    onClick={openEdit}
+                    title="Edit name"
+                    className="p-1 text-ink-faint hover:text-navy transition-colors"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={onRetry}
+                    title="Retry with original name"
+                    className="p-1 text-ink-faint hover:text-navy transition-colors"
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -755,6 +864,8 @@ export default function ActivityPlannerPage() {
                 item={item}
                 onSelect={(opt) => selectOption(item.id, opt)}
                 onRetry={() => retryGeocode(item)}
+                tripLat={currentTrip?.latitude}
+                tripLon={currentTrip?.longitude}
               />
             ))}
           </div>
