@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTrip } from '@/context/TripContext';
 import { itineraryApi } from '@/api/itinerary';
 import { ACTIVITY_ICONS, type ActivityType } from '@trip-planner-ai/shared';
-import { Plus, Trash2, Pencil, MapPin, CalendarDays, Check } from 'lucide-react';
+import { Plus, Trash2, Pencil, MapPin, CalendarDays, Check, Wand2 } from 'lucide-react';
 import { parseLocalDate } from '@/utils/date';
 import TripMap from '@/components/TripMap';
 
@@ -110,8 +110,18 @@ export default function ItineraryPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-2xl font-bold text-navy">Itinerary</h2>
+        {isOrganiser && (
+          <button
+            onClick={() => navigate('/itinerary/plan')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold/10 border border-gold/30 text-gold-aged text-sm font-semibold hover:bg-gold/20 transition-colors flex-shrink-0"
+          >
+            <Wand2 size={15} />
+            <span className="hidden sm:inline">Plan Activities</span>
+            <span className="sm:hidden">Plan</span>
+          </button>
+        )}
       </div>
 
       {isLoading || days.length === 0 ? (
