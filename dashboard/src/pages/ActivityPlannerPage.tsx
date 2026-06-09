@@ -935,75 +935,41 @@ export default function ActivityPlannerPage() {
             ))}
           </div>
 
-          {/* What's already on each day */}
-          {sortedDays.some((day) => day.activities.length > 0 || assigned.some((a) => a.dayId === day.id)) && (
-            <div className="vintage-card overflow-hidden">
-              <div className="px-4 py-3 border-b border-parchment-dark">
-                <p className="text-xs font-semibold text-ink-faint uppercase tracking-wider">What's on each day</p>
-              </div>
-              <div className="divide-y divide-parchment-dark">
-                {sortedDays.map((day, di) => {
-                  const newItems = assigned.filter((a) => a.dayId === day.id);
-                  const existing = [...day.activities].sort((a, b) => {
-                    if (!a.time && !b.time) return 0;
-                    if (!a.time) return 1;
-                    if (!b.time) return -1;
-                    return a.time.localeCompare(b.time);
-                  });
-                  if (newItems.length === 0 && existing.length === 0) return null;
-                  return (
-                    <div key={day.id} className="px-4 py-3">
-                      {/* Day header */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-5 h-5 rounded-full bg-navy/10 flex items-center justify-center text-[10px] font-bold text-navy flex-shrink-0">
-                          {di + 1}
-                        </div>
-                        <p className="text-xs font-semibold text-ink">
-                          {parseLocalDate(day.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </p>
-                        {newItems.length > 0 && (
-                          <span className="text-[10px] font-semibold text-navy bg-navy/10 px-1.5 py-0.5 rounded-full">
-                            +{newItems.length} adding
-                          </span>
-                        )}
-                      </div>
-                      {/* Existing activities */}
-                      <div className="ml-7 space-y-1">
-                        {existing.map((a) => (
-                          <div key={a.id} className="flex items-center gap-2">
-                            {a.time && (
-                              <span className="text-[10px] font-mono text-ink-faint w-9 flex-shrink-0">
-                                {a.time.slice(0, 5)}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-ink-light truncate">
-                              {ACTIVITY_ICONS[a.type as ActivityType]} {a.description}
-                            </span>
-                          </div>
-                        ))}
-                        {/* New items being added */}
-                        {newItems.map((a) => (
-                          <div key={a.id} className="flex items-center gap-2">
-                            {a.time && (
-                              <span className="text-[10px] font-mono text-navy/60 w-9 flex-shrink-0">
-                                {a.time.slice(0, 5)}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-navy font-medium truncate">
-                              + {a.label}
-                            </span>
-                          </div>
-                        ))}
-                        {existing.length === 0 && newItems.length > 0 && (
-                          <p className="text-[11px] text-ink-faint italic">Nothing planned yet</p>
-                        )}
-                      </div>
+          {/* Existing activities on the context day — times only */}
+          {(() => {
+            const contextDay = sortedDays.find((d) => d.id === contextDayId);
+            if (!contextDay || contextDay.activities.length === 0) return null;
+            const di = sortedDays.indexOf(contextDay);
+            const existing = [...contextDay.activities].sort((a, b) => {
+              if (!a.time && !b.time) return 0;
+              if (!a.time) return 1;
+              if (!b.time) return -1;
+              return a.time.localeCompare(b.time);
+            });
+            return (
+              <div className="vintage-card overflow-hidden">
+                <div className="px-4 py-3 border-b border-parchment-dark flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-navy/10 flex items-center justify-center text-[10px] font-bold text-navy flex-shrink-0">
+                    {di + 1}
+                  </div>
+                  <p className="text-xs font-semibold text-ink">
+                    {parseLocalDate(contextDay.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
+                  </p>
+                  <span className="text-[10px] text-ink-faint ml-auto">{existing.length} existing</span>
+                </div>
+                <div className="px-4 py-3 flex flex-wrap gap-2">
+                  {existing.map((a) => (
+                    <div key={a.id} className="flex items-center gap-1.5 bg-parchment border border-parchment-dark rounded-full px-2.5 py-1">
+                      <span className="text-sm leading-none">{ACTIVITY_ICONS[a.type as ActivityType]}</span>
+                      <span className="text-[11px] font-mono text-ink-faint">
+                        {a.time ? a.time.slice(0, 5) : '—'}
+                      </span>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <button
             onClick={handleApply}
